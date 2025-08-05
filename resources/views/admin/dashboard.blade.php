@@ -34,7 +34,7 @@
         </div>
     </div>
     
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <div class="display-4 text-warning mb-2">
@@ -42,6 +42,18 @@
                 </div>
                 <h3 class="text-warning">{{ number_format($pendingSubmissions) }}</h3>
                 <p class="card-text text-muted">심사 대기</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-info mb-2">
+                    <i class="bi bi-person-check"></i>
+                </div>
+                <h3 class="text-info">{{ number_format($assignedSubmissions) }}</h3>
+                <p class="card-text text-muted">배정된 영상</p>
             </div>
         </div>
     </div>
@@ -95,9 +107,18 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
+                    <a href="{{ route('admin.assignment.list') }}" 
+                       class="btn btn-admin">
+                        <i class="bi bi-person-check"></i> 영상 배정 관리
+                    </a>
                     <a href="{{ route('admin.evaluation.list', ['status' => 'pending']) }}" 
                        class="btn btn-admin">
                         <i class="bi bi-clipboard-check"></i> 심사 대기 목록 보기
+                    </a>
+                    <a href="{{ route('judge.dashboard') }}" 
+                       class="btn btn-admin">
+                        <i class="bi bi-person-badge"></i> 심사위원 페이지로 이동
+                    </a>
                     </a>
                     
                     <a href="{{ route('admin.evaluation.list') }}" 

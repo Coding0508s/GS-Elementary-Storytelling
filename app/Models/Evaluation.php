@@ -75,10 +75,10 @@ class Evaluation extends Model
     {
         return [
             'video_submission_id' => 'required|exists:video_submissions,id',
-            'pronunciation_score' => 'required|integer|min:1|max:10',
-            'vocabulary_score' => 'required|integer|min:1|max:10',
-            'fluency_score' => 'required|integer|min:1|max:10',
-            'confidence_score' => 'required|integer|min:1|max:10',
+            'pronunciation_score' => 'required|integer|min:1|max:100',
+            'vocabulary_score' => 'required|integer|min:1|max:100',
+            'fluency_score' => 'required|integer|min:1|max:100',
+            'confidence_score' => 'required|integer|min:1|max:100',
             'comments' => 'nullable|string|max:1000'
         ];
     }

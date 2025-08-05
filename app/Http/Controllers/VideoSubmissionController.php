@@ -79,7 +79,7 @@ class VideoSubmissionController extends Controller
                 'required',
                 'file',
                 'mimes:mp4,mov',
-                'max:2097152' // 2GB in KB (2 * 1024 * 1024)
+                'max:102400' // 100MB in KB (100 * 1024)
             ]
         ], [
             'region.required' => '거주 지역을 입력해주세요.',
@@ -94,7 +94,7 @@ class VideoSubmissionController extends Controller
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
             'video_file.required' => '비디오 파일을 선택해주세요.',
             'video_file.mimes' => 'MP4 또는 MOV 형식의 파일만 업로드 가능합니다.',
-            'video_file.max' => '파일 크기는 2GB를 초과할 수 없습니다.'
+            'video_file.max' => '파일 크기는 100MB를 초과할 수 없습니다.'
         ]);
 
         if ($validator->fails()) {
@@ -107,11 +107,11 @@ class VideoSubmissionController extends Controller
             // 고유한 파일명 생성
             $fileName = time() . '_' . Str::random(10) . '.' . $videoFile->getClientOriginalExtension();
             
-            // 파일을 AWS S3에 저장
-            $filePath = $videoFile->storeAs('videos', $fileName, 's3');
+            // 파일을 로컬 저장소에 저장
+            $filePath = $videoFile->storeAs('videos', $fileName, 'local');
             
-            // S3에 저장된 파일의 전체 URL 생성
-            $fileUrl = Storage::disk('s3')->url($filePath);
+            // 로컬에 저장된 파일의 전체 경로 생성
+            $fileUrl = Storage::disk('local')->url($filePath);
 
             // 데이터베이스에 정보 저장
             $submission = VideoSubmission::create([
@@ -134,11 +134,11 @@ class VideoSubmissionController extends Controller
                 'status' => VideoSubmission::STATUS_UPLOADED
             ]);
 
-            // Supabase에 데이터 저장
-            $this->saveToSupabase($submission);
+            // Supabase 설정이 없으므로 비활성화
+            // $this->saveToSupabase($submission);
 
-            // 비동기로 알림 발송 (여기서는 동기 처리)
-            $this->sendNotification($submission);
+            // 알림 서비스 설정이 없으므로 비활성화
+            // $this->sendNotification($submission);
 
             // 세션 정리
             $request->session()->forget(['privacy_consent', 'privacy_consent_time']);

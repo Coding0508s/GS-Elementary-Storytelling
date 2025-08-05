@@ -34,15 +34,27 @@
             margin-bottom: 2rem;
         }
         
+        .logo-container {
+            margin-bottom: 1.5rem;
+        }
+        
+        .logo-container img {
+            max-height: 80px;
+            width: auto;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+        }
+        
         .login-header h1 {
             color: #2c3e50;
             font-weight: bold;
             margin-bottom: 0.5rem;
+            font-size: 1.8rem;
         }
         
         .login-header p {
             color: #6c757d;
             margin-bottom: 0;
+            font-size: 1rem;
         }
         
         .form-control {
@@ -109,9 +121,17 @@
         }
         
         .admin-icon {
-            font-size: 3rem;
+            font-size: 2rem;
             color: #667eea;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .contest-title {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
         }
     </style>
     
@@ -120,9 +140,11 @@
 <body>
     <div class="login-container">
         <div class="login-header">
-            <i class="bi bi-shield-lock admin-icon"></i>
-            <h1>관리자 로그인</h1>
-            <p>Speech Contest 관리자 페이지 접속</p>
+            <div class="logo-container">
+                <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
+            </div>
+            <h1><i class="bi bi-shield-lock admin-icon"></i> <span class="contest-title">관리자 로그인</span></h1>
+            <p>Speech Contest 관리자/심사위원 페이지 접속</p>
         </div>
         
         @if(session('success'))
@@ -176,6 +198,17 @@
                        name="password" 
                        placeholder="비밀번호"
                        required>
+            </div>
+            
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-person-badge"></i>
+                </span>
+                <select class="form-control" name="role" required>
+                    <option value="">역할을 선택하세요</option>
+                    <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>관리자</option>
+                    <option value="judge" {{ old('role') == 'judge' ? 'selected' : '' }}>심사위원</option>
+                </select>
             </div>
             
             <button type="submit" class="btn btn-primary btn-login">

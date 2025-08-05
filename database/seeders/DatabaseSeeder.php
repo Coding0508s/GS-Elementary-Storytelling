@@ -19,5 +19,12 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        // 관리자 및 심사위원 계정 생성
+        $this->call([
+            AdminSeeder::class,
+            JudgeSeeder::class,
+            UpdateAdminRolesSeeder::class,
+        ]);
     }
 }

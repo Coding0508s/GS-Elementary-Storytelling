@@ -168,7 +168,7 @@
                         <h5>비디오 파일을 선택하거나 여기에 드래그하세요</h5>
                         <p class="text-muted">
                             지원 형식: MP4, MOV<br>
-                            최대 크기: 2GB
+                            최대 크기: 100MB
                         </p>
                         <input type="file" 
                                class="d-none" 
@@ -246,10 +246,10 @@ document.addEventListener('DOMContentLoaded', function() {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
-            // 파일 크기 체크 (2GB)
-            const maxSize = 2 * 1024 * 1024 * 1024; // 2GB
+            // 파일 크기 체크 (100MB)
+            const maxSize = 100 * 1024 * 1024; // 100MB
             if (file.size > maxSize) {
-                alert('파일 크기가 2GB를 초과합니다. 더 작은 파일을 선택해주세요.');
+                alert('파일 크기가 100MB를 초과합니다. 더 작은 파일을 선택해주세요.');
                 fileInput.value = '';
                 fileInfo.classList.add('d-none');
                 return;

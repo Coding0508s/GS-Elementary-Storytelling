@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Storage;
 
 class VideoSubmission extends Model
 {
@@ -84,11 +85,51 @@ class VideoSubmission extends Model
     }
 
     /**
+     * 영상 배정 관계
+     */
+    public function assignment()
+    {
+        return $this->hasOne(VideoAssignment::class);
+    }
+
+    /**
      * 심사 결과 관계
      */
     public function evaluation()
     {
         return $this->hasOne(Evaluation::class);
+    }
+
+    /**
+     * 영상 파일 URL 가져오기 (로컬 저장소)
+     */
+    public function getVideoUrlAttribute()
+    {
+        return asset('storage/' . $this->video_file_path);
+    }
+
+    /**
+     * 영상 파일이 로컬에 저장되어 있는지 확인
+     */
+    public function isStoredOnS3()
+    {
+        return false; // 로컬 저장소 사용
+    }
+
+    /**
+     * 배정된 심사위원 가져오기
+     */
+    public function getAssignedAdmin()
+    {
+        return $this->assignment ? $this->assignment->admin : null;
+    }
+
+    /**
+     * 배정 상태 확인
+     */
+    public function isAssigned()
+    {
+        return $this->assignment !== null;
     }
 
     /**
@@ -105,5 +146,13 @@ class VideoSubmission extends Model
     public function getTotalScore()
     {
         return $this->evaluation ? $this->evaluation->total_score : null;
+    }
+
+    /**
+     * 배정 상태 가져오기
+     */
+    public function getAssignmentStatus()
+    {
+        return $this->assignment ? $this->assignment->status : null;
     }
 }

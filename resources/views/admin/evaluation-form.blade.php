@@ -140,22 +140,22 @@
                             
                             <div class="mb-3">
                                 <label for="{{ $field }}" class="form-label">
-                                    점수 (1-10점)
+                                    점수 (1-100점)
                                 </label>
                                 <div class="d-flex align-items-center gap-3">
                                     <input type="range" 
                                            class="form-range flex-grow-1" 
                                            id="{{ $field }}_range"
                                            min="1" 
-                                           max="10" 
+                                           max="100" 
                                            step="1"
-                                           value="{{ old($field, $submission->evaluation->$field ?? 5) }}">
+                                           value="{{ old($field, $submission->evaluation->$field ?? 25) }}">
                                     <input type="number" 
                                            class="form-control score-input" 
                                            id="{{ $field }}"
                                            name="{{ $field }}"
                                            min="1" 
-                                           max="10" 
+                                           max="100" 
                                            value="{{ old($field, $submission->evaluation->$field ?? '') }}"
                                            required>
                                 </div>
@@ -165,7 +165,7 @@
                             <div class="score-guide">
                                 <small class="text-muted">
                                     <strong>점수 가이드:</strong><br>
-                                    1-3: 미흡 | 4-6: 보통 | 7-8: 양호 | 9-10: 우수
+                                    1-25: 미흡 | 26-50: 보통 | 51-75: 양호 | 76-100: 우수
                                 </small>
                             </div>
                         </div>
@@ -180,7 +180,7 @@
                     <h4 class="mb-0">
                         총점: <span id="total-score" class="text-primary fw-bold">
                             {{ $submission->evaluation ? $submission->evaluation->total_score : 0 }}
-                        </span> / 40점
+                        </span> / 100점
                     </h4>
                     <div class="mt-2">
                         <span id="grade-badge" class="badge fs-6">등급 계산 중...</span>
@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 숫자 입력 시 슬라이더 업데이트
         input.addEventListener('input', function() {
-            const value = Math.max(1, Math.min(10, parseInt(this.value) || 1));
+            const value = Math.max(1, Math.min(100, parseInt(this.value) || 1));
             this.value = value;
             range.value = value;
             calculateTotal();
@@ -265,16 +265,16 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateGrade(total) {
         let grade, className;
         
-        if (total >= 36) {
+        if (total >= 76) {
             grade = '우수 (A등급)';
             className = 'bg-success';
-        } else if (total >= 31) {
+        } else if (total >= 51) {
             grade = '양호 (B등급)';
             className = 'bg-primary';
         } else if (total >= 26) {
             grade = '보통 (C등급)';
             className = 'bg-info';
-        } else if (total >= 21) {
+        } else if (total >= 1) {
             grade = '미흡 (D등급)';
             className = 'bg-warning';
         } else {
@@ -289,11 +289,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // 폼 제출 시 확인
     document.getElementById('evaluation-form').addEventListener('submit', function(e) {
         const scores = Array.from(scoreInputs).map(input => parseInt(input.value));
-        const hasInvalidScore = scores.some(score => score < 1 || score > 10 || isNaN(score));
+        const hasInvalidScore = scores.some(score => score < 1 || score > 100 || isNaN(score));
         
         if (hasInvalidScore) {
             e.preventDefault();
-            alert('모든 점수는 1-10점 사이여야 합니다.');
+            alert('모든 점수는 1-100점 사이여야 합니다.');
             return;
         }
         

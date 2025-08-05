@@ -22,6 +22,26 @@
             color: white;
         }
         
+        .logo-container {
+            text-align: center;
+            padding: 1.5rem 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 1rem;
+        }
+        
+        .logo-container img {
+            max-height: 60px;
+            width: auto;
+            filter: brightness(0) invert(1);
+            margin-bottom: 0.5rem;
+        }
+        
+        .logo-container .brand-text {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.8);
+            margin: 0;
+        }
+        
         .sidebar .nav-link {
             color: rgba(255,255,255,0.8);
             padding: 0.75rem 1rem;
@@ -104,6 +124,24 @@
             width: 80px;
             text-align: center;
         }
+        
+        .user-info {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 1rem 0;
+            text-align: center;
+        }
+        
+        .user-info .user-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .user-info .user-role {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.7);
+        }
     </style>
     
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -114,19 +152,26 @@
             <!-- 사이드바 -->
             <div class="col-md-3 col-lg-2 px-0">
                 <div class="sidebar">
-                    <div class="p-3">
-                        <h4 class="text-center mb-4">
-                            <i class="bi bi-shield-check"></i><br>
-                            관리자 페이지
-                        </h4>
-                        
-                        @auth('admin')
-                        <div class="text-center mb-4">
-                            <small>{{ Auth::guard('admin')->user()->name }}님</small><br>
-                            <small class="text-muted">마지막 로그인: {{ Auth::guard('admin')->user()->last_login_at ? Auth::guard('admin')->user()->last_login_at->format('m/d H:i') : '처음' }}</small>
-                        </div>
-                        @endauth
+                    <div class="logo-container">
+                        <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
+                        <p class="brand-text">Speech Contest</p>
                     </div>
+                    
+                    @auth('admin')
+                    <div class="user-info">
+                        <div class="user-name">{{ Auth::guard('admin')->user()->name }}</div>
+                        <div class="user-role">
+                            @if(Auth::guard('admin')->user()->isAdmin())
+                                <i class="bi bi-shield-check"></i> 관리자
+                            @else
+                                <i class="bi bi-person-check"></i> 심사위원
+                            @endif
+                        </div>
+                        <small class="text-muted d-block mt-1">
+                            마지막 로그인: {{ Auth::guard('admin')->user()->last_login_at ? Auth::guard('admin')->user()->last_login_at->format('m/d H:i') : '처음' }}
+                        </small>
+                    </div>
+                    @endauth
                     
                     <nav class="nav flex-column px-3">
                         <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" 
@@ -137,6 +182,11 @@
                         <a class="nav-link {{ request()->routeIs('admin.evaluation.*') ? 'active' : '' }}" 
                            href="{{ route('admin.evaluation.list') }}">
                             <i class="bi bi-clipboard-check"></i> 심사 관리
+                        </a>
+                        
+                        <a class="nav-link {{ request()->routeIs('admin.assignment.*') ? 'active' : '' }}" 
+                           href="{{ route('admin.assignment.list') }}">
+                            <i class="bi bi-person-check"></i> 영상 배정 관리
                         </a>
                         
                         <a class="nav-link {{ request()->routeIs('admin.statistics') ? 'active' : '' }}" 

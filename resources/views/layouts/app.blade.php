@@ -30,14 +30,31 @@
             border-bottom: 2px solid #f8f9fa;
             margin-bottom: 2rem;
         }
+        .logo-container {
+            margin-bottom: 1.5rem;
+        }
+        .logo-container img {
+            max-height: 80px;
+            width: auto;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+        }
         .header-section h1 {
             color: #2c3e50;
             font-weight: bold;
             margin-bottom: 0.5rem;
+            font-size: 1.8rem;
         }
         .header-section p {
             color: #6c757d;
             margin-bottom: 0;
+            font-size: 1.1rem;
+        }
+        .contest-title {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
         }
         .form-section {
             padding: 1rem 0;
@@ -113,6 +130,14 @@
             border-color: #667eea;
             background-color: #f0f4ff;
         }
+        .footer-section {
+            text-align: center;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #f8f9fa;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
     </style>
     
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -121,8 +146,11 @@
     <div class="container">
         <div class="contest-container">
             <div class="header-section">
-                <h1><i class="bi bi-camera-video"></i> 예비 초등 Storytelling Contest</h1>
-                <p>GrapeSEED 학생들의 특별한 2025 Speech Contest </p>
+                <div class="logo-container">
+                    <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
+                </div>
+                <h1><i class="bi bi-camera-video"></i> <span class="contest-title">예비 초등 Storytelling Contest</span></h1>
+                <p>GrapeSEED 학생들의 특별한 2025 Speech Contest</p>
             </div>
             
             @if(session('success'))
@@ -153,6 +181,10 @@
             
             <div class="form-section">
                 @yield('content')
+            </div>
+            
+            <div class="footer-section">
+                <p>&copy; 2025 GrapeSEED English for Children. All rights reserved.</p>
             </div>
         </div>
     </div>

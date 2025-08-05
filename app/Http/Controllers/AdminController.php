@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\Admin;
 use App\Models\VideoSubmission;
 use App\Models\Evaluation;
+use App\Models\VideoAssignment;
 
 class AdminController extends Controller
 {
@@ -36,10 +37,13 @@ class AdminController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'username' => 'required|string',
-            'password' => 'required|string'
+            'password' => 'required|string',
+            'role' => 'required|in:admin,judge'
         ], [
             'username.required' => '아이디를 입력해주세요.',
-            'password.required' => '비밀번호를 입력해주세요.'
+            'password.required' => '비밀번호를 입력해주세요.',
+            'role.required' => '역할을 선택해주세요.',
+            'role.in' => '올바른 역할을 선택해주세요.'
         ]);
 
         if ($validator->fails()) {
@@ -52,8 +56,14 @@ class AdminController extends Controller
             $admin = Auth::guard('admin')->user();
             $admin->updateLastLogin();
             
-            return redirect()->route('admin.dashboard')
-                           ->with('success', '관리자 페이지에 오신 것을 환영합니다!');
+            // 선택된 역할에 따라 다른 대시보드로 리다이렉트
+            if ($request->role === 'judge') {
+                return redirect()->route('judge.dashboard')
+                               ->with('success', '심사위원 페이지에 오신 것을 환영합니다!');
+            } else {
+                return redirect()->route('admin.dashboard')
+                               ->with('success', '관리자 페이지에 오신 것을 환영합니다!');
+            }
         }
 
         return back()->with('error', '아이디 또는 비밀번호가 올바르지 않습니다.')
@@ -77,19 +87,32 @@ class AdminController extends Controller
     {
         $totalSubmissions = VideoSubmission::count();
         $evaluatedSubmissions = VideoSubmission::whereHas('evaluation')->count();
-        $pendingSubmissions = $totalSubmissions - $evaluatedSubmissions;
+        $assignedSubmissions = VideoSubmission::whereHas('assignment')->count();
+        $pendingSubmissions = $totalSubmissions - $assignedSubmissions;
         
         // 최근 업로드된 영상들
-        $recentSubmissions = VideoSubmission::with('evaluation')
+        $recentSubmissions = VideoSubmission::with(['evaluation', 'assignment.admin'])
                                           ->orderBy('created_at', 'desc')
                                           ->take(10)
                                           ->get();
 
+        // 심사위원별 배정 현황
+        $adminStats = Admin::withCount(['videoAssignments', 'evaluations'])
+                          ->get()
+                          ->map(function ($admin) {
+                              $admin->in_progress_count = $admin->videoAssignments()
+                                  ->where('status', VideoAssignment::STATUS_IN_PROGRESS)
+                                  ->count();
+                              return $admin;
+                          });
+
         return view('admin.dashboard', compact(
             'totalSubmissions',
-            'evaluatedSubmissions', 
+            'evaluatedSubmissions',
+            'assignedSubmissions',
             'pendingSubmissions',
-            'recentSubmissions'
+            'recentSubmissions',
+            'adminStats'
         ));
     }
 
@@ -292,11 +315,11 @@ class AdminController extends Controller
         // 점수별 분포
         $scoreDistribution = Evaluation::selectRaw('
             CASE 
-                WHEN total_score >= 36 THEN "우수 (36-40점)"
-                WHEN total_score >= 31 THEN "양호 (31-35점)"
-                WHEN total_score >= 26 THEN "보통 (26-30점)"
-                WHEN total_score >= 21 THEN "미흡 (21-25점)"
-                ELSE "매우 미흡 (20점 이하)"
+                WHEN total_score >= 76 THEN "우수 (76-100점)"
+                WHEN total_score >= 51 THEN "양호 (51-75점)"
+                WHEN total_score >= 26 THEN "보통 (26-50점)"
+                WHEN total_score >= 1 THEN "미흡 (1-25점)"
+                ELSE "매우 미흡 (0점)"
             END as grade,
             COUNT(*) as count
         ')
@@ -331,5 +354,107 @@ class AdminController extends Controller
             'averageScores',
             'institutionStats'
         ));
+    }
+
+    /**
+     * 영상 배정 목록
+     */
+    public function assignmentList()
+    {
+        $assignments = VideoAssignment::with(['videoSubmission', 'admin'])
+                                    ->orderBy('created_at', 'desc')
+                                    ->get();
+
+        $unassignedVideos = VideoSubmission::whereDoesntHave('assignment')
+                                          ->orderBy('created_at', 'desc')
+                                          ->get();
+
+        $admins = Admin::where('is_active', true)
+                      ->where('role', 'judge') // 심사위원만 표시
+                      ->get();
+
+        return view('admin.assignment-list', compact('assignments', 'unassignedVideos', 'admins'));
+    }
+
+    /**
+     * 영상 배정 처리
+     */
+    public function assignVideo(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'video_submission_id' => 'required|exists:video_submissions,id',
+            'admin_id' => 'required|exists:admins,id'
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->with('error', '배정 정보가 올바르지 않습니다.');
+        }
+
+        // 이미 배정된 영상인지 확인
+        $existingAssignment = VideoAssignment::where('video_submission_id', $request->video_submission_id)->first();
+        if ($existingAssignment) {
+            return back()->with('error', '이미 배정된 영상입니다.');
+        }
+
+        // 배정 생성
+        VideoAssignment::create([
+            'video_submission_id' => $request->video_submission_id,
+            'admin_id' => $request->admin_id,
+            'status' => VideoAssignment::STATUS_ASSIGNED
+        ]);
+
+        return back()->with('success', '영상이 성공적으로 배정되었습니다.');
+    }
+
+    /**
+     * 배정 취소
+     */
+    public function cancelAssignment($id)
+    {
+        $assignment = VideoAssignment::findOrFail($id);
+        
+        // 심사가 완료되지 않은 경우에만 취소 가능
+        if ($assignment->status === VideoAssignment::STATUS_COMPLETED) {
+            return back()->with('error', '심사가 완료된 영상은 배정을 취소할 수 없습니다.');
+        }
+
+        $assignment->delete();
+        return back()->with('success', '배정이 취소되었습니다.');
+    }
+
+    /**
+     * 자동 배정 (균등 분배)
+     */
+    public function autoAssign()
+    {
+        $unassignedVideos = VideoSubmission::whereDoesntHave('assignment')
+                                          ->orderBy('created_at', 'asc')
+                                          ->get();
+
+        $activeAdmins = Admin::where('is_active', true)
+                            ->where('role', 'judge') // 심사위원만 배정
+                            ->get();
+
+        if ($activeAdmins->isEmpty()) {
+            return back()->with('error', '활성화된 심사위원이 없습니다.');
+        }
+
+        $adminIndex = 0;
+        $assignedCount = 0;
+
+        foreach ($unassignedVideos as $video) {
+            $admin = $activeAdmins[$adminIndex % $activeAdmins->count()];
+            
+            VideoAssignment::create([
+                'video_submission_id' => $video->id,
+                'admin_id' => $admin->id,
+                'status' => VideoAssignment::STATUS_ASSIGNED
+            ]);
+
+            $assignedCount++;
+            $adminIndex++;
+        }
+
+        return back()->with('success', "{$assignedCount}개의 영상이 자동으로 배정되었습니다.");
     }
 }
