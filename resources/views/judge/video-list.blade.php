@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('admin.layout')
 
 @section('title', '배정된 영상 목록')
 
@@ -126,20 +126,20 @@
                             </td>
                             <td>
                                 @if($assignment->status === 'assigned')
-                                    <span class="badge badge-pending">
-                                        <i class="bi bi-clock"></i> 배정됨
+                                    <span class="badge badge-pending" style="color:rgb(3, 116, 254);">
+                                            <i class="bi bi-clock" style="color:rgb(3, 116, 254);"></i> 배정됨
                                     </span>
                                 @elseif($assignment->status === 'in_progress')
-                                    <span class="badge badge-info">
-                                        <i class="bi bi-arrow-clockwise"></i> 심사중
+                                    <span class="badge badge-info" style="color:rgb(226, 41, 4);">
+                                        <i class="bi bi-arrow-clockwise" style="color:rgb(226, 41, 4);"></i> 심사중
                                     </span>
                                 @elseif($assignment->status === 'completed')
-                                    <span class="badge badge-evaluated">
-                                        <i class="bi bi-check-circle"></i> 완료
+                                    <span class="badge badge-evaluated" style="color:rgb(79, 223, 7);">
+                                        <i class="bi bi-check-circle" style="color:rgb(79, 223, 7);"></i> 완료
                                     </span>
                                 @endif
                             </td>
-                            <td>
+                            <td>    
                                 @if($assignment->evaluation)
                                     <span class="fw-bold text-success">{{ $assignment->evaluation->total_score }}</span>
                                     <small class="text-muted">/ 100</small>
@@ -180,16 +180,6 @@
             </div>
         @endif
     </div>
-</div>
-
-<!-- 로그아웃 버튼 -->
-<div class="text-center mt-4">
-    <form action="{{ route('judge.logout') }}" method="POST" class="d-inline">
-        @csrf
-        <button type="submit" class="btn btn-outline-danger">
-            <i class="bi bi-box-arrow-right"></i> 로그아웃
-        </button>
-    </form>
 </div>
 @endsection
 

@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('admin.layout')
 
 @section('title', '심사위원 대시보드')
 
@@ -207,15 +207,15 @@
                             </td>
                             <td>
                                 @if($assignment->status === 'assigned')
-                                    <span class="badge badge-pending">
+                                    <span class="badge badge-pending" style="color:rgb(3, 116, 254);">
                                         <i class="bi bi-clock"></i> 배정됨
                                     </span>
                                 @elseif($assignment->status === 'in_progress')
-                                    <span class="badge badge-info">
+                                    <span class="badge badge-info" style="color:rgb(226, 41, 4);">
                                         <i class="bi bi-arrow-clockwise"></i> 심사중
                                     </span>
                                 @elseif($assignment->status === 'completed')
-                                    <span class="badge badge-evaluated">
+                                    <span class="badge badge-evaluated" style="color:rgb(79, 223, 7);">
                                         <i class="bi bi-check-circle"></i> 완료
                                     </span>
                                 @endif
@@ -253,16 +253,6 @@
             </div>
         @endif
     </div>
-</div>
-
-<!-- 로그아웃 버튼 -->
-<div class="text-center mt-4">
-    <form action="{{ route('judge.logout') }}" method="POST" class="d-inline">
-        @csrf
-        <button type="submit" class="btn btn-outline-secondary">
-            <i class="bi bi-box-arrow-right"></i> 로그아웃
-        </button>
-    </form>
 </div>
 @endsection
 

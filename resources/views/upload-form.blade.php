@@ -35,7 +35,7 @@
                                    id="region" 
                                    name="region" 
                                    value="{{ old('region') }}" 
-                                   placeholder="예: 서울"
+                                   placeholder="예: 과천 포도씨"
                                    required>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -65,12 +65,12 @@
                             <label for="grade" class="form-label">학년 <span class="text-danger">*</span></label>
                             <select class="form-control" id="grade" name="grade" required>
                                 <option value="">학년을 선택하세요</option>
-                                <option value="1학년" {{ old('grade') == '1학년' ? 'selected' : '' }}>1학년</option>
-                                <option value="2학년" {{ old('grade') == '2학년' ? 'selected' : '' }}>2학년</option>
+                                <option value=" 예비 초 1학년" {{ old('grade') == '1학년' ? 'selected' : '' }}>예비 초 1학년</option>
+                               <!--  <option value="2학년" {{ old('grade') == '2학년' ? 'selected' : '' }}>2학년</option>
                                 <option value="3학년" {{ old('grade') == '3학년' ? 'selected' : '' }}>3학년</option>
                                 <option value="4학년" {{ old('grade') == '4학년' ? 'selected' : '' }}>4학년</option>
                                 <option value="5학년" {{ old('grade') == '5학년' ? 'selected' : '' }}>5학년</option>
-                                <option value="6학년" {{ old('grade') == '6학년' ? 'selected' : '' }}>6학년</option>
+                                <option value="6학년" {{ old('grade') == '6학년' ? 'selected' : '' }}>6학년</option> -->
                             </select>
                         </div>
                     </div>
@@ -106,19 +106,20 @@
                                    id="age" 
                                    name="age" 
                                    value="{{ old('age') }}" 
-                                   min="5" 
-                                   max="15"
-                                   placeholder="예: 10"
+                                   min="6" 
+                                   max="7"
+                                   placeholder="7세"
                                    required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="unit_topic" class="form-label">Unit 주제</label>
+                            <label for="unit_topic" class="form-label">스토리의 제목을 입력해주세요. <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
                                    id="unit_topic" 
                                    name="unit_topic" 
                                    value="{{ old('unit_topic') }}" 
-                                   placeholder="예: Unit 5 - My Family">
+                                   placeholder="예: Unit 5 - My Family"
+                                   required>
                         </div>
                     </div>
                 </div>
@@ -213,6 +214,13 @@
                         <i class="bi bi-info-circle"></i> 
                         업로드가 완료되면 입력하신 전화번호로 알림을 보내드립니다.
                     </p>
+                    
+                    <!-- 처음으로 가기 버튼 -->
+                    <div class="mt-4">
+                        <a href="{{ url('/') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle-fill"></i> 취소하기
+                        </a>
+                    </div>
                 </div>
             </div>
         </form>

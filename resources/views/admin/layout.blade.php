@@ -16,10 +16,14 @@
             font-family: 'Noto Sans KR', sans-serif;
         }
         
+        
         .sidebar {
             min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            position: sticky;
+            top: 0;
+            z-index: 1020;
         }
         
         .logo-container {
@@ -174,6 +178,8 @@
                     @endauth
                     
                     <nav class="nav flex-column px-3">
+                        @if(Auth::guard('admin')->user()->isAdmin())
+                        <!-- 관리자 전용 메뉴 -->
                         <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" 
                            href="{{ route('admin.dashboard') }}">
                             <i class="bi bi-speedometer2"></i> 대시보드
@@ -197,6 +203,18 @@
                         <a class="nav-link" href="{{ route('admin.download.excel') }}">
                             <i class="bi bi-download"></i> 데이터 다운로드
                         </a>
+                        @else
+                        <!-- 심사위원 전용 메뉴 -->
+                        <a class="nav-link {{ request()->routeIs('judge.dashboard') ? 'active' : '' }}" 
+                           href="{{ route('judge.dashboard') }}">
+                            <i class="bi bi-speedometer2"></i> 심사위원 대시보드
+                        </a>
+                        
+                        <a class="nav-link {{ request()->routeIs('judge.video.*') ? 'active' : '' }}" 
+                           href="{{ route('judge.video.list') }}">
+                            <i class="bi bi-camera-video"></i> 배정된 영상 목록
+                        </a>
+                        @endif
                         
                         <hr class="text-white-50">
                         

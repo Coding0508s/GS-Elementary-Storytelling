@@ -149,7 +149,7 @@
                 <div class="logo-container">
                     <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
                 </div>
-                <h1><i class="bi bi-camera-video"></i> <span class="contest-title">예비 초등 Storytelling Contest</span></h1>
+                <h1><!-- <i class="bi bi-camera-video"></i> --> <span class="contest-title">예비 초등 Storytelling Contest</span></h1>
                 <p>GrapeSEED 학생들의 특별한 2025 Speech Contest</p>
             </div>
             

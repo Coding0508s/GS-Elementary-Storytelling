@@ -1,189 +1,189 @@
-@extends('layouts.app')
+@extends('admin.layout')
 
 @section('title', '심사 결과 수정')
 
 @section('content')
-<div class="container mx-auto px-4 py-8">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-4">심사 결과 수정</h1>
-        <p class="text-gray-600">{{ $judge->name }} 심사위원님</p>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-pencil-square"></i> 심사 결과 수정</h1>
+    <small class="text-muted">{{ now()->format('Y년 m월 d일 H:i') }}</small>
+</div>
 
-    @if(session('success'))
-        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            {{ session('success') }}
-        </div>
-    @endif
-
-    @if($errors->any())
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            <ul class="list-disc list-inside">
-                @foreach($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- 학생 정보 -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">학생 정보</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">학생명</label>
-                    <p class="mt-1 text-sm text-gray-900">
-                        {{ $submission->student_name_korean }} ({{ $submission->student_name_english }})
-                    </p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">기관명</label>
-                    <p class="mt-1 text-sm text-gray-900">{{ $submission->institution_name }}</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">반</label>
-                    <p class="mt-1 text-sm text-gray-900">{{ $submission->class_name }}</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">학년/나이</label>
-                    <p class="mt-1 text-sm text-gray-900">{{ $submission->grade }} ({{ $submission->age }}세)</p>
-                </div>
-                @if($submission->unit_topic)
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Unit 주제</label>
-                    <p class="mt-1 text-sm text-gray-900 font-semibold text-blue-600">{{ $submission->unit_topic }}</p>
-                </div>
-                @endif
+<!-- 학생 정보 및 현재 심사 결과 -->
+<div class="row mb-4">
+    <!-- 학생 정보 -->
+    <div class="col-md-6 mb-3">
+        <div class="card admin-card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person-circle"></i> 학생 정보</h5>
             </div>
-        </div>
-
-        <!-- 현재 심사 결과 -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">현재 심사 결과</h2>
-            <div class="space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">발음 점수</label>
-                        <p class="mt-1 text-lg font-semibold text-gray-900">{{ $assignment->evaluation->pronunciation_score }}/100</p>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">학생명</label>
+                        <p class="mb-0 fw-bold">{{ $submission->student_name_korean }} ({{ $submission->student_name_english }})</p>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">어휘 점수</label>
-                        <p class="mt-1 text-lg font-semibold text-gray-900">{{ $assignment->evaluation->vocabulary_score }}/100</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">기관명</label>
+                        <p class="mb-0">{{ $submission->institution_name }}</p>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">유창성 점수</label>
-                        <p class="mt-1 text-lg font-semibold text-gray-900">{{ $assignment->evaluation->fluency_score }}/100</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">반</label>
+                        <p class="mb-0">{{ $submission->class_name }}</p>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">자신감 점수</label>
-                        <p class="mt-1 text-lg font-semibold text-gray-900">{{ $assignment->evaluation->confidence_score }}/100</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">학년/나이</label>
+                        <p class="mb-0">{{ $submission->grade }} ({{ $submission->age }}세)</p>
                     </div>
+                    @if($submission->unit_topic)
+                    <div class="col-12">
+                        <label class="form-label text-muted small">Unit 주제</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $submission->unit_topic }}</p>
+                    </div>
+                    @endif
                 </div>
-                <div class="border-t pt-4">
-                    <label class="block text-sm font-medium text-gray-700">총점</label>
-                    <p class="mt-1 text-2xl font-bold text-blue-600">{{ $assignment->evaluation->total_score }}/100</p>
-                </div>
-                @if($assignment->evaluation->comments)
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">현재 코멘트</label>
-                    <p class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ $assignment->evaluation->comments }}</p>
-                </div>
-                @endif
             </div>
         </div>
     </div>
 
-    <!-- 수정 폼 -->
-    <div class="mt-8 bg-white rounded-lg shadow p-6">
-        <h2 class="text-xl font-semibold text-gray-800 mb-6">심사 결과 수정</h2>
-        
+    <!-- 현재 심사 결과 -->
+    <div class="col-md-6 mb-3">
+        <div class="card admin-card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clipboard-data"></i> 현재 심사 결과</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">발음 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->pronunciation_score }}/100</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">어휘 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->vocabulary_score }}/100</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">유창성 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->fluency_score }}/100</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">자신감 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->confidence_score }}/100</p>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label text-muted small">총점</label>
+                        <p class="mb-0 fw-bold text-success fs-4">{{ $assignment->evaluation->total_score }}/100</p>
+                    </div>
+                    @if($assignment->evaluation->comments)
+                    <div class="col-12 mt-3">
+                        <label class="form-label text-muted small">현재 코멘트</label>
+                        <div class="bg-light p-3 rounded">
+                            <p class="mb-0">{{ $assignment->evaluation->comments }}</p>
+                        </div>
+                    </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 수정 폼 -->
+<div class="card admin-card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-pencil-square"></i> 심사 결과 수정</h5>
+    </div>
+    <div class="card-body">
         <form action="{{ route('judge.evaluation.update', $assignment->id) }}" method="POST" id="evaluation-form">
             @csrf
             @method('PUT')
             
             <!-- 평가 기준 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="row mb-4">
                 @php
                     $criteria = [
-                        'pronunciation_score' => '정확한 발음과 자연스러운 억양, 전달력',
-                        'vocabulary_score' => '올바른 어휘 및 표현 사용',
-                        'fluency_score' => '유창성 수준',
-                        'confidence_score' => '자신감, 긍정적이고 밝은 태도'
+                        'pronunciation_score' => ['title' => '정확한 발음과 자연스러운 억양, 전달력', 'icon' => 'bi-mic'],
+                        'vocabulary_score' => ['title' => '올바른 어휘 및 표현 사용', 'icon' => 'bi-book'],
+                        'fluency_score' => ['title' => '유창성 수준', 'icon' => 'bi-chat-dots'],
+                        'confidence_score' => ['title' => '자신감, 긍정적이고 밝은 태도', 'icon' => 'bi-emoji-smile']
                     ];
                 @endphp
                 
-                @foreach($criteria as $field => $description)
-                <div class="bg-gray-50 rounded-lg p-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        {{ $description }}
-                    </label>
-                    
-                    <div class="mb-3">
-                        <label for="{{ $field }}" class="form-label">
-                            점수 (1-100점)
-                        </label>
-                        <div class="flex items-center gap-3">
-                            <input type="range" 
-                                   class="flex-grow-1" 
-                                   id="{{ $field }}_range"
-                                   min="1" 
-                                   max="100" 
-                                   step="1"
-                                   value="{{ old($field, $assignment->evaluation->$field) }}">
-                            <input type="number" 
-                                   class="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                                   id="{{ $field }}"
-                                   name="{{ $field }}"
-                                   min="1" 
-                                   max="100" 
-                                   value="{{ old($field, $assignment->evaluation->$field) }}"
-                                   required>
+                @foreach($criteria as $field => $info)
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="{{ $info['icon'] }}"></i> {{ $info['title'] }}
+                            </h6>
+                            
+                            <div class="mb-3">
+                                <label for="{{ $field }}" class="form-label">점수 (1-100점)</label>
+                                <div class="d-flex align-items-center gap-3">
+                                    <input type="range" 
+                                           class="form-range flex-grow-1" 
+                                           id="{{ $field }}_range"
+                                           min="1" 
+                                           max="100" 
+                                           step="1"
+                                           value="{{ old($field, $assignment->evaluation->$field) }}">
+                                    <input type="number" 
+                                           class="form-control score-input" 
+                                           id="{{ $field }}"
+                                           name="{{ $field }}"
+                                           min="1" 
+                                           max="100" 
+                                           value="{{ old($field, $assignment->evaluation->$field) }}"
+                                           required>
+                                </div>
+                            </div>
+                            
+                            <!-- 점수 가이드 -->
+                            <div class="text-muted small">
+                                <strong>점수 가이드:</strong><br>
+                                1-25: 미흡 | 26-50: 보통 | 51-75: 양호 | 76-100: 우수
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- 점수 가이드 -->
-                    <div class="text-xs text-gray-600">
-                        <strong>점수 가이드:</strong><br>
-                        1-25: 미흡 | 26-50: 보통 | 51-75: 양호 | 76-100: 우수
                     </div>
                 </div>
                 @endforeach
             </div>
             
             <!-- 총점 표시 -->
-            <div class="mt-6 bg-blue-50 rounded-lg p-4 text-center">
-                <h3 class="text-lg font-semibold text-gray-800 mb-2">수정된 총점</h3>
-                <div class="text-3xl font-bold text-blue-600">
-                    <span id="total-score">{{ $assignment->evaluation->total_score }}</span> / 100점
-                </div>
-                <div class="mt-2">
-                    <span id="grade-badge" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium">등급 계산 중...</span>
+            <div class="card mb-4">
+                <div class="card-body text-center bg-primary bg-opacity-10">
+                    <h5 class="card-title">수정된 총점</h5>
+                    <div class="display-6 fw-bold text-primary">
+                        <span id="total-score">{{ $assignment->evaluation->total_score }}</span> / 100점
+                    </div>
+                    <div class="mt-2">
+                        <span id="grade-badge" class="badge fs-6">등급 계산 중...</span>
+                    </div>
                 </div>
             </div>
             
             <!-- 심사 코멘트 -->
-            <div class="mt-6">
-                <label for="comments" class="block text-sm font-medium text-gray-700 mb-2">
-                    심사 코멘트 수정
+            <div class="mb-4">
+                <label for="comments" class="form-label">
+                    <i class="bi bi-chat-text"></i> 심사 코멘트 수정
                 </label>
-                <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                <textarea class="form-control" 
                           id="comments" 
                           name="comments" 
                           rows="4"
                           placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요...">{{ old('comments', $assignment->evaluation->comments) }}</textarea>
-                <p class="mt-1 text-sm text-gray-500">
-                    학생과 학부모에게 도움이 될 수 있는 건설적인 피드백을 남겨주세요.
-                </p>
+                <div class="form-text">
+                    학생과 학부모에게 도움이 될 수 있는 피드백을 남겨주세요.
+                </div>
             </div>
             
             <!-- 제출 버튼 -->
-            <div class="mt-8 flex gap-4 justify-end">
+            <div class="d-flex gap-3 justify-content-end">
                 <a href="{{ route('judge.video.list') }}" 
-                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                    취소
+                   class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> 취소
                 </a>
-                <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700">
-                    수정 완료
+                <button type="submit" class="btn btn-admin">
+                    <i class="bi bi-check-circle"></i> 수정 완료
                 </button>
             </div>
         </form>
@@ -234,23 +234,23 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (total >= 76) {
             grade = '우수 (A등급)';
-            className = 'bg-green-100 text-green-800';
+            className = 'bg-success text-white';
         } else if (total >= 51) {
             grade = '양호 (B등급)';
-            className = 'bg-blue-100 text-blue-800';
+            className = 'bg-primary text-white';
         } else if (total >= 26) {
             grade = '보통 (C등급)';
-            className = 'bg-yellow-100 text-yellow-800';
+            className = 'bg-warning text-dark';
         } else if (total >= 1) {
             grade = '미흡 (D등급)';
-            className = 'bg-red-100 text-red-800';
+            className = 'bg-danger text-white';
         } else {
             grade = '매우 미흡 (F등급)';
-            className = 'bg-gray-100 text-gray-800';
+            className = 'bg-secondary text-white';
         }
         
         gradeBadge.textContent = grade;
-        gradeBadge.className = `inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${className}`;
+        gradeBadge.className = `badge ${className} fs-6`;
     }
     
     // 폼 제출 시 확인

@@ -64,35 +64,47 @@
 
 <!-- 통계 요약 -->
 <div class="row mb-4">
-    <div class="col-md-3 mb-2">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <h5 class="text-primary">{{ $submissions->total() }}</h5>
-                <small class="text-muted">총 제출</small>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-primary mb-2">
+                    <i class="bi bi-collection"></i>
+                </div>
+                <h3 class="text-primary">{{ number_format($submissions->total()) }}</h3>
+                <p class="card-text text-muted">총 제출</p>
             </div>
         </div>
     </div>
-    <div class="col-md-3 mb-2">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <h5 class="text-success">{{ $submissions->where('evaluation', '!=', null)->count() }}</h5>
-                <small class="text-muted">심사 완료</small>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-success mb-2">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <h3 class="text-success">{{ number_format($submissions->where('evaluation', '!=', null)->count()) }}</h3>
+                <p class="card-text text-muted">심사 완료</p>
             </div>
         </div>
     </div>
-    <div class="col-md-3 mb-2">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <h5 class="text-warning">{{ $submissions->where('evaluation', null)->count() }}</h5>
-                <small class="text-muted">심사 대기</small>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-warning mb-2">
+                    <i class="bi bi-clock"></i>
+                </div>
+                <h3 class="text-warning">{{ number_format($submissions->where('evaluation', null)->count()) }}</h3>
+                <p class="card-text text-muted">심사 대기</p>
             </div>
         </div>
     </div>
-    <div class="col-md-3 mb-2">
-        <div class="card text-center">
-            <div class="card-body py-3">
-                <h5 class="text-info">{{ $submissions->currentPage() }}</h5>
-                <small class="text-muted">현재 페이지</small>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-info mb-2">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
+                <h3 class="text-info">{{ number_format($submissions->currentPage()) }}</h3>
+                <p class="card-text text-muted">현재 페이지</p>
             </div>
         </div>
     </div>
@@ -169,7 +181,7 @@
                                         <i class="bi bi-check-circle"></i> 심사완료
                                     </span>
                                     <small class="text-muted">
-                                        총점: <strong>{{ $submission->evaluation->total_score }}/40</strong>
+                                        총점: <strong>{{ $submission->evaluation->total_score }}/100</strong>
                                     </small>
                                 @else
                                     <span class="badge badge-pending d-block">

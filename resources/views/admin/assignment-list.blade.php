@@ -1,11 +1,11 @@
-@extends('layouts.app')
+@extends('admin.layout')
 
 @section('title', '영상 배정 관리')
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1><i class="bi bi-person-check"></i> 영상 배정 관리</h1>
+        <h1><i class="bi bi-person-check"></i> 영상 심사 관리</h1>
         <p class="text-muted mb-0">업로드된 영상을 심사위원에게 배정하여 중복 심사를 방지합니다.</p>
     </div>
     <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary">
@@ -34,7 +34,7 @@
                     <i class="bi bi-check-circle"></i>
                 </div>
                 <h3 class="text-success">{{ number_format($assignments->count()) }}</h3>
-                <p class="card-text text-muted">배정된 영상</p>
+                <p class="card-text text-muted">심사할 영상</p>
             </div>
         </div>
     </div>
@@ -67,7 +67,7 @@
 <!-- 자동 배정 버튼 -->
 <div class="card admin-card mb-4">
     <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-lightning"></i> 자동 배정</h5>
+        <h5 class="mb-0"><i class="bi bi-lightning"></i> 자동 심사 배정</h5>
     </div>
     <div class="card-body">
         <form action="{{ route('admin.assignment.auto') }}" method="POST" class="d-inline">

@@ -178,7 +178,7 @@
                                            class="form-range flex-grow-1" 
                                            id="{{ $field }}_range"
                                            min="1" 
-                                           max="100" 
+                                           max="25" 
                                            step="1"
                                            value="{{ old($field, $assignment->evaluation->$field ?? 25) }}">
                                     <input type="number" 
@@ -230,7 +230,7 @@
                           rows="4"
                           placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요...">{{ old('comments', $assignment->evaluation->comments ?? '') }}</textarea>
                 <div class="form-text">
-                    학생과 학부모에게 도움이 될 수 있는 건설적인 피드백을 남겨주세요.
+                    학생과 학부모에게 도움이 될 수 있는 피드백을 남겨주세요.
                 </div>
             </div>
             
