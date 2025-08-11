@@ -247,6 +247,97 @@
         @endif
     </div>
 </div>
+
+<!-- 관리자 전용 위험 구역 -->
+<div class="card border-danger mb-4">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0">
+            <i class="bi bi-exclamation-triangle"></i> 
+            위험 구역 (관리자 전용)
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            <strong>⚠️ 주의:</strong> 아래 기능들은 되돌릴 수 없는 작업입니다.
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <h6 class="text-danger"><i class="bi bi-trash"></i> 모든 데이터 초기화</h6>
+                <p class="text-muted mb-2">
+                    모든 영상, 심사, 배정 데이터를 영구적으로 삭제합니다.
+                    <br><small>※ 관리자 계정은 유지됩니다.</small>
+                </p>
+                <ul class="text-muted small">
+                    <li>영상 제출 데이터: {{ number_format($totalSubmissions) }}개</li>
+                    <li>심사 결과: {{ number_format($evaluatedSubmissions) }}개</li>
+                    <li>S3 저장 파일 포함</li>
+                </ul>
+            </div>
+            <div class="col-md-4 text-end">
+                <button type="button" 
+                        class="btn btn-outline-danger" 
+                        data-bs-toggle="modal" 
+                        data-bs-target="#resetWarningModal">
+                    <i class="bi bi-exclamation-triangle"></i> 데이터 초기화
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 데이터 초기화 경고 모달 -->
+<div class="modal fade" id="resetWarningModal" tabindex="-1" aria-labelledby="resetWarningModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="resetWarningModalLabel">
+                    <i class="bi bi-exclamation-triangle"></i> 데이터 초기화 경고
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <h6 class="text-danger"><strong>⚠️ 위험한 작업입니다!</strong></h6>
+                    <p class="mb-2">이 작업을 수행하면 다음 데이터가 <strong>영구적으로 삭제</strong>됩니다:</p>
+                    <ul class="mb-0">
+                        <li><strong>모든 영상 제출 데이터</strong> ({{ number_format($totalSubmissions) }}개)</li>
+                        <li><strong>모든 심사 결과</strong> ({{ number_format($evaluatedSubmissions) }}개)</li>
+                        <li><strong>모든 배정 정보</strong></li>
+                        <li><strong>S3에 저장된 모든 영상 파일</strong></li>
+                        <li><strong>관련된 모든 로그</strong></li>
+                    </ul>
+                </div>
+                
+                <div class="alert alert-info">
+                    <h6 class="text-info"><strong>💡 유지되는 데이터:</strong></h6>
+                    <ul class="mb-0">
+                        <li>관리자 계정 정보</li>
+                        <li>심사위원 계정 정보</li>
+                        <li>시스템 설정</li>
+                    </ul>
+                </div>
+                
+                <div class="mt-3">
+                    <p class="text-muted">
+                        <strong>주의사항:</strong>
+                        <br>• 이 작업은 <strong class="text-danger">되돌릴 수 없습니다</strong>
+                        <br>• 작업 전에 필요한 데이터를 백업해두세요
+                        <br>• 보안을 위해 추가 확인 절차가 있습니다
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x"></i> 취소
+                </button>
+                <a href="{{ route('admin.reset.confirmation') }}" class="btn btn-danger">
+                    <i class="bi bi-arrow-right"></i> 계속 진행
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')

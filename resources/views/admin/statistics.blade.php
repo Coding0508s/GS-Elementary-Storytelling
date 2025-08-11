@@ -152,6 +152,94 @@
     </div>
 </div>
 
+<!-- 학생 순위 -->
+<div class="card admin-card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-trophy"></i> 학생 순위 (상위 20명)</h5>
+    </div>
+    <div class="card-body">
+        @if($studentRankings->count() > 0)
+            <div class="table-responsive">
+                <table class="table table-admin table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">순위</th>
+                            <th>학생명</th>
+                            <th>학급</th>
+                            <th>기관명</th>
+                            <th>발음·억양</th>
+                            <th>어휘·표현</th>
+                            <th>유창성</th>
+                            <th>자신감</th>
+                            <th>총점</th>
+                            <th>등급</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($studentRankings as $student)
+                        <tr>
+                            <td>
+                                @if($student->rank <= 3)
+                                    <span class="badge fs-6
+                                        @if($student->rank === 1) bg-warning text-dark
+                                        @elseif($student->rank === 2) bg-secondary
+                                        @else bg-info
+                                        @endif">
+                                        @if($student->rank === 1) 🥇
+                                        @elseif($student->rank === 2) 🥈
+                                        @else 🥉
+                                        @endif
+                                        {{ $student->rank }}위
+                                    </span>
+                                @else
+                                    <span class="badge bg-light text-dark">{{ $student->rank }}위</span>
+                                @endif
+                            </td>
+                            <td><strong>{{ $student->student_name }}</strong></td>
+                            <td>{{ $student->grade_class }}</td>
+                            <td>{{ $student->institution_name }}</td>
+                            <td><span class="badge bg-primary">{{ $student->pronunciation_score }}</span></td>
+                            <td><span class="badge bg-success">{{ $student->vocabulary_score }}</span></td>
+                            <td><span class="badge bg-info">{{ $student->fluency_score }}</span></td>
+                            <td><span class="badge bg-warning">{{ $student->confidence_score }}</span></td>
+                            <td><strong class="text-danger">{{ $student->total_score }}/40</strong></td>
+                            <td>
+                                @php
+                                    $grade = '';
+                                    $class = '';
+                                    if ($student->total_score >= 36) {
+                                        $grade = '우수';
+                                        $class = 'bg-success';
+                                    } elseif ($student->total_score >= 31) {
+                                        $grade = '양호';
+                                        $class = 'bg-primary';
+                                    } elseif ($student->total_score >= 26) {
+                                        $grade = '보통';
+                                        $class = 'bg-info';
+                                    } elseif ($student->total_score >= 21) {
+                                        $grade = '미흡';
+                                        $class = 'bg-warning';
+                                    } else {
+                                        $grade = '매우 미흡';
+                                        $class = 'bg-danger';
+                                    }
+                                @endphp
+                                <span class="badge {{ $class }}">{{ $grade }}</span>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @else
+            <div class="text-center py-4">
+                <i class="bi bi-trophy display-4 text-muted"></i>
+                <p class="text-muted mt-2">심사 완료된 학생이 없습니다.</p>
+            </div>
+        @endif
+    </div>
+</div>
+
 <!-- 기관별 통계 -->
 <div class="card admin-card">
     <div class="card-header">
@@ -222,7 +310,7 @@
                             <td>
                                 @php
                                     $totalForInstitution = \App\Models\VideoSubmission::where('institution_name', $stat->institution_name)->count();
-                                    $progressPercent = ($stat->submission_count / $totalForInstitution) * 100;
+                                    $progressPercent = $totalForInstitution > 0 ? ($stat->submission_count / $totalForInstitution) * 100 : 0;
                                 @endphp
                                 <div class="progress" style="height: 20px; width: 100px;">
                                     <div class="progress-bar bg-success" 

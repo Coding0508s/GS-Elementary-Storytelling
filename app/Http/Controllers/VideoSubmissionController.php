@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\VideoSubmission;
 use App\Services\NotificationService;
+use App\Services\TwilioSmsService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
@@ -79,7 +80,7 @@ class VideoSubmissionController extends Controller
                 'required',
                 'file',
                 'mimes:mp4,mov',
-                'max:102400' // 100MB in KB (100 * 1024)
+                'max:1048576' // 1GB in KB (1024 * 1024)
             ]
         ], [
             'region.required' => '거주 지역을 입력해주세요.',
@@ -94,7 +95,7 @@ class VideoSubmissionController extends Controller
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
             'video_file.required' => '비디오 파일을 선택해주세요.',
             'video_file.mimes' => 'MP4 또는 MOV 형식의 파일만 업로드 가능합니다.',
-            'video_file.max' => '파일 크기는 100MB를 초과할 수 없습니다.'
+            'video_file.max' => '파일 크기는 1GB를 초과할 수 없습니다.'
         ]);
 
         if ($validator->fails()) {
@@ -107,11 +108,11 @@ class VideoSubmissionController extends Controller
             // 고유한 파일명 생성
             $fileName = time() . '_' . Str::random(10) . '.' . $videoFile->getClientOriginalExtension();
             
-            // 파일을 로컬 저장소에 저장
-            $filePath = $videoFile->storeAs('videos', $fileName, 'local');
+            // 파일을 S3에 저장
+            $filePath = $videoFile->storeAs('videos', $fileName, 's3');
             
-            // 로컬에 저장된 파일의 전체 경로 생성
-            $fileUrl = Storage::disk('local')->url($filePath);
+            // S3에 저장된 파일의 URL 생성
+            $fileUrl = Storage::disk('s3')->url($filePath);
 
             // 데이터베이스에 정보 저장
             $submission = VideoSubmission::create([
@@ -137,14 +138,14 @@ class VideoSubmissionController extends Controller
             // Supabase 설정이 없으므로 비활성화
             // $this->saveToSupabase($submission);
 
-            // 알림 서비스 설정이 없으므로 비활성화
-            // $this->sendNotification($submission);
+            // Twilio SMS 알림 전송
+            $this->sendSmsNotification($submission);
 
             // 세션 정리
             $request->session()->forget(['privacy_consent', 'privacy_consent_time']);
 
             return redirect()->route('upload.success')
-                           ->with('success', '비디오가 성공적으로 업로드되었습니다. 곧 알림을 받으실 수 있습니다.')
+                           ->with('success', '비디오가 성공적으로 업로드되었습니다. 곧 SMS 알림을 받으실 수 있습니다.')
                            ->with('submission_id', $submission->id);
 
         } catch (\Exception $e) {
@@ -221,6 +222,36 @@ class VideoSubmissionController extends Controller
             $notificationService->sendUploadCompletionNotification($submission);
         } catch (\Exception $e) {
             Log::error('알림 발송 오류: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Twilio SMS 알림 전송
+     */
+    private function sendSmsNotification($submission)
+    {
+        try {
+            $twilioService = new TwilioSmsService();
+            $result = $twilioService->sendUploadCompletionNotification($submission);
+            
+            if ($result['success']) {
+                Log::info('SMS 알림 전송 성공', [
+                    'submission_id' => $submission->id,
+                    'phone' => $submission->parent_phone,
+                    'message_sid' => $result['message_sid']
+                ]);
+            } else {
+                Log::error('SMS 알림 전송 실패', [
+                    'submission_id' => $submission->id,
+                    'phone' => $submission->parent_phone,
+                    'error' => $result['error']
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('SMS 알림 전송 중 오류 발생', [
+                'submission_id' => $submission->id,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 }

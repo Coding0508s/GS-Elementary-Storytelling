@@ -50,8 +50,8 @@ class VideoSubmission extends Model
     // 허용된 파일 형식
     const ALLOWED_FILE_TYPES = ['mp4', 'mov'];
 
-    // 최대 파일 크기 (2GB in bytes)
-    const MAX_FILE_SIZE = 2147483648; // 2GB
+    // 최대 파일 크기 (1GB in bytes)
+    const MAX_FILE_SIZE = 1073741824; // 1GB
 
     /**
      * 파일 크기를 사람이 읽기 쉬운 형태로 변환
@@ -101,19 +101,63 @@ class VideoSubmission extends Model
     }
 
     /**
-     * 영상 파일 URL 가져오기 (로컬 저장소)
+     * 영상 파일 URL 가져오기 (S3 임시 URL)
      */
     public function getVideoUrlAttribute()
     {
+        if ($this->isStoredOnS3()) {
+            return $this->getS3TemporaryUrl();
+        }
         return asset('storage/' . $this->video_file_path);
     }
 
     /**
-     * 영상 파일이 로컬에 저장되어 있는지 확인
+     * 영상 파일이 S3에 저장되어 있는지 확인
      */
     public function isStoredOnS3()
     {
-        return false; // 로컬 저장소 사용
+        return config('filesystems.default') === 's3' && $this->video_file_path;
+    }
+
+    /**
+     * S3에서 임시 URL 생성 (1시간 유효)
+     */
+    public function getS3TemporaryUrl($hours = 1)
+    {
+        if (!$this->isStoredOnS3()) {
+            return null;
+        }
+
+        try {
+            return Storage::disk('s3')->temporaryUrl(
+                $this->video_file_path,
+                now()->addHours($hours)
+            );
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * S3에서 다운로드용 임시 URL 생성 (강제 다운로드)
+     */
+    public function getS3DownloadUrl($hours = 1)
+    {
+        if (!$this->isStoredOnS3()) {
+            return null;
+        }
+
+        try {
+            return Storage::disk('s3')->temporaryUrl(
+                $this->video_file_path,
+                now()->addHours($hours),
+                [
+                    'ResponseContentDisposition' => 'attachment; filename="' . $this->video_file_name . '"'
+                ]
+            );
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     /**

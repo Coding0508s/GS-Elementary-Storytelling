@@ -32,11 +32,11 @@
                         Speech Contest 비디오가 성공적으로 업로드되었습니다.
                     </p>
                     
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
-                        <strong>알림 발송 안내</strong><br>
-                        입력해주신 학부모 전화번호로 업로드 완료 알림을 발송했습니다.<br>
-                        대회 진행 상황은 추후 별도로 안내드리겠습니다.
+                    <div class="alert alert-success">
+                        <i class="bi bi-chat-dots"></i>
+                        <strong>SMS 알림 발송 완료</strong><br>
+                        입력해주신 학부모 전화번호로 업로드 완료 SMS를 발송했습니다.<br>
+                        <small class="text-muted">몇 분 내에 SMS를 받으실 수 있습니다.</small>
                     </div>
                     
                     <div class="row mt-4">

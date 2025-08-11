@@ -181,7 +181,11 @@
                                         <i class="bi bi-check-circle"></i> 심사완료
                                     </span>
                                     <small class="text-muted">
-                                        총점: <strong>{{ $submission->evaluation->total_score }}/100</strong>
+                                        총점: <strong>{{ $submission->evaluation->total_score }}/40</strong><br>
+                                        환산: 발음 {{ $submission->evaluation->pronunciation_converted }}%, 
+                                        어휘 {{ $submission->evaluation->vocabulary_converted }}%, 
+                                        유창성 {{ $submission->evaluation->fluency_converted }}%, 
+                                        자신감 {{ $submission->evaluation->confidence_converted }}%
                                     </small>
                                 @else
                                     <span class="badge badge-pending d-block">
@@ -210,7 +214,7 @@
             
             <!-- 페이지네이션 -->
             <div class="mt-4">
-                {{ $submissions->appends(request()->query())->links() }}
+                {{ $submissions->appends(request()->query())->links('custom.pagination') }}
             </div>
             
         @else

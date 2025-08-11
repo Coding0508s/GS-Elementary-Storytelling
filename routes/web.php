@@ -80,6 +80,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 통계 페이지
         Route::get('/statistics', [AdminController::class, 'statistics'])
             ->name('statistics');
+        
+        // 데이터 초기화
+        Route::get('/reset-confirmation', [AdminController::class, 'showResetConfirmation'])
+            ->name('reset.confirmation');
+        
+        Route::post('/reset-execute', [AdminController::class, 'executeReset'])
+            ->name('reset.execute');
     });
 });
 
@@ -119,5 +126,12 @@ Route::prefix('judge')->name('judge.')->group(function () {
         
         Route::put('/evaluation/{id}/edit', [JudgeController::class, 'updateEvaluation'])
             ->name('evaluation.update');
+        
+        // 영상 다운로드 및 스트리밍
+        Route::get('/video/{id}/download', [JudgeController::class, 'downloadVideo'])
+            ->name('video.download');
+        
+        Route::get('/video/{id}/stream-url', [JudgeController::class, 'getVideoStreamUrl'])
+            ->name('video.stream-url');
     });
 });

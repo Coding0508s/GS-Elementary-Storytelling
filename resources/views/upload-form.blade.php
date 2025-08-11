@@ -12,8 +12,8 @@
 </div>
 
 <div class="row justify-content-center">
-    <div class="col-md-10">
-        <div class="text-center mb-4">
+    <div class="col-md-8 col-lg-10">
+        <div class="text-center mb-2">
             <h2><i class="bi bi-cloud-upload"></i> 비디오 업로드</h2>
             <p class="text-muted">학생 정보와 Unit 비디오를 업로드해주세요.</p>
         </div>
@@ -22,13 +22,13 @@
             @csrf
             
             <!-- 학생 기본 정보 -->
-            <div class="card mb-4">
+            <div class="card mb-2">
                 <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-person"></i> 학생 기본 정보</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="region" class="form-label">거주 지역 <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -38,7 +38,7 @@
                                    placeholder="예: 과천 포도씨"
                                    required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="institution_name" class="form-label">기관명 <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -51,7 +51,7 @@
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="class_name" class="form-label">반 이름 <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -61,7 +61,7 @@
                                    placeholder="예: London, 감사반"
                                    required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="grade" class="form-label">학년 <span class="text-danger">*</span></label>
                             <select class="form-control" id="grade" name="grade" required>
                                 <option value="">학년을 선택하세요</option>
@@ -76,7 +76,7 @@
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="student_name_korean" class="form-label">학생 이름 (한글) <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -86,7 +86,7 @@
                                    placeholder="예: 김철수"
                                    required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="student_name_english" class="form-label">학생 이름 (영어) <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -99,7 +99,7 @@
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="age" class="form-label">나이 <span class="text-danger">*</span></label>
                             <input type="number" 
                                    class="form-control" 
@@ -111,7 +111,7 @@
                                    placeholder="7세"
                                    required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="unit_topic" class="form-label">스토리의 제목을 입력해주세요. <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -126,13 +126,13 @@
             </div>
 
             <!-- 학부모 정보 -->
-            <div class="card mb-4">
+            <div class="card mb-2">
                 <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-people"></i> 학부모 정보</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="parent_name" class="form-label">학부모 성함 <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -142,7 +142,7 @@
                                    placeholder="예: 김철수"
                                    required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-2">
                             <label for="parent_phone" class="form-label">학부모 전화번호 <span class="text-danger">*</span></label>
                             <input type="tel" 
                                    class="form-control" 
@@ -159,17 +159,17 @@
             </div>
 
             <!-- 비디오 업로드 -->
-            <div class="card mb-4">
+            <div class="card mb-2">
                 <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-camera-video"></i> 비디오 파일 업로드</h5>
                 </div>
                 <div class="card-body">
                     <div class="file-upload-area" onclick="document.getElementById('video_file').click()">
-                        <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
-                        <h5>비디오 파일을 선택하거나 여기에 드래그하세요</h5>
+                        <i class="bi bi-cloud-upload fs-2 text-muted mb-2"></i>
+                        <h6>비디오 파일을 선택하거나 여기에 드래그하세요</h6>
                         <p class="text-muted">
                             지원 형식: MP4, MOV<br>
-                            최대 크기: 100MB
+                            최대 크기: 1GB
                         </p>
                         <input type="file" 
                                class="d-none" 
@@ -210,13 +210,13 @@
                         </button>
                     </div>
                     
-                    <p class="text-muted mt-3 small">
+                    <p class="text-muted mt-2 small">
                         <i class="bi bi-info-circle"></i> 
                         업로드가 완료되면 입력하신 전화번호로 알림을 보내드립니다.
                     </p>
                     
                     <!-- 처음으로 가기 버튼 -->
-                    <div class="mt-4">
+                    <div class="mt-2">
                         <a href="{{ url('/') }}" class="btn btn-outline-secondary">
                             <i class="bi bi-x-circle-fill"></i> 취소하기
                         </a>
@@ -254,10 +254,10 @@ document.addEventListener('DOMContentLoaded', function() {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
-            // 파일 크기 체크 (100MB)
-            const maxSize = 100 * 1024 * 1024; // 100MB
+            // 파일 크기 체크 (1GB)
+            const maxSize = 1024 * 1024 * 1024; // 1GB
             if (file.size > maxSize) {
-                alert('파일 크기가 100MB를 초과합니다. 더 작은 파일을 선택해주세요.');
+                alert('파일 크기가 1GB를 초과합니다. 더 작은 파일을 선택해주세요.');
                 fileInput.value = '';
                 fileInfo.classList.add('d-none');
                 return;

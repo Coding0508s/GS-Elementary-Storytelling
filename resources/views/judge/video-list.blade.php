@@ -148,24 +148,34 @@
                                 @endif
                             </td>
                             <td>
-                                @if($assignment->status === 'assigned')
-                                    <form action="{{ route('judge.evaluation.start', $assignment->id) }}" method="POST" class="d-inline">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-play-circle"></i> 심사 시작
-                                        </button>
-                                    </form>
-                                @elseif($assignment->status === 'in_progress')
-                                    <a href="{{ route('judge.evaluation.show', $assignment->id) }}" 
-                                       class="btn btn-sm btn-outline-info">
-                                        <i class="bi bi-arrow-clockwise"></i> 심사 계속
+                                <div class="btn-group-vertical btn-group-sm" role="group">
+                                    @if($assignment->status === 'assigned')
+                                        <form action="{{ route('judge.evaluation.start', $assignment->id) }}" method="POST" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-play-circle"></i> 심사 시작
+                                            </button>
+                                        </form>
+                                    @elseif($assignment->status === 'in_progress')
+                                        <a href="{{ route('judge.evaluation.show', $assignment->id) }}" 
+                                           class="btn btn-sm btn-outline-info">
+                                            <i class="bi bi-arrow-clockwise"></i> 심사 계속
+                                        </a>
+                                    @elseif($assignment->status === 'completed')
+                                        <a href="{{ route('judge.evaluation.edit', $assignment->id) }}" 
+                                           class="btn btn-sm btn-outline-success">
+                                            <i class="bi bi-pencil"></i> 수정
+                                        </a>
+                                    @endif
+                                    
+                                    <!-- 영상 다운로드 버튼 (항상 표시) -->
+                                    <a href="{{ route('judge.video.download', $assignment->id) }}" 
+                                       class="btn btn-sm btn-outline-secondary mt-1"
+                                       target="_blank"
+                                       title="영상 다운로드">
+                                        <i class="bi bi-download"></i> 다운로드
                                     </a>
-                                @elseif($assignment->status === 'completed')
-                                    <a href="{{ route('judge.evaluation.edit', $assignment->id) }}" 
-                                       class="btn btn-sm btn-outline-success">
-                                        <i class="bi bi-pencil"></i> 수정
-                                    </a>
-                                @endif
+                                </div>
                             </td>
                         </tr>
                         @endforeach

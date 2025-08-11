@@ -95,24 +95,24 @@ class JudgeController extends Controller
 
         // 검증 규칙
         $validator = Validator::make($request->all(), [
-            'pronunciation_score' => 'required|integer|min:1|max:100',
-            'vocabulary_score' => 'required|integer|min:1|max:100',
-            'fluency_score' => 'required|integer|min:1|max:100',
-            'confidence_score' => 'required|integer|min:1|max:100',
+            'pronunciation_score' => 'required|integer|min:0|max:10',
+            'vocabulary_score' => 'required|integer|min:0|max:10',
+            'fluency_score' => 'required|integer|min:0|max:10',
+            'confidence_score' => 'required|integer|min:0|max:10',
             'comments' => 'nullable|string|max:1000'
         ], [
             'pronunciation_score.required' => '발음 점수를 입력해주세요.',
-            'pronunciation_score.min' => '발음 점수는 1점 이상이어야 합니다.',
-            'pronunciation_score.max' => '발음 점수는 100점 이하여야 합니다.',
+            'pronunciation_score.min' => '발음 점수는 0점 이상이어야 합니다.',
+            'pronunciation_score.max' => '발음 점수는 10점 이하여야 합니다.',
             'vocabulary_score.required' => '어휘 점수를 입력해주세요.',
-            'vocabulary_score.min' => '어휘 점수는 1점 이상이어야 합니다.',
-            'vocabulary_score.max' => '어휘 점수는 100점 이하여야 합니다.',
+            'vocabulary_score.min' => '어휘 점수는 0점 이상이어야 합니다.',
+            'vocabulary_score.max' => '어휘 점수는 10점 이하여야 합니다.',
             'fluency_score.required' => '유창성 점수를 입력해주세요.',
-            'fluency_score.min' => '유창성 점수는 1점 이상이어야 합니다.',
-            'fluency_score.max' => '유창성 점수는 100점 이하여야 합니다.',
+            'fluency_score.min' => '유창성 점수는 0점 이상이어야 합니다.',
+            'fluency_score.max' => '유창성 점수는 10점 이하여야 합니다.',
             'confidence_score.required' => '자신감 점수를 입력해주세요.',
-            'confidence_score.min' => '자신감 점수는 1점 이상이어야 합니다.',
-            'confidence_score.max' => '자신감 점수는 100점 이하여야 합니다.',
+            'confidence_score.min' => '자신감 점수는 0점 이상이어야 합니다.',
+            'confidence_score.max' => '자신감 점수는 10점 이하여야 합니다.',
         ]);
 
         if ($validator->fails()) {
@@ -205,10 +205,10 @@ class JudgeController extends Controller
 
         // 검증 규칙
         $validator = Validator::make($request->all(), [
-            'pronunciation_score' => 'required|integer|min:1|max:100',
-            'vocabulary_score' => 'required|integer|min:1|max:100',
-            'fluency_score' => 'required|integer|min:1|max:100',
-            'confidence_score' => 'required|integer|min:1|max:100',
+            'pronunciation_score' => 'required|integer|min:0|max:10',
+            'vocabulary_score' => 'required|integer|min:0|max:10',
+            'fluency_score' => 'required|integer|min:0|max:10',
+            'confidence_score' => 'required|integer|min:0|max:10',
             'comments' => 'nullable|string|max:1000'
         ]);
 
@@ -231,6 +231,61 @@ class JudgeController extends Controller
 
         return redirect()->route('judge.video.list')
                         ->with('success', '심사 결과가 수정되었습니다.');
+    }
+
+    /**
+     * 영상 다운로드
+     */
+    public function downloadVideo($assignmentId)
+    {
+        $judge = Auth::guard('admin')->user();
+        
+        // 이 심사위원에게 배정된 영상인지 확인
+        $assignment = VideoAssignment::where('id', $assignmentId)
+                                   ->where('admin_id', $judge->id)
+                                   ->with('videoSubmission')
+                                   ->firstOrFail();
+
+        $submission = $assignment->videoSubmission;
+
+        // S3 다운로드 URL 생성
+        $downloadUrl = $submission->getS3DownloadUrl(1); // 1시간 유효
+
+        if (!$downloadUrl) {
+            return back()->with('error', '영상 다운로드 링크를 생성할 수 없습니다.');
+        }
+
+        return redirect($downloadUrl);
+    }
+
+    /**
+     * 영상 스트리밍 URL 가져오기 (AJAX)
+     */
+    public function getVideoStreamUrl($assignmentId)
+    {
+        $judge = Auth::guard('admin')->user();
+        
+        // 이 심사위원에게 배정된 영상인지 확인
+        $assignment = VideoAssignment::where('id', $assignmentId)
+                                   ->where('admin_id', $judge->id)
+                                   ->with('videoSubmission')
+                                   ->firstOrFail();
+
+        $submission = $assignment->videoSubmission;
+
+        // S3 스트리밍 URL 생성 (24시간 유효)
+        $streamUrl = $submission->getS3TemporaryUrl(24);
+
+        if (!$streamUrl) {
+            return response()->json(['error' => '영상 URL을 생성할 수 없습니다.'], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'url' => $streamUrl,
+            'filename' => $submission->video_file_name,
+            'size' => $submission->getFormattedFileSizeAttribute()
+        ]);
     }
 
     /**

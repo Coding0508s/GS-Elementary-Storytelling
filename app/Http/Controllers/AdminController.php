@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\Admin;
 use App\Models\VideoSubmission;
 use App\Models\Evaluation;
@@ -207,24 +210,24 @@ class AdminController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'pronunciation_score' => 'required|integer|min:1|max:100',
-            'vocabulary_score' => 'required|integer|min:1|max:100',
-            'fluency_score' => 'required|integer|min:1|max:100',
-            'confidence_score' => 'required|integer|min:1|max:100',
+            'pronunciation_score' => 'required|integer|min:0|max:10',
+            'vocabulary_score' => 'required|integer|min:0|max:10',
+            'fluency_score' => 'required|integer|min:0|max:10',
+            'confidence_score' => 'required|integer|min:0|max:10',
             'comments' => 'nullable|string|max:1000'
         ], [
             'pronunciation_score.required' => '발음 점수를 입력해주세요.',
             'vocabulary_score.required' => '어휘 점수를 입력해주세요.',
             'fluency_score.required' => '유창성 점수를 입력해주세요.',
             'confidence_score.required' => '자신감 점수를 입력해주세요.',
-            'pronunciation_score.min' => '점수는 1점 이상이어야 합니다.',
-            'vocabulary_score.min' => '점수는 1점 이상이어야 합니다.',
-            'fluency_score.min' => '점수는 1점 이상이어야 합니다.',
-            'confidence_score.min' => '점수는 1점 이상이어야 합니다.',
-            'pronunciation_score.max' => '점수는 100점 이하여야 합니다.',
-            'vocabulary_score.max' => '점수는 100점 이하여야 합니다.',
-            'fluency_score.max' => '점수는 100점 이하여야 합니다.',
-            'confidence_score.max' => '점수는 100점 이하여야 합니다.',
+            'pronunciation_score.min' => '점수는 0점 이상이어야 합니다.',
+            'vocabulary_score.min' => '점수는 0점 이상이어야 합니다.',
+            'fluency_score.min' => '점수는 0점 이상이어야 합니다.',
+            'confidence_score.min' => '점수는 0점 이상이어야 합니다.',
+            'pronunciation_score.max' => '점수는 10점 이하여야 합니다.',
+            'vocabulary_score.max' => '점수는 10점 이하여야 합니다.',
+            'fluency_score.max' => '점수는 10점 이하여야 합니다.',
+            'confidence_score.max' => '점수는 10점 이하여야 합니다.',
         ]);
 
         if ($validator->fails()) {
@@ -414,9 +417,68 @@ class AdminController extends Controller
             AVG(total_score) as avg_total
         ')->first();
 
+        // 점수 분포 통계
+        $scoreDistribution = collect([]);
+        if ($evaluatedSubmissions > 0) {
+            $scoreDistribution = Evaluation::selectRaw('
+                CASE 
+                    WHEN total_score >= 36 THEN "우수 (36-40점)"
+                    WHEN total_score >= 31 THEN "양호 (31-35점)"
+                    WHEN total_score >= 26 THEN "보통 (26-30점)"
+                    WHEN total_score >= 21 THEN "미흡 (21-25점)"
+                    ELSE "매우 미흡 (20점 이하)"
+                END as grade,
+                COUNT(*) as count
+            ')
+            ->groupBy('grade')
+            ->orderByRaw('MIN(total_score) DESC')
+            ->get()
+            ->map(function ($item) {
+                return (object) [
+                    'grade' => $item->grade,
+                    'count' => $item->count
+                ];
+            });
+        }
+
+        // 기관별 통계 (평균 점수 포함)
+        $institutionStats = VideoSubmission::selectRaw('
+            video_submissions.institution_name,
+            COUNT(video_submissions.id) as submission_count,
+            AVG(evaluations.total_score) as avg_score
+        ')
+        ->leftJoin('evaluations', 'video_submissions.id', '=', 'evaluations.video_submission_id')
+        ->whereNotNull('evaluations.total_score')
+        ->groupBy('video_submissions.institution_name')
+        ->orderBy('avg_score', 'DESC')
+        ->get();
+
+        // 학생 순위 (상위 20명)
+        $studentRankings = VideoSubmission::select(
+            'video_submissions.student_name_korean as student_name',
+            'video_submissions.institution_name',
+            'video_submissions.class_name',
+            'video_submissions.grade',
+            'evaluations.pronunciation_score',
+            'evaluations.vocabulary_score', 
+            'evaluations.fluency_score',
+            'evaluations.confidence_score',
+            'evaluations.total_score'
+        )
+        ->join('evaluations', 'video_submissions.id', '=', 'evaluations.video_submission_id')
+        ->orderBy('evaluations.total_score', 'DESC')
+        ->limit(20)
+        ->get()
+        ->map(function ($item, $index) {
+            $item->rank = $index + 1;
+            // 학년과 반을 합쳐서 표시
+            $item->grade_class = $item->grade . ' ' . $item->class_name;
+            return $item;
+        });
+
         return view('admin.statistics', compact(
             'totalSubmissions', 'evaluatedSubmissions', 'assignedSubmissions', 'pendingSubmissions',
-            'institutionStats', 'judgeStats', 'dailyStats', 'averageScores'
+            'institutionStats', 'judgeStats', 'dailyStats', 'averageScores', 'scoreDistribution', 'studentRankings'
         ));
     }
 
@@ -540,5 +602,161 @@ class AdminController extends Controller
         }
 
         return back()->with('success', "{$assignedCount}개의 영상이 자동으로 배정되었습니다.");
+    }
+
+    /**
+     * 데이터 초기화 확인 페이지
+     */
+    public function showResetConfirmation()
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 기능입니다.');
+        }
+
+        // 현재 데이터 통계
+        $stats = [
+            'total_submissions' => VideoSubmission::count(),
+            'total_evaluations' => Evaluation::count(),
+            'total_assignments' => VideoAssignment::count(),
+            's3_files' => 0
+        ];
+
+        // S3 파일 수 계산
+        try {
+            $s3Files = Storage::disk('s3')->files('videos');
+            $stats['s3_files'] = count($s3Files);
+        } catch (\Exception $e) {
+            $stats['s3_files'] = 0;
+        }
+
+        return view('admin.reset-confirmation', compact('stats'));
+    }
+
+    /**
+     * 데이터 초기화 실행
+     */
+    public function executeReset(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 기능입니다.');
+        }
+
+        // 확인 절차 검증
+        $validator = Validator::make($request->all(), [
+            'confirmation_text' => 'required|in:모든 데이터를 영구적으로 삭제합니다',
+            'admin_password' => 'required'
+        ], [
+            'confirmation_text.required' => '확인 문구를 정확히 입력해주세요.',
+            'confirmation_text.in' => '확인 문구가 일치하지 않습니다.',
+            'admin_password.required' => '관리자 비밀번호를 입력해주세요.'
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
+
+        // 관리자 비밀번호 확인
+        if (!Auth::guard('admin')->validate([
+            'username' => $admin->username,
+            'password' => $request->admin_password
+        ])) {
+            return back()->with('error', '관리자 비밀번호가 일치하지 않습니다.');
+        }
+
+        try {
+            \DB::beginTransaction();
+
+            // 초기화 통계 수집
+            $stats = [
+                'submissions_deleted' => VideoSubmission::count(),
+                'evaluations_deleted' => Evaluation::count(),
+                'assignments_deleted' => VideoAssignment::count(),
+                's3_files_deleted' => 0
+            ];
+
+            // 1. 심사 결과 삭제
+            Evaluation::query()->delete();
+
+            // 2. 영상 배정 삭제
+            VideoAssignment::query()->delete();
+
+            // 3. S3 파일 삭제
+            try {
+                $s3Files = Storage::disk('s3')->files('videos');
+                foreach ($s3Files as $file) {
+                    Storage::disk('s3')->delete($file);
+                }
+                $stats['s3_files_deleted'] = count($s3Files);
+            } catch (\Exception $e) {
+                Log::error('S3 파일 삭제 오류: ' . $e->getMessage());
+            }
+
+            // 4. 영상 제출 데이터 삭제
+            VideoSubmission::query()->delete();
+
+            // 5. 로컬 storage 파일 정리
+            try {
+                $localFiles = Storage::disk('local')->files('videos');
+                foreach ($localFiles as $file) {
+                    Storage::disk('local')->delete($file);
+                }
+                
+                $publicFiles = Storage::disk('public')->files('videos');
+                foreach ($publicFiles as $file) {
+                    Storage::disk('public')->delete($file);
+                }
+            } catch (\Exception $e) {
+                Log::error('로컬 파일 삭제 오류: ' . $e->getMessage());
+            }
+
+            // 6. ID 시퀀스 초기화 (테이블 ID 재시작)
+            try {
+                $driver = \DB::getDriverName();
+                if ($driver === 'mysql') {
+                    \DB::statement('ALTER TABLE evaluations AUTO_INCREMENT = 1');
+                    \DB::statement('ALTER TABLE video_assignments AUTO_INCREMENT = 1');
+                    \DB::statement('ALTER TABLE video_submissions AUTO_INCREMENT = 1');
+                } elseif ($driver === 'sqlite') {
+                    // sqlite은 시퀀스가 sqlite_sequence 테이블에 저장됨
+                    \DB::statement("DELETE FROM sqlite_sequence WHERE name IN ('evaluations','video_assignments','video_submissions')");
+                } elseif ($driver === 'pgsql') {
+                    // PostgreSQL 시퀀스 이름은 기본 규칙을 따름: {table}_{column}_seq
+                    \DB::statement('ALTER SEQUENCE evaluations_id_seq RESTART WITH 1');
+                    \DB::statement('ALTER SEQUENCE video_assignments_id_seq RESTART WITH 1');
+                    \DB::statement('ALTER SEQUENCE video_submissions_id_seq RESTART WITH 1');
+                }
+            } catch (\Exception $e) {
+                Log::warning('ID 시퀀스 초기화 경고: ' . $e->getMessage());
+            }
+
+            // 7. 로그 기록
+            Log::warning('데이터 초기화 실행', [
+                'admin_id' => $admin->id,
+                'admin_name' => $admin->name,
+                'timestamp' => now(),
+                'stats' => $stats
+            ]);
+
+            \DB::commit();
+
+            return redirect()->route('admin.dashboard')
+                           ->with('success', 
+                                  "데이터 초기화가 완료되었습니다.\n" .
+                                  "삭제된 항목: " .
+                                  "영상 {$stats['submissions_deleted']}개, " .
+                                  "심사 {$stats['evaluations_deleted']}개, " .
+                                  "배정 {$stats['assignments_deleted']}개, " .
+                                  "S3 파일 {$stats['s3_files_deleted']}개");
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+            Log::error('데이터 초기화 오류: ' . $e->getMessage());
+            
+            return back()->with('error', '데이터 초기화 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
     }
 }

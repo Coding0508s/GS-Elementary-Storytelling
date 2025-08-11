@@ -113,7 +113,7 @@ class NotificationService
     private function generateUploadCompletionMessage(VideoSubmission $submission)
     {
         return sprintf(
-            "[GS Speech Contest] 안녕하세요. %s 학생의 영어 발표 동영상 업로드가 완료되었습니다. 심사 결과는 추후 개별 안내드리겠습니다. 참여해주셔서 감사합니다.",
+            "[GS Speech Contest] 안녕하세요. %s 학생의 영어 발표 동영상 업로드가 완료되었습니다.참여해주셔서 감사합니다.",
             $submission->student_name_korean
         );
     }
