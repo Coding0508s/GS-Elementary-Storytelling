@@ -73,6 +73,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/assignments/auto', [AdminController::class, 'autoAssign'])
             ->name('assignment.auto');
         
+        Route::post('/assignments/reassign-all', [AdminController::class, 'reassignAll'])
+            ->name('assignment.reassign.all');
+        
         // 데이터 다운로드
         Route::get('/download/excel', [AdminController::class, 'downloadExcel'])
             ->name('download.excel');
@@ -87,6 +90,19 @@ Route::prefix('admin')->name('admin.')->group(function () {
         
         Route::post('/reset-execute', [AdminController::class, 'executeReset'])
             ->name('reset.execute');
+        
+        // 2차 예선 진출 관리
+        Route::post('/qualify-second-round', [AdminController::class, 'qualifySecondRound'])
+            ->name('qualify.second.round');
+        
+        Route::get('/second-round-qualifiers', [AdminController::class, 'secondRoundQualifiers'])
+            ->name('second.round.qualifiers');
+        
+        Route::get('/download/second-round-qualifiers', [AdminController::class, 'downloadSecondRoundQualifiers'])
+            ->name('download.second.round.qualifiers');
+        
+        Route::post('/reset-qualification', [AdminController::class, 'resetQualificationStatus'])
+            ->name('reset.qualification');
     });
 });
 
@@ -131,7 +147,7 @@ Route::prefix('judge')->name('judge.')->group(function () {
         Route::get('/video/{id}/download', [JudgeController::class, 'downloadVideo'])
             ->name('video.download');
         
-        Route::get('/video/{id}/stream-url', [JudgeController::class, 'getVideoStreamUrl'])
-            ->name('video.stream-url');
+        Route::get('/video/{id}/stream', [JudgeController::class, 'getVideoStreamUrl'])
+            ->name('video.stream');
     });
 });

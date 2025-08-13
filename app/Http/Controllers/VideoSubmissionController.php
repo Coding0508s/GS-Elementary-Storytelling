@@ -65,6 +65,13 @@ class VideoSubmissionController extends Controller
      */
     public function uploadVideo(Request $request)
     {
+        // Force PHP upload settings for large files (2GB)
+        ini_set('upload_max_filesize', '2048M');
+        ini_set('post_max_size', '2048M');
+        ini_set('max_execution_time', '3600');
+        ini_set('max_input_time', '3600');
+        ini_set('memory_limit', '1024M');
+        set_time_limit(3600);
         $validator = Validator::make($request->all(), [
             'region' => 'required|string|max:255',
             'institution_name' => 'required|string|max:255',
@@ -80,7 +87,7 @@ class VideoSubmissionController extends Controller
                 'required',
                 'file',
                 'mimes:mp4,mov',
-                'max:1048576' // 1GB in KB (1024 * 1024)
+                'max:2097152' // 2GB in KB (2048 * 1024)
             ]
         ], [
             'region.required' => '거주 지역을 입력해주세요.',
@@ -95,7 +102,7 @@ class VideoSubmissionController extends Controller
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
             'video_file.required' => '비디오 파일을 선택해주세요.',
             'video_file.mimes' => 'MP4 또는 MOV 형식의 파일만 업로드 가능합니다.',
-            'video_file.max' => '파일 크기는 1GB를 초과할 수 없습니다.'
+            'video_file.max' => '파일 크기는 2GB를 초과할 수 없습니다.'
         ]);
 
         if ($validator->fails()) {
@@ -157,9 +164,20 @@ class VideoSubmissionController extends Controller
     /**
      * 업로드 성공 페이지 표시
      */
-    public function showUploadSuccess()
+    public function showUploadSuccess(Request $request)
     {
-        return view('upload-success');
+        $submission = null;
+        
+        // 세션에서 submission_id 가져오기
+        if ($request->session()->has('submission_id')) {
+            $submissionId = $request->session()->get('submission_id');
+            $submission = VideoSubmission::find($submissionId);
+            
+            // 보안을 위해 세션에서 ID 제거
+            $request->session()->forget('submission_id');
+        }
+        
+        return view('upload-success', compact('submission'));
     }
 
     /**
@@ -254,4 +272,6 @@ class VideoSubmissionController extends Controller
             ]);
         }
     }
+
+
 }

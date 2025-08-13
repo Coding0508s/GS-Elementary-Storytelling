@@ -50,8 +50,8 @@ class VideoSubmission extends Model
     // 허용된 파일 형식
     const ALLOWED_FILE_TYPES = ['mp4', 'mov'];
 
-    // 최대 파일 크기 (1GB in bytes)
-    const MAX_FILE_SIZE = 1073741824; // 1GB
+    // 최대 파일 크기 (2GB in bytes)
+    const MAX_FILE_SIZE = 2147483648; // 2GB
 
     /**
      * 파일 크기를 사람이 읽기 쉬운 형태로 변환
@@ -148,16 +148,80 @@ class VideoSubmission extends Model
         }
 
         try {
+            // 한글 파일명을 안전하게 처리
+            $originalFilename = $this->video_file_name;
+            
+            // 파일명에서 특수문자 제거 및 정리
+            $safeFilename = preg_replace('/[^\w\-_.가-힣a-zA-Z0-9]/', '_', $originalFilename);
+            
+            // UTF-8 인코딩 (percent encoding)
+            $encodedFilename = rawurlencode($safeFilename);
+            
+            // RFC 6266 표준에 따른 Content-Disposition 헤더
+            // filename*=UTF-8''encoded_filename 형식 사용
+            $contentDisposition = "attachment; filename*=UTF-8''" . $encodedFilename;
+            
             return Storage::disk('s3')->temporaryUrl(
                 $this->video_file_path,
                 now()->addHours($hours),
                 [
-                    'ResponseContentDisposition' => 'attachment; filename="' . $this->video_file_name . '"'
+                    'ResponseContentDisposition' => $contentDisposition
                 ]
             );
         } catch (\Exception $e) {
+            \Log::error('S3 다운로드 URL 생성 실패: ' . $e->getMessage(), [
+                'video_id' => $this->id,
+                'filename' => $this->video_file_name
+            ]);
             return null;
         }
+    }
+
+    /**
+     * S3에서 안전한 다운로드용 임시 URL 생성 (대안 방법)
+     */
+    public function getSafeS3DownloadUrl($hours = 1)
+    {
+        if (!$this->isStoredOnS3()) {
+            return null;
+        }
+
+        try {
+            // 영어/숫자로만 구성된 안전한 파일명 생성
+            $timestamp = date('YmdHis');
+            $extension = pathinfo($this->video_file_name, PATHINFO_EXTENSION);
+            $safeFilename = 'video_' . $this->id . '_' . $timestamp . '.' . $extension;
+            
+            return Storage::disk('s3')->temporaryUrl(
+                $this->video_file_path,
+                now()->addHours($hours),
+                [
+                    'ResponseContentDisposition' => 'attachment; filename="' . $safeFilename . '"'
+                ]
+            );
+        } catch (\Exception $e) {
+            \Log::error('안전한 S3 다운로드 URL 생성 실패: ' . $e->getMessage(), [
+                'video_id' => $this->id,
+                'filename' => $this->video_file_name
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * 접수번호 생성
+     */
+    public function getReceiptNumber()
+    {
+        return 'GSK-' . str_pad($this->id, 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * 접수번호 속성 (Accessor)
+     */
+    public function getReceiptNumberAttribute()
+    {
+        return $this->getReceiptNumber();
     }
 
     /**

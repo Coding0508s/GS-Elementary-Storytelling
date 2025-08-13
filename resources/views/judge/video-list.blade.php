@@ -126,15 +126,15 @@
                             </td>
                             <td>
                                 @if($assignment->status === 'assigned')
-                                    <span class="badge badge-pending" style="color:rgb(3, 116, 254);">
+                                    <span class="badge badge-pending">
                                             <i class="bi bi-clock" style="color:rgb(3, 116, 254);"></i> 배정됨
                                     </span>
                                 @elseif($assignment->status === 'in_progress')
-                                    <span class="badge badge-info" style="color:rgb(226, 41, 4);">
+                                    <span class="badge badge-info">
                                         <i class="bi bi-arrow-clockwise" style="color:rgb(226, 41, 4);"></i> 심사중
                                     </span>
                                 @elseif($assignment->status === 'completed')
-                                    <span class="badge badge-evaluated" style="color:rgb(79, 223, 7);">
+                                    <span class="badge badge-evaluated">
                                         <i class="bi bi-check-circle" style="color:rgb(79, 223, 7);"></i> 완료
                                     </span>
                                 @endif
@@ -142,7 +142,7 @@
                             <td>    
                                 @if($assignment->evaluation)
                                     <span class="fw-bold text-success">{{ $assignment->evaluation->total_score }}</span>
-                                    <small class="text-muted">/ 100</small>
+                                    <small class="text-muted">/ 40</small>
                                 @else
                                     <span class="text-muted">-</span>
                                 @endif
@@ -182,6 +182,13 @@
                     </tbody>
                 </table>
             </div>
+            
+            <!-- 페이지네이션 -->
+            @if($assignments->hasPages())
+            <div class="d-flex justify-content-center mt-4">
+                {{ $assignments->links('custom.pagination') }}
+            </div>
+            @endif
         @else
             <div class="text-center py-4">
                 <i class="bi bi-inbox display-4 text-muted"></i>

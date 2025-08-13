@@ -200,6 +200,11 @@
                             <i class="bi bi-graph-up"></i> 통계 보기
                         </a>
                         
+                        <a class="nav-link {{ request()->routeIs('admin.second.round.qualifiers') ? 'active' : '' }}" 
+                           href="{{ route('admin.second.round.qualifiers') }}">
+                            <i class="bi bi-trophy"></i> 2차 예선 진출자
+                        </a>
+                        
                         <a class="nav-link" href="{{ route('admin.download.excel') }}">
                             <i class="bi bi-download"></i> 데이터 다운로드
                         </a>
@@ -210,7 +215,7 @@
                             <i class="bi bi-speedometer2"></i> 심사위원 대시보드
                         </a>
                         
-                        <a class="nav-link {{ request()->routeIs('judge.video.*') ? 'active' : '' }}" 
+                        <a class="nav-link {{ request()->routeIs('judge.video.*') || request()->routeIs('judge.evaluation.*') ? 'active' : '' }}" 
                            href="{{ route('judge.video.list') }}">
                             <i class="bi bi-camera-video"></i> 배정된 영상 목록
                         </a>

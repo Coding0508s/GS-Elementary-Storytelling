@@ -1,3 +1,44 @@
+/* Range ticks for score sliders */
+.range-ticks {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin-top: 8px;
+  padding: 0 8px; /* 슬라이더 thumb 너비만큼 여백 */
+}
+.range-ticks .tick {
+  font-size: 11px;
+  color: #6c757d;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1;
+  min-width: 12px;
+}
+
+/* 슬라이더와 눈금이 정확히 겹치도록 래퍼에 기준 폭 제공 */
+.range-wrap {
+  position: relative;
+}
+.range-wrap input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+
+/* Bootstrap 기본 슬라이더 스타일 보완 */
+.range-wrap .form-range {
+  padding: 0;
+}
+
+/* 슬라이더 thumb과 트랙 스타일 개선 */
+.range-wrap .form-range::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.range-wrap .form-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+}
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';

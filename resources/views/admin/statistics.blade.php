@@ -112,36 +112,26 @@
     </div>
     <div class="card-body">
         @if($scoreDistribution->count() > 0)
-            <div class="row">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
                 @foreach($scoreDistribution as $dist)
-                <div class="col-md-2 mb-3">
-                    <div class="card text-center h-100">
-                        <div class="card-body">
-                            <h4 class="
-                                @if(Str::contains($dist->grade, '우수')) text-success
-                                @elseif(Str::contains($dist->grade, '양호')) text-primary
-                                @elseif(Str::contains($dist->grade, '보통')) text-info
-                                @elseif(Str::contains($dist->grade, '미흡')) text-warning
-                                @else text-danger
-                                @endif
-                            ">
-                                {{ $dist->count }}
-                            </h4>
-                            <small class="text-muted">{{ $dist->grade }}</small>
-                            <div class="mt-2">
-                                <small class="text-muted">
-                                    ({{ number_format(($dist->count / $evaluatedSubmissions) * 100, 1) }}%)
-                                </small>
-                            </div>
-                        </div>
+                <div class="text-center mx-2 mb-2">
+                    <span class="badge fs-6 px-2 py-1
+                        @if(Str::contains($dist->grade, '우수')) bg-success
+                        @elseif(Str::contains($dist->grade, '양호')) bg-primary
+                        @elseif(Str::contains($dist->grade, '보통')) bg-info
+                        @elseif(Str::contains($dist->grade, '미흡')) bg-warning
+                        @else bg-danger
+                        @endif
+                    ">
+                        {{ $dist->grade }} {{ $dist->count }}명
+                    </span>
+                    <div>
+                        <small class="text-muted" style="font-size: 0.7rem;">
+                            {{ number_format(($dist->count / $evaluatedSubmissions) * 100, 1) }}%
+                        </small>
                     </div>
                 </div>
                 @endforeach
-            </div>
-            
-            <!-- 점수 분포 차트 영역 -->
-            <div class="mt-4">
-                <canvas id="distributionChart" width="400" height="200"></canvas>
             </div>
         @else
             <div class="text-center py-4">

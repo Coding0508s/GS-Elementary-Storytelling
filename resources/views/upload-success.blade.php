@@ -28,6 +28,14 @@
                         <i class="bi bi-party-popper"></i> 업로드 완료!
                     </h2>
                     
+                    @if($submission)
+                    <div class="alert alert-info mb-4">
+                        <h5 class="mb-2"><i class="bi bi-receipt"></i> 접수번호</h5>
+                        <h3 class="mb-0 text-primary">{{ $submission->receipt_number }}</h3>
+                        <small class="text-muted">접수번호를 기록해두시면 문의 시 도움이 됩니다.</small>
+                    </div>
+                    @endif
+                    
                     <p class="lead mb-4">
                         Speech Contest 비디오가 성공적으로 업로드되었습니다.
                     </p>
@@ -36,7 +44,7 @@
                         <i class="bi bi-chat-dots"></i>
                         <strong>SMS 알림 발송 완료</strong><br>
                         입력해주신 학부모 전화번호로 업로드 완료 SMS를 발송했습니다.<br>
-                        <small class="text-muted">몇 분 내에 SMS를 받으실 수 있습니다.</small>
+                        <small class="text-muted">접수번호가 포함된 SMS를 몇 분 내에 받으실 수 있습니다.</small>
                     </div>
                     
                     <div class="row mt-4">
@@ -48,10 +56,10 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                       <!--  <div class="col-md-6">
                             <div class="card bg-light">
                                 <div class="card-body">
-                                    <h6><i class="bi bi-hash"></i> 제출 번호</h6>
+                                    <h6><i class="bi bi-hash"></i> 접수번호</h6>
                                     <p class="mb-0">
                                         @if(session('submission_id'))
                                             #{{ str_pad(session('submission_id'), 6, '0', STR_PAD_LEFT) }}
@@ -61,7 +69,7 @@
                                     </p>
                                 </div>
                             </div>
-                        </div>
+                        </div> -->
                     </div>
                     
                     <div class="mt-5">
@@ -101,7 +109,7 @@
                         <div class="alert alert-warning">
                             <i class="bi bi-exclamation-triangle"></i>
                             <strong>중요 안내</strong><br>
-                            • 제출된 비디오는 수정 또는 재업로드가 불가능합니다.<br>
+                            • 접수된 비디오는 수정 또는 재업로드가 불가능합니다.<br>
                             • 문의사항은 각 교육기관을 통해 연락해주세요.<br>
                             • 개인정보는 대회 종료 후 안전하게 폐기됩니다.
                         </div>

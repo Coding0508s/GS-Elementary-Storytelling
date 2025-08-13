@@ -55,6 +55,19 @@ class AdminController extends Controller
 
         $credentials = $request->only('username', 'password');
 
+        // 사용자 존재 여부 확인
+        $admin = Admin::where('username', $credentials['username'])->first();
+        
+        if (!$admin) {
+            return back()->with('error', '존재하지 않는 사용자입니다.')
+                        ->withInput();
+        }
+        
+        if (!$admin->is_active) {
+            return back()->with('error', '비활성화된 계정입니다.')
+                        ->withInput();
+        }
+
         if (Auth::guard('admin')->attempt($credentials)) {
             $admin = Auth::guard('admin')->user();
             $admin->updateLastLogin();
@@ -69,7 +82,7 @@ class AdminController extends Controller
             }
         }
 
-        return back()->with('error', '아이디 또는 비밀번호가 올바르지 않습니다.')
+        return back()->with('error', '비밀번호가 올바르지 않습니다.')
                     ->withInput();
     }
 
@@ -100,11 +113,10 @@ class AdminController extends Controller
         $assignedSubmissions = VideoSubmission::whereHas('assignment')->count();
         $pendingSubmissions = $totalSubmissions - $assignedSubmissions;
         
-        // 최근 업로드된 영상들
+        // 최근 업로드된 영상들 
         $recentSubmissions = VideoSubmission::with(['evaluation', 'assignment.admin'])
                                           ->orderBy('created_at', 'desc')
-                                          ->take(10)
-                                          ->get();
+                                          ->paginate(10, ['*'], 'recent');
 
         // 심사위원별 배정 현황
         $adminStats = Admin::withCount(['videoAssignments', 'evaluations'])
@@ -116,13 +128,17 @@ class AdminController extends Controller
                               return $admin;
                           });
 
+        // 심사위원 수 계산
+        $judgesCount = Admin::where('role', 'judge')->count();
+
         return view('admin.dashboard', compact(
             'totalSubmissions',
             'evaluatedSubmissions',
             'assignedSubmissions',
             'pendingSubmissions',
             'recentSubmissions',
-            'adminStats'
+            'adminStats',
+            'judgesCount'
         ));
     }
 
@@ -168,7 +184,7 @@ class AdminController extends Controller
             }
         }
 
-        $submissions = $query->orderBy('created_at', 'desc')->paginate(20);
+        $submissions = $query->orderBy('created_at', 'asc')->paginate(20);
 
         return view('admin.evaluation-list', compact('submissions'));
     }
@@ -279,7 +295,7 @@ class AdminController extends Controller
         }
 
         $submissions = VideoSubmission::with(['evaluation', 'assignment.admin'])
-                                    ->orderBy('created_at', 'desc')
+                                    ->orderBy('created_at', 'asc')
                                     ->get();
 
         // PhpSpreadsheet 사용
@@ -288,7 +304,7 @@ class AdminController extends Controller
 
         // 헤더 설정
         $headers = [
-            'ID', '학생명(한글)', '학생명(영어)', '기관명', '반명', '학년', '나이',
+            '접수번호', '학생명(한글)', '학생명(영어)', '기관명', '반명', '학년', '나이',
             '학부모명', '연락처', 'Unit주제', '업로드일시', '파일명', '파일크기',
             '배정된심사위원', '배정일시', '심사상태', '발음점수', '어휘점수', 
             '유창성점수', '자신감점수', '총점', '심사코멘트', '심사완료일시'
@@ -320,7 +336,8 @@ class AdminController extends Controller
         // 데이터 추가
         $rowIndex = 2;
         foreach ($submissions as $submission) {
-            $sheet->setCellValue('A' . $rowIndex, $submission->id);
+            // 접수번호
+            $sheet->setCellValue('A' . $rowIndex, $submission->receipt_number);
             $sheet->setCellValue('B' . $rowIndex, $submission->student_name_korean);
             $sheet->setCellValue('C' . $rowIndex, $submission->student_name_english);
             $sheet->setCellValue('D' . $rowIndex, $submission->institution_name);
@@ -467,6 +484,7 @@ class AdminController extends Controller
         )
         ->join('evaluations', 'video_submissions.id', '=', 'evaluations.video_submission_id')
         ->orderBy('evaluations.total_score', 'DESC')
+        ->orderBy('video_submissions.created_at', 'ASC')
         ->limit(20)
         ->get()
         ->map(function ($item, $index) {
@@ -495,12 +513,14 @@ class AdminController extends Controller
         }
 
         $assignments = VideoAssignment::with(['videoSubmission', 'admin'])
-                                    ->orderBy('created_at', 'desc')
-                                    ->get();
+                                    ->whereHas('videoSubmission') // videoSubmission이 있는 것만
+                                    ->whereHas('admin') // admin이 있는 것만
+                                    ->orderBy('created_at', 'asc')
+                                    ->paginate(10, ['*'], 'assignments');
 
         $unassignedVideos = VideoSubmission::whereDoesntHave('assignment')
-                                          ->orderBy('created_at', 'desc')
-                                          ->get();
+                                          ->orderBy('created_at', 'asc')
+                                          ->paginate(10, ['*'], 'unassigned');
 
         $admins = Admin::where('is_active', true)
                       ->where('role', 'judge') // 심사위원만 표시
@@ -575,12 +595,14 @@ class AdminController extends Controller
                            ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
         }
 
+        // 무작위 배정을 위해 영상과 심사위원 목록을 랜덤 순서로 가져옴
         $unassignedVideos = VideoSubmission::whereDoesntHave('assignment')
-                                          ->orderBy('created_at', 'asc')
+                                          ->inRandomOrder()
                                           ->get();
 
         $activeAdmins = Admin::where('is_active', true)
                             ->where('role', 'judge') // 심사위원만 배정
+                            ->inRandomOrder()
                             ->get();
 
         if ($activeAdmins->isEmpty()) {
@@ -588,8 +610,13 @@ class AdminController extends Controller
         }
 
         $assignedCount = 0;
+
+        // 심사위원을 라운드로빈하되, 시작점을 랜덤으로 하여 무작위성을 강화
+        $adminCount = $activeAdmins->count();
+        $startOffset = $adminCount > 0 ? random_int(0, $adminCount - 1) : 0;
+
         foreach ($unassignedVideos as $index => $video) {
-            $adminIndex = $index % $activeAdmins->count();
+            $adminIndex = ($startOffset + $index) % $adminCount;
             $selectedAdmin = $activeAdmins[$adminIndex];
 
             VideoAssignment::create([
@@ -602,6 +629,85 @@ class AdminController extends Controller
         }
 
         return back()->with('success', "{$assignedCount}개의 영상이 자동으로 배정되었습니다.");
+    }
+
+    /**
+     * 전체 영상 재배정 (기존 배정 삭제 후 새로 배정)
+     */
+    public function reassignAll()
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        try {
+            \DB::beginTransaction();
+
+            // 1. 기존 배정 삭제
+            $deletedAssignments = VideoAssignment::count();
+            VideoAssignment::query()->delete();
+
+            // 2. 기존 평가 삭제
+            $deletedEvaluations = Evaluation::count();
+            Evaluation::query()->delete();
+
+            // 3. 모든 영상 가져오기 (업로드 순서대로)
+            $allVideos = VideoSubmission::orderBy('created_at', 'asc')->get();
+
+            // 4. 활성 심사위원 가져오기
+            $activeAdmins = Admin::where('is_active', true)
+                                ->where('role', 'judge')
+                                ->get();
+
+            if ($activeAdmins->isEmpty()) {
+                \DB::rollback();
+                return back()->with('error', '활성화된 심사위원이 없습니다.');
+            }
+
+            $assignedCount = 0;
+            $adminCount = $activeAdmins->count();
+
+            // 5. 라운드로빈 방식으로 모든 영상 재배정
+            foreach ($allVideos as $index => $video) {
+                $adminIndex = $index % $adminCount;
+                $selectedAdmin = $activeAdmins[$adminIndex];
+
+                VideoAssignment::create([
+                    'video_submission_id' => $video->id,
+                    'admin_id' => $selectedAdmin->id,
+                    'status' => 'assigned'
+                ]);
+
+                $assignedCount++;
+            }
+
+            \DB::commit();
+
+            Log::info('전체 영상 재배정 완료', [
+                'admin_id' => $admin->id,
+                'deleted_assignments' => $deletedAssignments,
+                'deleted_evaluations' => $deletedEvaluations,
+                'reassigned_videos' => $assignedCount,
+                'judges_count' => $adminCount,
+                'timestamp' => now()
+            ]);
+
+            return back()->with('success', 
+                              "전체 영상 재배정이 완료되었습니다.\n" .
+                              "삭제된 기존 배정: {$deletedAssignments}개\n" .
+                              "삭제된 기존 평가: {$deletedEvaluations}개\n" .
+                              "새로 배정된 영상: {$assignedCount}개\n" .
+                              "심사위원 수: {$adminCount}명");
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+            Log::error('전체 영상 재배정 오류: ' . $e->getMessage());
+            
+            return back()->with('error', '전체 영상 재배정 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -757,6 +863,276 @@ class AdminController extends Controller
             Log::error('데이터 초기화 오류: ' . $e->getMessage());
             
             return back()->with('error', '데이터 초기화 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 2차 예선 진출자 선정 (각 심사위원별 상위 10명)
+     */
+    public function qualifySecondRound()
+    {
+        try {
+            \DB::beginTransaction();
+
+            // 모든 심사위원의 평가를 초기화
+            Evaluation::query()->update([
+                'qualification_status' => Evaluation::QUALIFICATION_NOT_QUALIFIED,
+                'rank_by_judge' => null,
+                'qualified_at' => null
+            ]);
+
+            // 각 심사위원별로 상위 10명 선정
+            $judges = Admin::where('role', 'judge')->get();
+            $totalQualified = 0;
+
+            foreach ($judges as $judge) {
+                // 해당 심사위원이 완료한 배정들을 통해 평가 가져오기
+                $completedAssignments = VideoAssignment::where('admin_id', $judge->id)
+                    ->where('status', VideoAssignment::STATUS_COMPLETED)
+                    ->with(['evaluation', 'videoSubmission'])
+                    ->get();
+                
+                // 평가가 있는 배정들만 필터링하고 총점 순으로 정렬 (동점 시 제출일시 빠른 순)
+                $evaluations = $completedAssignments
+                    ->filter(function($assignment) {
+                        return $assignment->evaluation !== null;
+                    })
+                    ->sort(function($a, $b) {
+                        $scoreA = $a->evaluation ? $a->evaluation->total_score : 0;
+                        $scoreB = $b->evaluation ? $b->evaluation->total_score : 0;
+                        
+                        // 총점이 동일한 경우 제출일시(업로드 시간) 빠른 순으로 정렬
+                        if ($scoreA === $scoreB) {
+                            $timeA = $a->videoSubmission ? $a->videoSubmission->created_at : now();
+                            $timeB = $b->videoSubmission ? $b->videoSubmission->created_at : now();
+                            return $timeA <=> $timeB; // 제출일시 빠른 순
+                        }
+                        return $scoreB <=> $scoreA; // 총점 높은 순
+                    });
+
+                // 상위 10명에 순위 부여 및 자격 부여
+                foreach ($evaluations->take(10) as $index => $assignment) {
+                    $rank = $index + 1;
+                    
+                    $assignment->evaluation->update([
+                        'qualification_status' => Evaluation::QUALIFICATION_QUALIFIED,
+                        'rank_by_judge' => $rank,
+                        'qualified_at' => now()
+                    ]);
+                    
+                    $totalQualified++;
+                }
+
+                // 나머지는 탈락 처리
+                foreach ($evaluations->skip(10) as $assignment) {
+                    $assignment->evaluation->update([
+                        'qualification_status' => Evaluation::QUALIFICATION_NOT_QUALIFIED,
+                        'rank_by_judge' => null,
+                        'qualified_at' => null
+                    ]);
+                }
+            }
+
+            \DB::commit();
+
+            Log::info('2차 예선 진출자 선정 완료', [
+                'admin_id' => auth()->guard('admin')->user()->id,
+                'judges_count' => $judges->count(),
+                'total_qualified' => $totalQualified,
+                'timestamp' => now()
+            ]);
+
+            return back()->with('success', "2차 예선 진출자 선정이 완료되었습니다. " .
+                                          "심사위원 {$judges->count()}명, " .
+                                          "총 진출자 {$totalQualified}명");
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+            Log::error('2차 예선 진출자 선정 오류: ' . $e->getMessage());
+            
+            return back()->with('error', '2차 예선 진출자 선정 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 2차 예선 진출자 목록 조회
+     */
+    public function secondRoundQualifiers()
+    {
+        // 2차 예선 진출자들을 심사위원별로 그룹화 후 각 그룹 내에서 순위별 정렬
+        $qualifiedEvaluations = Evaluation::where('qualification_status', Evaluation::QUALIFICATION_QUALIFIED)
+            ->with(['videoSubmission', 'admin'])
+            ->get();
+
+        // 심사위원별로 그룹화하고 각 그룹 내에서 1~10위 순서로 정렬 보장
+        $qualifiedByJudge = $qualifiedEvaluations
+            ->groupBy('admin_id')
+            ->map(function ($evaluations) {
+                // rank_by_judge 기준으로 정렬하되, null 값은 제외
+                return $evaluations
+                    ->filter(function($evaluation) {
+                        return $evaluation->rank_by_judge !== null;
+                    })
+                    ->sortBy('rank_by_judge')
+                    ->values(); // 키를 0, 1, 2... 순서로 재인덱싱
+            })
+            ->filter(function($evaluations) {
+                return $evaluations->count() > 0; // 빈 그룹 제거
+            });
+
+        // 전체 진출자 통계
+        $totalQualified = $qualifiedEvaluations->count();
+        $judgesCount = Admin::where('role', 'judge')->count();
+
+        return view('admin.second-round-qualifiers', compact('qualifiedByJudge', 'totalQualified', 'judgesCount'));
+    }
+
+    /**
+     * 2차 예선 진출자 엑셀 다운로드
+     */
+    public function downloadSecondRoundQualifiers()
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        // 2차 예선 진출자들 가져오기 (심사위원별 → 순위별 정렬)
+        $qualifiedEvaluations = Evaluation::where('qualification_status', Evaluation::QUALIFICATION_QUALIFIED)
+            ->with(['videoSubmission', 'admin'])
+            ->orderBy('admin_id')
+            ->orderBy('rank_by_judge')
+            ->get();
+
+        if ($qualifiedEvaluations->isEmpty()) {
+            return back()->with('error', '2차 예선 진출자가 없습니다.');
+        }
+
+        // PhpSpreadsheet 사용
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // 헤더 설정
+        $headers = [
+            '접수번호', '심사위원', '순위', '학생명(한글)', '학생명(영어)', '기관명', '학년', '반명', '나이',
+            'Unit주제', '총점', '등급', '제출일시', '진출확정일시'
+        ];
+
+        // 헤더 스타일 설정
+        $headerStyle = [
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '4F46E5'],
+            ],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            ],
+        ];
+
+        // 헤더 추가
+        foreach ($headers as $colIndex => $header) {
+            $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
+            $sheet->setCellValue($column . '1', $header);
+            $sheet->getStyle($column . '1')->applyFromArray($headerStyle);
+        }
+
+        // 데이터 추가
+        $rowIndex = 2;
+        foreach ($qualifiedEvaluations as $evaluation) {
+            $submission = $evaluation->videoSubmission;
+            
+            // 등급 계산
+            $grade = '';
+            if ($evaluation->total_score >= 36) {
+                $grade = 'A+';
+            } elseif ($evaluation->total_score >= 32) {
+                $grade = 'A';
+            } elseif ($evaluation->total_score >= 28) {
+                $grade = 'B+';
+            } elseif ($evaluation->total_score >= 24) {
+                $grade = 'B';
+            } elseif ($evaluation->total_score >= 20) {
+                $grade = 'C+';
+            } elseif ($evaluation->total_score >= 16) {
+                $grade = 'C';
+            } else {
+                $grade = 'D';
+            }
+
+            // 접수번호
+            $sheet->setCellValue('A' . $rowIndex, $submission->receipt_number);
+            $sheet->setCellValue('B' . $rowIndex, $evaluation->admin->name);
+            $sheet->setCellValue('C' . $rowIndex, $evaluation->rank_by_judge . '위');
+            $sheet->setCellValue('D' . $rowIndex, $submission->student_name_korean);
+            $sheet->setCellValue('E' . $rowIndex, $submission->student_name_english);
+            $sheet->setCellValue('F' . $rowIndex, $submission->institution_name);
+            $sheet->setCellValue('G' . $rowIndex, $submission->grade);
+            $sheet->setCellValue('H' . $rowIndex, $submission->class_name);
+            $sheet->setCellValue('I' . $rowIndex, $submission->age);
+            $sheet->setCellValue('J' . $rowIndex, $submission->unit_topic ?? '-');
+            $sheet->setCellValue('K' . $rowIndex, $evaluation->total_score . '/40');
+            $sheet->setCellValue('L' . $rowIndex, $grade);
+            $sheet->setCellValue('M' . $rowIndex, $submission->created_at->format('Y-m-d H:i:s'));
+            $sheet->setCellValue('N' . $rowIndex, $evaluation->qualified_at->format('Y-m-d H:i:s'));
+            
+            $rowIndex++;
+        }
+
+        // 열 너비 자동 조정
+        foreach (range('A', 'N') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        // 파일명 생성
+        $filename = '2차_예선_진출자_목록_' . date('Y-m-d_H-i-s') . '.xlsx';
+
+        // Excel 파일 생성
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        
+        // 임시 파일에 저장
+        $tempFile = storage_path('app/temp/' . $filename);
+        if (!file_exists(dirname($tempFile))) {
+            mkdir(dirname($tempFile), 0755, true);
+        }
+        
+        $writer->save($tempFile);
+
+        // 파일 다운로드
+        return response()->download($tempFile, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * 2차 예선 진출 상태 초기화
+     */
+    public function resetQualificationStatus()
+    {
+        try {
+            Evaluation::query()->update([
+                'qualification_status' => Evaluation::QUALIFICATION_PENDING,
+                'rank_by_judge' => null,
+                'qualified_at' => null
+            ]);
+
+            Log::info('2차 예선 자격 상태 초기화', [
+                'admin_id' => auth()->guard('admin')->user()->id,
+                'timestamp' => now()
+            ]);
+
+            return back()->with('success', '2차 예선 자격 상태가 초기화되었습니다.');
+
+        } catch (\Exception $e) {
+            Log::error('2차 예선 자격 상태 초기화 오류: ' . $e->getMessage());
+            
+            return back()->with('error', '자격 상태 초기화 중 오류가 발생했습니다: ' . $e->getMessage());
         }
     }
 }

@@ -35,7 +35,7 @@
                                    id="region" 
                                    name="region" 
                                    value="{{ old('region') }}" 
-                                   placeholder="예: 과천 포도씨"
+                                   placeholder="예: 경기도 과천시"
                                    required>
                         </div>
                         <div class="col-md-6 mb-2">
@@ -45,7 +45,7 @@
                                    id="institution_name" 
                                    name="institution_name" 
                                    value="{{ old('institution_name') }}" 
-                                   placeholder="예: GS어학원"
+                                   placeholder="정확한 기관명을 입력해주세요."
                                    required>
                         </div>
                     </div>
@@ -169,7 +169,7 @@
                         <h6>비디오 파일을 선택하거나 여기에 드래그하세요</h6>
                         <p class="text-muted">
                             지원 형식: MP4, MOV<br>
-                            최대 크기: 1GB
+                            최대 크기: 2GB
                         </p>
                         <input type="file" 
                                class="d-none" 
@@ -254,10 +254,10 @@ document.addEventListener('DOMContentLoaded', function() {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
-            // 파일 크기 체크 (1GB)
-            const maxSize = 1024 * 1024 * 1024; // 1GB
+            // 파일 크기 체크 (2GB)
+            const maxSize = 2 * 1024 * 1024 * 1024; // 2GB
             if (file.size > maxSize) {
-                alert('파일 크기가 1GB를 초과합니다. 더 작은 파일을 선택해주세요.');
+                alert('파일 크기가 2GB를 초과합니다. 더 작은 파일을 선택해주세요.');
                 fileInput.value = '';
                 fileInfo.classList.add('d-none');
                 return;

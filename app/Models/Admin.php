@@ -31,11 +31,16 @@ class Admin extends Authenticatable
     ];
 
     /**
-     * 비밀번호를 자동으로 해시화
+     * 비밀번호를 자동으로 해시화 (이미 해시된 경우 중복 해시 방지)
      */
     public function setPasswordAttribute($password)
     {
-        $this->attributes['password'] = Hash::make($password);
+        // 이미 BCrypt 해시인지 확인 (60자 길이이고 $2y$로 시작)
+        if (strlen($password) === 60 && (str_starts_with($password, '$2y$') || str_starts_with($password, '$2a$'))) {
+            $this->attributes['password'] = $password;
+        } else {
+            $this->attributes['password'] = Hash::make($password);
+        }
     }
 
     /**

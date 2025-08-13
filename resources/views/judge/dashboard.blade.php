@@ -170,6 +170,114 @@
     </div>
 </div>
 
+<!-- 내가 심사한 영상 순위 -->
+@if($myEvaluatedRankings->count() > 0)
+<div class="card admin-card mb-4">
+    <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-trophy"></i> 내가 심사한 영상 순위 (상위 10명)</h5>
+                        <small class="text-muted">※ 동점 시 업로드 빠른 순으로 순위 결정</small>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-admin table-hover">
+                <thead>
+                    <tr>
+                        <th width="80px">순위</th>
+                        <th>학생명</th>
+                        <th>기관</th>
+                        <th>학년</th>
+                        <th>총점</th>
+                        <th>등급</th>
+                        <th>업로드시간</th>
+                        <th>2차 예선</th>
+                        <th>작업</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($myEvaluatedRankings as $ranking)
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                @if($ranking['rank'] <= 3)
+                                    @if($ranking['rank'] == 1)
+                                        <i class="bi bi-trophy-fill text-warning me-2" style="font-size: 1.2rem;"></i>
+                                    @elseif($ranking['rank'] == 2)
+                                        <i class="bi bi-award-fill text-secondary me-2" style="font-size: 1.2rem;"></i>
+                                    @else
+                                        <i class="bi bi-award-fill text-warning me-2" style="font-size: 1.2rem;"></i>
+                                    @endif
+                                @endif
+                                <strong class="text-primary">{{ $ranking['rank'] }}위</strong>
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ $ranking['student_name'] }}</strong>
+                        </td>
+                        <td>{{ $ranking['institution'] }}</td>
+                        <td>{{ $ranking['grade'] }}</td>
+                        <td>
+                            <span class="fw-bold text-primary">{{ $ranking['total_score'] }}</span>
+                            <small class="text-muted">/40점</small>
+                        </td>
+                        <td>
+                            @php
+                                $badgeClass = '';
+                                switch($ranking['evaluation_grade']) {
+                                    case '우수': $badgeClass = 'bg-success'; break;
+                                    case '양호': $badgeClass = 'bg-primary'; break;
+                                    case '보통': $badgeClass = 'bg-info'; break;
+                                    case '미흡': $badgeClass = 'bg-warning text-dark'; break;
+                                    default: $badgeClass = 'bg-danger'; break;
+                                }
+                            @endphp
+                            <span class="badge {{ $badgeClass }}">{{ $ranking['evaluation_grade'] }}</span>
+                        </td>
+                        <td>
+                            <small class="text-info">{{ $ranking['upload_time'] }}</small>
+                        </td>
+                        <td>
+                            @php
+                                $qualificationStatus = \App\Models\Evaluation::where('video_submission_id', $ranking['submission_id'])
+                                    ->where('admin_id', auth()->guard('admin')->user()->id)
+                                    ->value('qualification_status');
+                            @endphp
+                            @if($qualificationStatus === 'qualified')
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> 진출
+                                </span>
+                            @elseif($qualificationStatus === 'not_qualified')
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle"></i> 탈락
+                                </span>
+                            @else
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-clock"></i> 대기
+                                </span>
+                            @endif
+                        </td>
+                        <td>
+                            <a href="{{ route('judge.evaluation.edit', $ranking['assignment_id']) }}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> 보기
+                            </a>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        
+        @if($completedEvaluations > 10)
+        <div class="text-center mt-3">
+            <small class="text-muted">
+                총 {{ $completedEvaluations }}개 중 상위 10명을 표시하고 있습니다.
+            </small>
+        </div>
+        @endif
+    </div>
+</div>
+@endif
+
 <!-- 최근 배정된 영상 -->
 <div class="card admin-card">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -215,7 +323,7 @@
                                         <i class="bi bi-arrow-clockwise"></i> 심사중
                                     </span>
                                 @elseif($assignment->status === 'completed')
-                                    <span class="badge badge-evaluated" style="color:rgb(79, 223, 7);">
+                                    <span class="badge" style="color:rgb(120, 223, 69);">
                                         <i class="bi bi-check-circle"></i> 완료
                                     </span>
                                 @endif

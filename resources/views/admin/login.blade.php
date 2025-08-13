@@ -185,7 +185,7 @@
                        name="username" 
                        placeholder="관리자 아이디"
                        value="{{ old('username') }}"
-                       required
+                       required autocomplete="username"
                        autofocus>
             </div>
             
@@ -197,6 +197,7 @@
                        class="form-control" 
                        name="password" 
                        placeholder="비밀번호"
+                       autocomplete="current-password"
                        required>
             </div>
             

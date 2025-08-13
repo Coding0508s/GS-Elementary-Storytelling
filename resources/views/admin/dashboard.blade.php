@@ -17,7 +17,7 @@
                     <i class="bi bi-camera-video"></i>
                 </div>
                 <h3 class="text-primary">{{ number_format($totalSubmissions) }}</h3>
-                <p class="card-text text-muted">총 제출 영상</p>
+                <p class="card-text text-muted">총 접수 영상</p>
             </div>
         </div>
     </div>
@@ -123,7 +123,7 @@
                     
                     <a href="{{ route('admin.evaluation.list') }}" 
                        class="btn btn-outline-primary">
-                        <i class="bi bi-list-check"></i> 전체 제출 목록
+                        <i class="bi bi-list-check"></i> 전체 접수 목록
                     </a>
                     
                     <a href="{{ route('admin.download.excel') }}" 
@@ -172,7 +172,7 @@
 <!-- 최근 제출된 영상 -->
 <div class="card admin-card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-clock-history"></i> 최근 제출된 영상</h5>
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> 최근 접수된 영상</h5>
         <a href="{{ route('admin.evaluation.list') }}" class="btn btn-sm btn-outline-light">
             전체 보기 <i class="bi bi-arrow-right"></i>
         </a>
@@ -183,7 +183,8 @@
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
-                            <th>제출일</th>
+                            <th>접수번호</th>
+                            <th>접수일</th>
                             <th>학생명</th>
                             <th>기관</th>
                             <th>파일</th>
@@ -194,6 +195,9 @@
                     <tbody>
                         @foreach($recentSubmissions as $submission)
                         <tr>
+                            <td>
+                                <small>{{ $submission->receipt_number }}</small>
+                            </td>
                             <td>
                                 <small>{{ $submission->created_at->format('m/d H:i') }}</small>
                             </td>
@@ -239,12 +243,109 @@
         @else
             <div class="text-center py-4">
                 <i class="bi bi-inbox display-4 text-muted"></i>
-                <p class="text-muted mt-2">제출된 영상이 없습니다.</p>
+                <p class="text-muted mt-2">접수된 영상이 없습니다.</p>
                 <a href="{{ url('/') }}" class="btn btn-outline-primary" target="_blank">
                     <i class="bi bi-plus-circle"></i> 대회 페이지로 이동
                 </a>
             </div>
         @endif
+        
+        <!-- 최근 접수된 영상 페이지네이션 -->
+        @if($recentSubmissions->hasPages())
+        <div class="d-flex justify-content-center mt-4">
+            {{ $recentSubmissions->appends(request()->query())->links('custom.pagination') }}
+        </div>
+        @endif
+    </div>
+</div>
+
+<!-- 2차 예선 관리 -->
+<div class="card admin-card mb-4">
+    <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <h5 class="mb-0 text-white">
+            <i class="bi bi-trophy"></i> 
+            2차 예선 관리
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- 2차 예선 진출자 선정 -->
+            <div class="col-md-6 mb-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-primary">
+                            <i class="bi bi-award"></i> 2차 예선 진출자 선정
+                        </h6>
+                        <p class="text-muted mb-2">
+                            각 심사위원별로 상위 10명을 자동 선정합니다.
+                        </p>
+                        <ul class="text-muted small">
+                            <li>심사위원: {{ $judgesCount }}명</li>
+                            <li>완료된 심사: {{ $evaluatedSubmissions }}개</li>
+                            <li>예상 진출자: 최대 {{ $judgesCount * 10 }}명</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <form action="{{ route('admin.qualify.second.round') }}" method="POST" 
+                              onsubmit="return confirm('각 심사위원별로 상위 10명을 2차 예선 진출자로 선정하시겠습니까?')">
+                            @csrf
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-star-fill"></i> 진출자 선정
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2차 예선 진출자 목록 -->
+            <div class="col-md-6 mb-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-success">
+                            <i class="bi bi-list-check"></i> 진출자 목록 조회
+                        </h6>
+                        <p class="text-muted mb-2">
+                            선정된 2차 예선 진출자 목록을 확인합니다.
+                        </p>
+                        @php
+                            $qualifiedCount = \App\Models\Evaluation::where('qualification_status', 'qualified')->count();
+                        @endphp
+                        <ul class="text-muted small">
+                            <li>현재 진출자: {{ $qualifiedCount }}명</li>
+                            <li>심사위원별 순위 표시</li>
+                            <li>엑셀 다운로드 가능</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <a href="{{ route('admin.second.round.qualifiers') }}" class="btn btn-success">
+                            <i class="bi bi-eye"></i> 목록 보기
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 자격 상태 초기화 -->
+        <div class="row mt-3 pt-3 border-top">
+            <div class="col-md-8">
+                <h6 class="text-warning">
+                    <i class="bi bi-arrow-clockwise"></i> 자격 상태 초기화
+                </h6>
+                <p class="text-muted mb-0">
+                    모든 2차 예선 자격 상태를 초기화합니다.
+                    <br><small class="text-warning">※ 선정된 진출자가 모두 대기 상태로 변경됩니다.</small>
+                </p>
+            </div>
+            <div class="col-md-4 text-end">
+                <form action="{{ route('admin.reset.qualification') }}" method="POST" 
+                      onsubmit="return confirm('모든 2차 예선 자격 상태를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')">
+                    @csrf
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-clockwise"></i> 상태 초기화
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -269,7 +370,7 @@
                     <br><small>※ 관리자 계정은 유지됩니다.</small>
                 </p>
                 <ul class="text-muted small">
-                    <li>영상 제출 데이터: {{ number_format($totalSubmissions) }}개</li>
+                    <li>영상 접수 데이터: {{ number_format($totalSubmissions) }}개</li>
                     <li>심사 결과: {{ number_format($evaluatedSubmissions) }}개</li>
                     <li>S3 저장 파일 포함</li>
                 </ul>
@@ -301,7 +402,7 @@
                     <h6 class="text-danger"><strong>⚠️ 위험한 작업입니다!</strong></h6>
                     <p class="mb-2">이 작업을 수행하면 다음 데이터가 <strong>영구적으로 삭제</strong>됩니다:</p>
                     <ul class="mb-0">
-                        <li><strong>모든 영상 제출 데이터</strong> ({{ number_format($totalSubmissions) }}개)</li>
+                        <li><strong>모든 영상 접수 데이터</strong> ({{ number_format($totalSubmissions) }}개)</li>
                         <li><strong>모든 심사 결과</strong> ({{ number_format($evaluatedSubmissions) }}개)</li>
                         <li><strong>모든 배정 정보</strong></li>
                         <li><strong>S3에 저장된 모든 영상 파일</strong></li>

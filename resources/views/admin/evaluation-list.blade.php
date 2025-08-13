@@ -71,7 +71,7 @@
                     <i class="bi bi-collection"></i>
                 </div>
                 <h3 class="text-primary">{{ number_format($submissions->total()) }}</h3>
-                <p class="card-text text-muted">총 제출</p>
+                <p class="card-text text-muted">총 접수</p>
             </div>
         </div>
     </div>
@@ -125,8 +125,8 @@
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
-                            <th width="60">#</th>
-                            <th>제출일시</th>
+                            <th width="80">접수번호</th>
+                            <th>접수일시</th>
                             <th>학생 정보</th>
                             <th>기관 정보</th>
                             <th>영상 정보</th>
@@ -137,7 +137,7 @@
                     <tbody>
                         @foreach($submissions as $submission)
                         <tr>
-                            <td>{{ $submission->id }}</td>
+                            <td><small>{{ $submission->receipt_number }}</small></td>
                             
                             <td>
                                 <small>{{ $submission->created_at->format('Y-m-d') }}</small><br>

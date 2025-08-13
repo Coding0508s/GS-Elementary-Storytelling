@@ -1,20 +1,11 @@
-# PHP Upload Settings for Large Files (2GB)
-php_value upload_max_filesize 2048M
-php_value post_max_size 2048M
-php_value max_execution_time 3600
-php_value max_input_time 3600
-php_value memory_limit 2048M
-
-# Enhanced error handling for broken pipe issues
-php_value ignore_user_abort 1
-php_value log_errors_max_len 0
-php_value display_errors 0
-php_value display_startup_errors 0
-php_value error_reporting "E_ERROR | E_PARSE"
-
-# Additional settings to prevent broken pipe errors
-php_value output_buffering 4096
-php_value implicit_flush 0
+# PHP Upload Settings for Large Files (4GB)
+php_value upload_max_filesize 4096M
+php_value post_max_size 4096M
+php_value max_execution_time 7200
+php_value max_input_time 7200
+php_value memory_limit 4096M
+php_value max_input_vars 10000
+php_value max_file_uploads 100
 
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>

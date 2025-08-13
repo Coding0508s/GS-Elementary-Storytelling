@@ -4,16 +4,8 @@
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1><i class="bi bi-clipboard-check"></i> 영상 심사</h1>
-        <p class="text-muted mb-0">{{ $judge->name }} 심사위원님</p>
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{{ route('judge.video.list') }}" 
-           class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> 목록으로
-        </a>
-    </div>
+    <h1><i class="bi bi-clipboard-check"></i> 영상 심사</h1>
+    <small class="text-muted">{{ now()->format('Y년 m월 d일 H:i') }}</small>
 </div>
 
 @if(session('success'))
@@ -35,148 +27,136 @@
     </div>
 @endif
 
-<div class="row">
+<!-- 학생 정보 및 영상 정보 -->
+<div class="row mb-4">
     <!-- 학생 정보 -->
-    <div class="col-md-6 mb-4">
+    <div class="col-md-6 mb-3">
         <div class="card admin-card h-100">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-person"></i> 학생 정보</h5>
+                <h5 class="mb-0"><i class="bi bi-person-circle"></i> 학생 정보</h5>
             </div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">학생명 (한글)</label>
-                        <p class="fw-bold">{{ $submission->student_name_korean }}</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">학생명</label>
+                        <p class="mb-0 fw-bold">{{ $submission->student_name_korean }} ({{ $submission->student_name_english }})</p>
                     </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">학생명 (영어)</label>
-                        <p class="fw-bold">{{ $submission->student_name_english }}</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">기관명</label>
+                        <p class="mb-0">{{ $submission->institution_name }}</p>
                     </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">학년</label>
-                        <p>{{ $submission->grade }}</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">반</label>
+                        <p class="mb-0">{{ $submission->class_name }}</p>
                     </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">나이</label>
-                        <p>{{ $submission->age }}세</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">학년/나이</label>
+                        <p class="mb-0">{{ $submission->grade }} ({{ $submission->age }}세)</p>
                     </div>
-                    <div class="col-12 mb-3">
-                        <label class="form-label text-muted">거주 지역</label>
-                        <p>{{ $submission->region }}</p>
+                    @if($submission->unit_topic)
+                    <div class="col-12">
+                        <label class="form-label text-muted small">Unit 주제</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $submission->unit_topic }}</p>
                     </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">기관명</label>
-                        <p>{{ $submission->institution_name }}</p>
-                    </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">반 이름</label>
-                        <p>{{ $submission->class_name }}</p>
-                    </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">학부모 성함</label>
-                        <p>{{ $submission->parent_name }}</p>
-                    </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">연락처</label>
-                        <p>{{ $submission->parent_phone }}</p>
-                    </div>
+                    @endif
                 </div>
             </div>
         </div>
     </div>
     
     <!-- 영상 정보 -->
-    <div class="col-md-6 mb-4">
+    <div class="col-md-6 mb-3">
         <div class="card admin-card h-100">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-camera-video"></i> 영상 정보</h5>
             </div>
             <div class="card-body">
-                <div class="mb-3">
-                    <label class="form-label text-muted">파일명</label>
-                    <p class="fw-bold">{{ $submission->video_file_name }}</p>
-                </div>
                 <div class="row">
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">파일 형식</label>
-                        <p>{{ strtoupper($submission->video_file_type) }}</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">파일명</label>
+                        <p class="mb-0">{{ $submission->video_file_name }}</p>
                     </div>
-                    <div class="col-sm-6 mb-3">
-                        <label class="form-label text-muted">파일 크기</label>
-                        <p>{{ $submission->getFormattedFileSizeAttribute() }}</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">파일 크기</label>
+                        <p class="mb-0">{{ $submission->getFormattedFileSizeAttribute() }}</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">파일 형식</label>
+                        <p class="mb-0">{{ strtoupper($submission->video_file_type) }}</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">업로드 일시</label>
+                        <p class="mb-0">{{ $submission->created_at->format('Y-m-d H:i') }}</p>
                     </div>
                 </div>
-                @if($submission->unit_topic)
-                <div class="mb-3">
-                    <label class="form-label text-muted">Unit 주제</label>
-                    <p class="fw-bold text-primary">{{ $submission->unit_topic }}</p>
-                </div>
-                @endif
-                <div class="mb-3">
-                    <label class="form-label text-muted">업로드 일시</label>
-                    <p>{{ $submission->created_at->format('Y년 m월 d일 H:i') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 영상 플레이어 -->
+<div class="card admin-card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-play-circle"></i> 영상 재생</h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label text-muted">영상 파일</label>
+            <div class="border rounded overflow-hidden">
+                <!-- 영상 플레이어 -->
+                <div id="video-container" class="position-relative" style="background: #000; min-height: 300px;">
+                    <div id="video-loading" class="d-flex align-items-center justify-content-center h-100 text-white">
+                        <div class="text-center">
+                            <div class="spinner-border mb-3" role="status">
+                                <span class="visually-hidden">로딩중...</span>
+                            </div>
+                            <p>재생 버튼을 클릭해 주세요.</p>
+                        </div>
+                    </div>
+                    <video id="video-player" class="w-100 h-100" controls style="display: none; max-height: 400px;">
+                        <source src="" type="video/mp4">
+                        <p>브라우저가 영상 재생을 지원하지 않습니다.</p>
+                    </video>
                 </div>
                 
-                <!-- 영상 플레이어 및 다운로드 -->
-                <div class="mb-3">
-                    <label class="form-label text-muted">영상 파일</label>
-                    <div class="border rounded overflow-hidden">
-                        <!-- 영상 플레이어 -->
-                        <div id="video-container" class="position-relative" style="background: #000; min-height: 300px;">
-                            <div id="video-loading" class="d-flex align-items-center justify-content-center h-100 text-white">
-                                <div class="text-center">
-                                    <div class="spinner-border mb-3" role="status">
-                                        <span class="visually-hidden">로딩중...</span>
-                                    </div>
-                                    <p>영상을 로딩 중입니다...</p>
-                                </div>
-                            </div>
-                            <video id="video-player" class="w-100 h-100" controls style="display: none; max-height: 400px;">
-                                <source src="" type="video/mp4">
-                                <p>브라우저가 영상 재생을 지원하지 않습니다.</p>
-                            </video>
+                <!-- 영상 컨트롤 패널 -->
+                <div class="p-3 bg-light border-top">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h6 class="mb-1 fw-bold">{{ $submission->video_file_name }}</h6>
+                            <small class="text-muted">
+                                {{ strtoupper($submission->video_file_type) }} · 
+                                {{ $submission->getFormattedFileSizeAttribute() }} · 
+                                업로드: {{ $submission->created_at->format('m/d H:i') }}
+                            </small>
                         </div>
-                        
-                        <!-- 영상 컨트롤 패널 -->
-                        <div class="p-3 bg-light border-top">
-                            <div class="row align-items-center">
-                                <div class="col-md-8">
-                                    <h6 class="mb-1 fw-bold">{{ $submission->video_file_name }}</h6>
-                                    <small class="text-muted">
-                                        {{ strtoupper($submission->video_file_type) }} · 
-                                        {{ $submission->getFormattedFileSizeAttribute() }} · 
-                                        업로드: {{ $submission->created_at->format('m/d H:i') }}
-                                    </small>
-                                </div>
-                                <div class="col-md-4 text-end">
-                                    <div class="btn-group" role="group">
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="load-video-btn">
-                                            <i class="bi bi-play-fill"></i> 재생
-                                        </button>
-                                        <a href="{{ route('judge.video.download', $assignment->id) }}" 
-                                           class="btn btn-outline-success btn-sm"
-                                           target="_blank">
-                                            <i class="bi bi-download"></i> 다운로드
-                                        </a>
-                                    </div>
-                                </div>
+                        <div class="col-md-4 text-end">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="load-video-btn">
+                                    <i class="bi bi-play-fill"></i> 재생
+                                </button>
+                                <a href="{{ route('judge.video.download', $assignment->id) }}" 
+                                   class="btn btn-outline-success btn-sm"
+                                   target="_blank">
+                                    <i class="bi bi-download"></i> 다운로드
+                                </a>
                             </div>
-                            
-                            <!-- 영상 상태 표시 -->
-                            <div id="video-status" class="mt-2" style="display: none;">
-                                <div class="alert alert-info alert-sm mb-0">
-                                    <i class="bi bi-info-circle"></i>
-                                    <span id="status-text">영상이 준비되었습니다.</span>
-                                </div>
-                            </div>
-                            
-                            <!-- 에러 표시 -->
-                            <div id="video-error" class="mt-2" style="display: none;">
-                                <div class="alert alert-danger alert-sm mb-0">
-                                    <i class="bi bi-exclamation-triangle"></i>
-                                    <span id="error-text">영상을 로드할 수 없습니다.</span>
-                                </div>
-                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 영상 상태 표시 -->
+                    <div id="video-status" class="mt-2" style="display: none;">
+                        <div class="alert alert-info alert-sm mb-0">
+                            <i class="bi bi-info-circle"></i>
+                            <span id="status-text">영상이 준비되었습니다.</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 에러 표시 -->
+                    <div id="video-error" class="mt-2" style="display: none;">
+                        <div class="alert alert-danger alert-sm mb-0">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <span id="error-text">영상을 로드할 수 없습니다.</span>
                         </div>
                     </div>
                 </div>
@@ -184,6 +164,19 @@
         </div>
     </div>
 </div>
+
+@if($nextAssignment)
+<!-- 다음 영상 안내 -->
+<div class="alert alert-info d-flex align-items-center mb-4">
+    <i class="bi bi-info-circle me-2"></i>
+    <div>
+        <strong>다음 영상:</strong> {{ $nextAssignment->videoSubmission->student_name_korean }}
+        ({{ $nextAssignment->videoSubmission->grade }} / {{ $nextAssignment->videoSubmission->institution_name }})
+        <br>
+        <small class="text-muted">평가 완료 후 자동으로 다음 영상으로 이동합니다.</small>
+    </div>
+</div>
+@endif
 
 <!-- 심사 폼 -->
 <div class="card admin-card">
@@ -201,51 +194,55 @@
         <form action="{{ route('judge.evaluation.store', $assignment->id) }}" method="POST" id="evaluation-form">
             @csrf
             
-            <div class="row">
+            <!-- 평가 기준 -->
+            <div class="row mb-4">
                 @php
-                    $criteriaLabels = [
-                        'pronunciation_score' => '정확한 발음과 자연스러운 억양, 전달력',
-                        'vocabulary_score' => '올바른 어휘 및 표현 사용',
-                        'fluency_score' => '유창성 수준',
-                        'confidence_score' => '자신감, 긍정적이고 밝은 태도'
+                    $criteria = [
+                        'pronunciation_score' => ['title' => '발음·억양', 'icon' => 'bi-mic'],
+                        'vocabulary_score' => ['title' => '어휘·표현', 'icon' => 'bi-book'],
+                        'fluency_score' => ['title' => '유창성', 'icon' => 'bi-chat-dots'],
+                        'confidence_score' => ['title' => '자신감', 'icon' => 'bi-emoji-smile']
                     ];
                 @endphp
                 
-                @foreach($criteriaLabels as $field => $label)
-                <div class="col-md-6 mb-4">
+                @foreach($criteria as $field => $info)
+                <div class="col-md-3 mb-3">
                     <div class="card h-100">
-                        <div class="card-body">
-                            <h6 class="card-title">{{ $label }}</h6>
+                        <div class="card-body p-3">
+                            <h6 class="card-title">
+                                <i class="{{ $info['icon'] }}"></i> {{ $info['title'] }}
+                            </h6>
                             
-                            <div class="mb-3">
-                                <label for="{{ $field }}" class="form-label">
-                                    점수 (0-10점)
-                                </label>
-                                <div class="d-flex align-items-center gap-3">
+                            <div class="mb-2">
+                                <div class="range-wrap">
                                     <input type="range" 
-                                           class="form-range flex-grow-1" 
+                                           class="form-range w-100" 
                                            id="{{ $field }}_range"
                                            min="0" 
                                            max="10" 
                                            step="1"
-                                           value="{{ old($field, $assignment->evaluation->$field ?? 5) }}">
-                                    <input type="number" 
-                                           class="form-control score-input" 
-                                           id="{{ $field }}"
-                                           name="{{ $field }}"
-                                           min="0" 
-                                           max="10" 
-                                           value="{{ old($field, $assignment->evaluation->$field ?? '') }}"
-                                           required>
+                                           value="{{ old($field, $assignment->evaluation->$field ?? 0) }}">
+                                    <div class="range-ticks mt-1" style="display: flex; justify-content: space-between; padding: 0 8px; margin-top: 4px;">
+                                        @for($i = 0; $i <= 10; $i++)
+                                            <span class="tick" style="font-size: 9px; color: #6c757d; font-weight: 500; text-align: center;">{{ $i }}</span>
+                                        @endfor
+                                    </div>
                                 </div>
+                                <input type="number" 
+                                       class="form-control score-input mt-2" 
+                                       id="{{ $field }}"
+                                       name="{{ $field }}"
+                                       min="0" 
+                                       max="10" 
+                                       value="{{ old($field, $assignment->evaluation->$field ?? '') }}"
+                                       placeholder="0-10"
+                                       required>
                             </div>
                             
                             <!-- 점수 가이드 -->
-                            <div class="score-guide">
-                                <small class="text-muted">
-                                    <strong>점수 가이드:</strong><br>
-                                    0-2: 매우 미흡 | 3-4: 미흡 | 5-6: 보통 | 7-8: 양호 | 9-10: 우수
-                                </small>
+                            <div class="text-muted" style="font-size: 0.7rem;">
+                                0-2: 매우미흡 | 3-4: 미흡<br>
+                                5-6: 보통 | 7-8: 양호 | 9-10: 우수
                             </div>
                         </div>
                     </div>
@@ -254,13 +251,12 @@
             </div>
             
             <!-- 총점 표시 -->
-            <div class="card bg-light mb-4">
-                <div class="card-body text-center">
-                    <h4 class="mb-0">
-                        총점: <span id="total-score" class="text-primary fw-bold">
-                            {{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}
-                        </span> / 100점
-                    </h4>
+            <div class="card mb-4">
+                <div class="card-body text-center bg-primary bg-opacity-10">
+                    <h5 class="card-title">총점</h5>
+                    <div class="display-6 fw-bold text-primary">
+                        <span id="total-score">{{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}</span> / 40점
+                    </div>
                     <div class="mt-2">
                         <span id="grade-badge" class="badge fs-6">등급 계산 중...</span>
                     </div>
@@ -270,7 +266,7 @@
             <!-- 심사 코멘트 -->
             <div class="mb-4">
                 <label for="comments" class="form-label">
-                    <i class="bi bi-chat-dots"></i> 심사 코멘트 (선택사항)
+                    <i class="bi bi-chat-text"></i> 심사 코멘트
                 </label>
                 <textarea class="form-control" 
                           id="comments" 
@@ -283,12 +279,12 @@
             </div>
             
             <!-- 제출 버튼 -->
-            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <div class="d-flex gap-3 justify-content-end">
                 <a href="{{ route('judge.video.list') }}" 
                    class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> 취소
                 </a>
-                <button type="submit" class="btn btn-admin btn-lg" id="submit-btn">
+                <button type="submit" class="btn btn-admin">
                     @if($assignment->evaluation)
                         <i class="bi bi-pencil"></i> 심사 결과 수정
                     @else
@@ -312,6 +308,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const videoError = document.getElementById('video-error');
     const statusText = document.getElementById('status-text');
     const errorText = document.getElementById('error-text');
+
+    // 로딩 오버레이 숨김/제거 유틸
+    function hideLoadingOverlay() {
+        if (videoLoading) {
+            videoLoading.style.display = 'none';
+            // 혹시 남아있지 않도록 DOM에서 제거
+            if (videoLoading.parentNode) {
+                try { videoLoading.parentNode.removeChild(videoLoading); } catch (_) {}
+            }
+        }
+    }
     
     // 심사 관련 요소들
     const scoreInputs = document.querySelectorAll('input[type="number"]');
@@ -319,7 +326,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalScoreElement = document.getElementById('total-score');
     const gradeBadge = document.getElementById('grade-badge');
     
-    // 영상 로드 버튼 클릭
+        // 영상 로드 버튼 클릭
     loadVideoBtn.addEventListener('click', function() {
         loadVideo();
     });
@@ -329,12 +336,14 @@ document.addEventListener('DOMContentLoaded', function() {
         loadVideoBtn.disabled = true;
         loadVideoBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 로딩중...';
         
-        videoLoading.style.display = 'flex';
+        // 재생 버튼 클릭과 동시에 로딩 문구 숨기기
+        hideLoadingOverlay();
+        videoPlayer.style.display = 'block';
         videoStatus.style.display = 'none';
         videoError.style.display = 'none';
         
         // S3 스트리밍 URL 요청
-        fetch('{{ route("judge.video.stream-url", $assignment->id) }}')
+        fetch('{{ route("judge.video.stream", $assignment->id) }}')
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -345,15 +354,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // 영상 로드 완료 시
                     videoPlayer.addEventListener('loadeddata', function() {
-                        videoLoading.style.display = 'none';
-                        videoPlayer.style.display = 'block';
-                        
+                        hideLoadingOverlay();
                         videoStatus.style.display = 'block';
                         statusText.textContent = `영상이 로드되었습니다. (${data.size})`;
                         
                         loadVideoBtn.disabled = false;
                         loadVideoBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 새로고침';
                     });
+                    // 사용자 제스처로 재생 시작될 때도 로딩 오버레이 강제 숨김
+                    videoPlayer.addEventListener('play', hideLoadingOverlay, { once: true });
                     
                     // 영상 로드 에러 시
                     videoPlayer.addEventListener('error', function() {
@@ -372,7 +381,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 영상 에러 표시
     function showVideoError(message) {
-        videoLoading.style.display = 'none';
+        hideLoadingOverlay();
+        videoPlayer.style.display = 'none';
         videoError.style.display = 'block';
         errorText.textContent = message;
         
@@ -399,92 +409,42 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // 총점 계산 및 환산 점수 계산
+    // 총점 계산
     function calculateTotal() {
         let total = 0;
-        const scores = {
-            pronunciation: 0,
-            vocabulary: 0,
-            fluency: 0,
-            confidence: 0
-        };
         
         scoreInputs.forEach(input => {
             const value = parseInt(input.value) || 0;
             total += value;
-            
-            // 각 항목별 점수 저장
-            const fieldName = input.name.replace('_score', '');
-            scores[fieldName] = value;
         });
         
         totalScoreElement.textContent = total;
         updateGrade(total);
-        calculateConvertedScores(scores, total);
     }
     
-    // 환산 점수 계산
-    function calculateConvertedScores(scores, total) {
-        if (total === 0) {
-            // 총점이 0이면 모든 환산 점수도 0
-            document.getElementById('pronunciation-converted').textContent = '0.0';
-            document.getElementById('vocabulary-converted').textContent = '0.0';
-            document.getElementById('fluency-converted').textContent = '0.0';
-            document.getElementById('confidence-converted').textContent = '0.0';
-            document.getElementById('total-converted').textContent = '0.0';
-            return;
-        }
-        
-        // 각 항목의 환산 점수 계산
-        const convertedScores = {
-            pronunciation: Math.round((scores.pronunciation / total) * 100 * 10) / 10,
-            vocabulary: Math.round((scores.vocabulary / total) * 100 * 10) / 10,
-            fluency: Math.round((scores.fluency / total) * 100 * 10) / 10,
-            confidence: Math.round((scores.confidence / total) * 100 * 10) / 10
-        };
-        
-        // 반올림 오차 보정
-        let convertedTotal = convertedScores.pronunciation + convertedScores.vocabulary + 
-                           convertedScores.fluency + convertedScores.confidence;
-        
-        if (Math.abs(convertedTotal - 100.0) > 0.1) {
-            // 가장 큰 점수에 오차 보정
-            const maxField = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
-            const difference = 100.0 - convertedTotal;
-            convertedScores[maxField] = Math.round((convertedScores[maxField] + difference) * 10) / 10;
-        }
-        
-        // 화면에 표시
-        document.getElementById('pronunciation-converted').textContent = convertedScores.pronunciation.toFixed(1);
-        document.getElementById('vocabulary-converted').textContent = convertedScores.vocabulary.toFixed(1);
-        document.getElementById('fluency-converted').textContent = convertedScores.fluency.toFixed(1);
-        document.getElementById('confidence-converted').textContent = convertedScores.confidence.toFixed(1);
-        document.getElementById('total-converted').textContent = '100.0';
-    }
-    
-    // 등급 업데이트 (0~40점 기준)
+    // 등급 업데이트 (0-40점 기준)
     function updateGrade(total) {
         let grade, className;
         
-        if (total >= 32) {
-            grade = '우수 (A등급)';
-            className = 'bg-success';
-        } else if (total >= 24) {
-            grade = '양호 (B등급)';
-            className = 'bg-primary';
-        } else if (total >= 16) {
-            grade = '보통 (C등급)';
-            className = 'bg-info';
-        } else if (total >= 8) {
-            grade = '미흡 (D등급)';
-            className = 'bg-warning';
+        if (total >= 36) {
+            grade = '우수';
+            className = 'bg-success text-white';
+        } else if (total >= 31) {
+            grade = '양호';
+            className = 'bg-primary text-white';
+        } else if (total >= 26) {
+            grade = '보통';
+            className = 'bg-info text-white';
+        } else if (total >= 21) {
+            grade = '미흡';
+            className = 'bg-warning text-dark';
         } else {
-            grade = '매우 미흡 (F등급)';
-            className = 'bg-danger';
+            grade = '매우 미흡';
+            className = 'bg-danger text-white';
         }
         
         gradeBadge.textContent = grade;
-        gradeBadge.className = `badge fs-6 ${className}`;
+        gradeBadge.className = `badge ${className} fs-6`;
     }
     
     // 폼 제출 시 확인
@@ -506,9 +466,11 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
         } else {
             // 제출 버튼 비활성화
-            const submitBtn = document.getElementById('submit-btn');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 저장 중...';
+            const submitBtn = document.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 저장 중...';
+            }
         }
     });
     

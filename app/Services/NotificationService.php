@@ -112,9 +112,12 @@ class NotificationService
      */
     private function generateUploadCompletionMessage(VideoSubmission $submission)
     {
+        $receiptNumber = str_pad($submission->id, 6, '0', STR_PAD_LEFT);
+        
         return sprintf(
-            "[GS Speech Contest] 안녕하세요. %s 학생의 영어 발표 동영상 업로드가 완료되었습니다.참여해주셔서 감사합니다.",
-            $submission->student_name_korean
+            "[GS Speech Contest] 안녕하세요. %s 학생의 영어 발표 동영상 업로드가 완료되었습니다. 접수번호: #%s 참여해주셔서 감사합니다.",
+            $submission->student_name_korean,
+            $receiptNumber
         );
     }
     

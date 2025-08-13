@@ -22,7 +22,10 @@ class Evaluation extends Model
         'fluency_converted',
         'confidence_converted',
         'total_converted',
-        'comments'
+        'comments',
+        'qualification_status',
+        'rank_by_judge',
+        'qualified_at'
     ];
 
     protected $casts = [
@@ -35,8 +38,15 @@ class Evaluation extends Model
         'vocabulary_converted' => 'decimal:1',
         'fluency_converted' => 'decimal:1',
         'confidence_converted' => 'decimal:1',
-        'total_converted' => 'decimal:1'
+        'total_converted' => 'decimal:1',
+        'rank_by_judge' => 'integer',
+        'qualified_at' => 'datetime'
     ];
+
+    // 자격 상태 상수 정의
+    const QUALIFICATION_PENDING = 'pending';
+    const QUALIFICATION_QUALIFIED = 'qualified';
+    const QUALIFICATION_NOT_QUALIFIED = 'not_qualified';
 
     /**
      * 총점 자동 계산
@@ -132,6 +142,15 @@ class Evaluation extends Model
     public function admin()
     {
         return $this->belongsTo(Admin::class);
+    }
+
+    /**
+     * 영상 배정 관계
+     */
+    public function videoAssignment()
+    {
+        return $this->belongsTo(VideoAssignment::class, 'video_submission_id', 'video_submission_id')
+                    ->where('video_assignments.admin_id', '=', $this->admin_id);
     }
 
     /**

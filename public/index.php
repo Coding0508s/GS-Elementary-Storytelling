@@ -3,6 +3,30 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 
+// Set PHP upload limits for large files (2GB)
+ini_set('upload_max_filesize', '2048M');
+ini_set('post_max_size', '2048M');
+ini_set('max_execution_time', '3600');
+ini_set('max_input_time', '3600');
+ini_set('memory_limit', '2048M');
+
+// Suppress broken pipe errors (harmless connection drops) - Enhanced
+error_reporting(E_ERROR | E_PARSE);
+ini_set('log_errors_max_len', 0);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+
+// Additional error suppression for broken pipe issues
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    // Suppress broken pipe and file_put_contents warnings
+    if (strpos($errstr, 'Broken pipe') !== false || 
+        strpos($errstr, 'file_put_contents') !== false ||
+        $errno === E_WARNING || $errno === E_NOTICE) {
+        return true; // Suppress these errors
+    }
+    return false; // Let other errors through
+}, E_ALL);
+
 define('LARAVEL_START', microtime(true));
 
 // Determine if the application is in maintenance mode...
