@@ -6,9 +6,12 @@ use Illuminate\Http\Request;
 // Set PHP upload limits for large files (2GB)
 ini_set('upload_max_filesize', '2048M');
 ini_set('post_max_size', '2048M');
-ini_set('max_execution_time', '3600');
+ini_set('max_execution_time', '0'); // 무제한으로 설정
 ini_set('max_input_time', '3600');
 ini_set('memory_limit', '2048M');
+
+// 추가적인 시간 제한 설정
+set_time_limit(0); // 스크립트 실행 시간 제한 완전 제거
 
 // Suppress broken pipe errors (harmless connection drops) - Enhanced
 error_reporting(E_ERROR | E_PARSE);

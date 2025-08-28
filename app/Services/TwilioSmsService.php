@@ -84,7 +84,7 @@ class TwilioSmsService
         $unitTopic = $submission->unit_topic ?: '미지정';
         $receiptNumber = str_pad($submission->id, 5, '0', STR_PAD_LEFT);
         
-        $message = "[GrapeSeed]\n";
+        $message = "[GrapeSEED]\n";
         $message .= "{$studentName}학생의 영상 업로드 완료!\n";
         $message .= "접수번호: GSK-{$receiptNumber}\n";
         $message .= "참여해주셔서 감사합니다! 🎉";

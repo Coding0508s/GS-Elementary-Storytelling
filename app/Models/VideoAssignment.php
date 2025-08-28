@@ -46,11 +46,12 @@ class VideoAssignment extends Model
     }
 
     /**
-     * 심사와의 관계
+     * 심사와의 관계 (해당 심사위원의 평가만)
      */
     public function evaluation()
     {
-        return $this->hasOne(Evaluation::class, 'video_submission_id', 'video_submission_id');
+        return $this->hasOne(Evaluation::class, 'video_submission_id', 'video_submission_id')
+                    ->where('evaluations.admin_id', $this->admin_id);
     }
 
     /**

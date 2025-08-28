@@ -173,10 +173,10 @@
 <!-- 내가 심사한 영상 순위 -->
 @if($myEvaluatedRankings->count() > 0)
 <div class="card admin-card mb-4">
-    <div class="card-header">
-                                <h5 class="mb-0"><i class="bi bi-trophy"></i> 내가 심사한 영상 순위 (상위 10명)</h5>
-                        <small class="text-muted">※ 동점 시 업로드 빠른 순으로 순위 결정</small>
-    </div>
+    <!-- <div class="card-header"> -->
+        <h4 class="mb-0 mt-3 mx-4"><i class="bi bi-trophy"></i> 내가 심사한 영상 순위 (상위 10명)</h4>
+        <small class="text-muted mx-4">※ 동점 시 업로드 빠른 순으로 순위 결정</small>
+    <!-- </div> -->
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-admin table-hover">
@@ -189,8 +189,8 @@
                         <th>총점</th>
                         <th>등급</th>
                         <th>업로드시간</th>
-                        <th>2차 예선</th>
-                        <th>작업</th>
+                        <th>상태</th>
+                        <th>다시보기</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -216,8 +216,14 @@
                         <td>{{ $ranking['institution'] }}</td>
                         <td>{{ $ranking['grade'] }}</td>
                         <td>
-                            <span class="fw-bold text-primary">{{ $ranking['total_score'] }}</span>
-                            <small class="text-muted">/40점</small>
+                            <div>
+                                <span class="fw-bold text-primary">{{ $ranking['total_score'] }}</span>
+                                <small class="text-muted">/80점 (총합)</small>
+                            </div>
+                            <div>
+                                <span class="fw-bold text-secondary">{{ $ranking['my_score'] }}</span>
+                                <small class="text-muted">/40점 (내 평가)</small>
+                            </div>
                         </td>
                         <td>
                             @php
@@ -236,6 +242,7 @@
                             <small class="text-info">{{ $ranking['upload_time'] }}</small>
                         </td>
                         <td>
+                            {{-- 2차 예선진출 기능이 필요 없어서 주석처리
                             @php
                                 $qualificationStatus = \App\Models\Evaluation::where('video_submission_id', $ranking['submission_id'])
                                     ->where('admin_id', auth()->guard('admin')->user()->id)
@@ -254,12 +261,22 @@
                                     <i class="bi bi-clock"></i> 대기
                                 </span>
                             @endif
+                            --}}
+                            <span class="badge bg-primary">
+                                <i class="bi bi-check2-all"></i> 평가완료
+                            </span>
                         </td>
                         <td>
-                            <a href="{{ route('judge.evaluation.edit', $ranking['assignment_id']) }}" 
-                               class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i> 보기
-                            </a>
+                            @if($ranking['assignment_id'])
+                                <a href="{{ route('judge.evaluation.edit', $ranking['assignment_id']) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> 보기
+                                </a>
+                            @else
+                                <span class="btn btn-sm btn-outline-secondary disabled">
+                                    <i class="bi bi-exclamation-triangle"></i> 배정 없음
+                                </span>
+                            @endif
                         </td>
                     </tr>
                     @endforeach
@@ -280,12 +297,9 @@
 
 <!-- 최근 배정된 영상 -->
 <div class="card admin-card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-clock-history"></i> 최근 배정된 영상</h5>
-        <a href="{{ route('judge.video.list') }}" class="btn btn-sm btn-outline-light">
-            전체 보기 <i class="bi bi-arrow-right"></i>
-        </a>
-    </div>
+    <!-- <div class="card-header d-flex justify-content-between align-items-center"> -->
+        <h5 class="mb-0 mt-3 mx-4"><i class="bi bi-clock-history"></i> 최근 배정된 영상</h5>
+    <!-- </div> -->
     <div class="card-body">
         @if($recentAssignments->count() > 0)
             <div class="table-responsive">

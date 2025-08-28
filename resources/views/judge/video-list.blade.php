@@ -89,9 +89,9 @@
 
 <!-- 영상 목록 -->
 <div class="card admin-card">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-camera-video"></i> 배정된 영상 목록</h5>
-    </div>
+    <!-- <div class="card-header"> -->
+        <h5 class="mb-0 mt-3 mx-4"><i class="bi bi-camera-video"></i> 배정된 영상 목록</h5>
+   <!--  </div> -->
     <div class="card-body">
         @if($assignments->count() > 0)
             <div class="table-responsive">
@@ -126,11 +126,11 @@
                             </td>
                             <td>
                                 @if($assignment->status === 'assigned')
-                                    <span class="badge badge-pending">
+                                    <span class="badge badge-pending;">
                                             <i class="bi bi-clock" style="color:rgb(3, 116, 254);"></i> 배정됨
                                     </span>
                                 @elseif($assignment->status === 'in_progress')
-                                    <span class="badge badge-info">
+                                    <span class="badge badge-info" style="color:rgb(226, 41, 4);">
                                         <i class="bi bi-arrow-clockwise" style="color:rgb(226, 41, 4);"></i> 심사중
                                     </span>
                                 @elseif($assignment->status === 'completed')

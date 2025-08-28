@@ -1,3 +1,5 @@
+{{-- 
+2차 예선진출 기능이 필요 없어서 전체 파일을 주석처리
 @extends('admin.layout')
 
 @section('title', '2차 예선 진출자 목록')
@@ -214,3 +216,6 @@ function refreshData() {
 </script>
 
 @endsection
+--}}
+
+{{-- 2차 예선진출 기능이 필요 없어서 이 파일은 사용하지 않습니다. --}}

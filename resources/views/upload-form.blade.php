@@ -30,23 +30,39 @@
                     <div class="row">
                         <div class="col-md-6 mb-2">
                             <label for="region" class="form-label">거주 지역 <span class="text-danger">*</span></label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="region" 
-                                   name="region" 
-                                   value="{{ old('region') }}" 
-                                   placeholder="예: 경기도 과천시"
-                                   required>
+                            <div class="row">
+                                <div class="col-6">
+                                    <select class="form-control" id="province" name="province" required>
+                                        <option value="">시/도 선택</option>
+                                        @foreach(array_keys(\App\Models\VideoSubmission::REGIONS) as $province)
+                                            <option value="{{ $province }}" {{ old('province') == $province ? 'selected' : '' }}>
+                                                {{ $province }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <select class="form-control" id="city" name="city" required disabled>
+                                        <option value="">시/군/구 선택</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <input type="hidden" id="region" name="region" value="{{ old('region') }}">
                         </div>
                         <div class="col-md-6 mb-2">
-                            <label for="institution_name" class="form-label">기관명 <span class="text-danger">*</span></label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="institution_name" 
-                                   name="institution_name" 
-                                   value="{{ old('institution_name') }}" 
-                                   placeholder="정확한 기관명을 입력해주세요."
-                                   required>
+                            <label for="institution_name" class="form-label">기관명(예:용인000) <span class="text-danger">*</span></label>
+                            <div class="position-relative">
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="institution_name" 
+                                       name="institution_name" 
+                                       value="{{ old('institution_name') }}" 
+                                       placeholder="기관명을 입력하거나 선택해주세요"
+                                       autocomplete="off"
+                                       required>
+                                <div id="institution_suggestions" class="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-sm" style="display: none; z-index: 1000; max-height: 200px; overflow-y: auto;">
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -93,7 +109,7 @@
                                    id="student_name_english" 
                                    name="student_name_english" 
                                    value="{{ old('student_name_english') }}" 
-                                   placeholder="예: John Doe"
+                                   placeholder="예: John"
                                    required>
                         </div>
                     </div>
@@ -108,7 +124,7 @@
                                    value="{{ old('age') }}" 
                                    min="6" 
                                    max="7"
-                                   placeholder="7세"
+                                   placeholder="한국 나이를 입력해주세요."
                                    required>
                         </div>
                         <div class="col-md-6 mb-2">
@@ -166,7 +182,7 @@
                 <div class="card-body">
                     <div class="file-upload-area" onclick="document.getElementById('video_file').click()">
                         <i class="bi bi-cloud-upload fs-2 text-muted mb-2"></i>
-                        <h6>비디오 파일을 선택하거나 여기에 드래그하세요</h6>
+                        <h6>여기를 클릭하여 비디오 파일을 선택하거나 여기에 드래그하세요</h6>
                         <p class="text-muted">
                             지원 형식: MP4, MOV<br>
                             최대 크기: 2GB
@@ -206,7 +222,7 @@
                         <button type="submit" 
                                 class="btn btn-primary btn-lg"
                                 id="submit-btn">
-                            <i class="bi bi-upload"></i> 비디오 업로드
+                            <i class="bi bi-upload"></i> 제출하기
                         </button>
                     </div>
                     
@@ -229,8 +245,19 @@
 @endsection
 
 @section('scripts')
+<!-- 지역 데이터를 JavaScript로 전달하기 위한 숨겨진 요소 -->
+<script type="application/json" id="regions-data">@json(\App\Models\VideoSubmission::REGIONS)</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // 페이지 로드 시 페이드인 효과
+    document.body.style.opacity = '0';
+    document.body.style.transition = 'opacity 0.5s ease-in';
+    
+    setTimeout(function() {
+        document.body.style.opacity = '1';
+    }, 100);
+    
     const fileInput = document.getElementById('video_file');
     const fileInfo = document.getElementById('file-info');
     const fileName = document.getElementById('file-name');
@@ -241,6 +268,185 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.querySelector('.progress-bar');
     const progressText = document.getElementById('progress-text');
     
+    // 지역 데이터 (PHP에서 JavaScript로 전달)
+    const regionsDataElement = document.getElementById('regions-data');
+    const regionsData = regionsDataElement ? JSON.parse(regionsDataElement.textContent) : {};
+    
+    // 시/도 선택 시 시/군/구 목록 업데이트
+    document.getElementById('province').addEventListener('change', function() {
+        const selectedProvince = this.value;
+        const citySelect = document.getElementById('city');
+        const regionInput = document.getElementById('region');
+        
+        // 시/군/구 선택 초기화
+        citySelect.innerHTML = '<option value="">시/군/구 선택</option>';
+        citySelect.disabled = !selectedProvince;
+        regionInput.value = '';
+        
+        if (selectedProvince && regionsData[selectedProvince]) {
+            // 선택된 시/도의 시/군/구 목록 추가
+            regionsData[selectedProvince].forEach(function(city) {
+                const option = document.createElement('option');
+                option.value = city;
+                option.textContent = city;
+                citySelect.appendChild(option);
+            });
+        }
+    });
+    
+    // 시/군/구 선택 시 최종 지역 값 설정
+    document.getElementById('city').addEventListener('change', function() {
+        const province = document.getElementById('province').value;
+        const city = this.value;
+        const regionInput = document.getElementById('region');
+        
+        if (province && city) {
+            regionInput.value = province + ' ' + city;
+        } else {
+            regionInput.value = '';
+        }
+    });
+    
+    // 기관명 자동완성 기능
+    const institutionInput = document.getElementById('institution_name');
+    const suggestionsList = document.getElementById('institution_suggestions');
+    let debounceTimer;
+    
+    institutionInput.addEventListener('input', function() {
+        const query = this.value.trim();
+        
+        // 디바운스 적용 (300ms 지연)
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            fetchInstitutions(query);
+        }, 300);
+    });
+    
+    institutionInput.addEventListener('blur', function() {
+        // 약간의 지연을 두어 클릭 이벤트가 처리되도록 함
+        setTimeout(() => {
+            hideSuggestions();
+        }, 200);
+    });
+    
+    institutionInput.addEventListener('focus', function() {
+        // 포커스 시 항상 기관명 목록 표시 (검색어 길이 상관없이)
+        fetchInstitutions(this.value.trim());
+    });
+    
+    function fetchInstitutions(query) {
+        fetch(`{{ route('api.institutions') }}?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                showSuggestions(data);
+            })
+            .catch(error => {
+                console.error('기관명 검색 오류:', error);
+                hideSuggestions();
+            });
+    }
+    
+    function showSuggestions(institutions) {
+        suggestionsList.innerHTML = '';
+        
+        if (institutions.length === 0) {
+            const query = institutionInput.value.trim();
+            if (query.length === 0) {
+                suggestionsList.innerHTML = '<div class="p-2 text-muted small">등록된 기관명이 없습니다. 새로운 기관명을 입력해주세요.</div>';
+            } else {
+                suggestionsList.innerHTML = '<div class="p-2 text-muted small">검색 결과가 없습니다. 새로운 기관명을 입력해주세요.</div>';
+            }
+        } else {
+            institutions.forEach(institution => {
+                const item = document.createElement('div');
+                item.className = 'p-2 cursor-pointer border-bottom suggestion-item';
+                item.style.cursor = 'pointer';
+                item.textContent = institution;
+                
+                item.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#f8f9fa';
+                });
+                
+                item.addEventListener('mouseleave', function() {
+                    this.style.backgroundColor = 'white';
+                });
+                
+                item.addEventListener('click', function() {
+                    institutionInput.value = institution;
+                    hideSuggestions();
+                    institutionInput.focus();
+                });
+                
+                suggestionsList.appendChild(item);
+            });
+        }
+        
+        suggestionsList.style.display = 'block';
+    }
+    
+    function hideSuggestions() {
+        suggestionsList.style.display = 'none';
+    }
+    
+    // 키보드 내비게이션 지원
+    institutionInput.addEventListener('keydown', function(e) {
+        const items = suggestionsList.querySelectorAll('.suggestion-item');
+        const activeItem = suggestionsList.querySelector('.suggestion-item.active');
+        let activeIndex = -1;
+        
+        if (activeItem) {
+            activeIndex = Array.from(items).indexOf(activeItem);
+        }
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (items.length > 0) {
+                if (activeItem) activeItem.classList.remove('active');
+                const nextIndex = (activeIndex + 1) % items.length;
+                items[nextIndex].classList.add('active');
+                items[nextIndex].style.backgroundColor = '#e9ecef';
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (items.length > 0) {
+                if (activeItem) activeItem.classList.remove('active');
+                const prevIndex = activeIndex <= 0 ? items.length - 1 : activeIndex - 1;
+                items[prevIndex].classList.add('active');
+                items[prevIndex].style.backgroundColor = '#e9ecef';
+            }
+        } else if (e.key === 'Enter') {
+            if (activeItem) {
+                e.preventDefault();
+                institutionInput.value = activeItem.textContent;
+                hideSuggestions();
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+
+    // 페이지 로드 시 기존 값 복원 (폼 오류 시)
+    document.addEventListener('DOMContentLoaded', function() {
+        const oldRegion = '{{ old("region") }}';
+        if (oldRegion) {
+            const parts = oldRegion.split(' ');
+            if (parts.length >= 2) {
+                const province = parts[0];
+                const city = parts.slice(1).join(' ');
+                
+                // 시/도 선택
+                document.getElementById('province').value = province;
+                document.getElementById('province').dispatchEvent(new Event('change'));
+                
+                // 시/군/구 선택 (약간의 지연 후)
+                setTimeout(function() {
+                    document.getElementById('city').value = city;
+                    document.getElementById('city').dispatchEvent(new Event('change'));
+                }, 100);
+            }
+        }
+    });
+
     // 파일 크기 포맷팅 함수
     function formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';

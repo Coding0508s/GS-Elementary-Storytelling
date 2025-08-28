@@ -72,7 +72,7 @@
                         </div> -->
                     </div>
                     
-                    <div class="mt-5">
+                    <!-- <div class="mt-5">
                         <h5><i class="bi bi-trophy"></i> Speech Contest 안내</h5>
                         <div class="row">
                             <div class="col-md-4">
@@ -103,7 +103,7 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </div> -->
                     
                     <div class="mt-4">
                         <div class="alert alert-warning">
@@ -119,7 +119,7 @@
                     <div class="mt-4 mb-3">
                         <div class="alert alert-success">
                             <i class="bi bi-clock"></i>
-                            <span id="redirect-message">10초 후 자동으로 메인 페이지로 이동합니다...</span>
+                            <span id="redirect-message">10초 후 자동으로 GrapeSEED 스토리텔링 콘테스트 페이지로 이동합니다...</span>
                             <div class="progress mt-2" style="height: 4px;">
                                 <div id="redirect-progress" class="progress-bar bg-success" style="width: 0%;"></div>
                             </div>
@@ -171,7 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function startCountdown() {
         redirectTimer = setInterval(function() {
             countdownSeconds--;
-            redirectMessage.textContent = countdownSeconds + '초 후 자동으로 메인 페이지로 이동합니다...';
+            redirectMessage.textContent = countdownSeconds + '초 후 자동으로 GrapeSEED 스토리텔링 콘테스트 페이지로 이동합니다...';
             
             // 프로그레스 바 업데이트
             const progress = ((10 - countdownSeconds) / 10) * 100;
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (countdownSeconds <= 0) {
                 clearInterval(redirectTimer);
-                window.location.href = '{{ route("privacy.consent") }}';
+                window.location.href = 'https://grapeseed.com/kr/storytelling';
             }
         }, 1000);
     }

@@ -192,7 +192,7 @@
                             <td><span class="badge bg-success">{{ $student->vocabulary_score }}</span></td>
                             <td><span class="badge bg-info">{{ $student->fluency_score }}</span></td>
                             <td><span class="badge bg-warning">{{ $student->confidence_score }}</span></td>
-                            <td><strong class="text-danger">{{ $student->total_score }}/40</strong></td>
+                            <td><strong class="text-danger">{{ $student->total_score }}/80</strong></td>
                             <td>
                                 @php
                                     $grade = '';
@@ -233,7 +233,10 @@
 <!-- 기관별 통계 -->
 <div class="card admin-card">
     <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-building"></i> 기관별 통계</h5>
+        <h5 class="mb-0">
+            <i class="bi bi-building"></i> 기관별 통계 
+            <small class="text-muted">(제출수 순위)</small>
+        </h5>
     </div>
     <div class="card-body">
         @if($institutionStats->count() > 0)
@@ -241,35 +244,53 @@
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
-                            <th>순위</th>
-                            <th>기관명</th>
-                            <th>제출 수</th>
-                            <th>평균 점수</th>
-                            <th>등급</th>
-                            <th>진행률</th>
+                            <th width="10%">제출수 순위</th>
+                            <th width="30%">기관명</th>
+                            <th width="15%">제출 수</th>
+                            <th width="15%">평균 점수</th>
+                            <th width="15%">등급</th>
+                            <th width="15%">진행률</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($institutionStats as $index => $stat)
-                        <tr>
+                        <tr @if($index < 3) class="table-warning" @endif>
                             <td>
-                                @if($index < 3)
-                                    <span class="badge 
-                                        @if($index === 0) bg-warning
-                                        @elseif($index === 1) bg-secondary
-                                        @else bg-info
-                                        @endif">
-                                        {{ $index + 1 }}위
+                                @if($index === 0)
+                                    <span class="badge bg-warning text-dark fs-6">
+                                        <i class="bi bi-trophy-fill"></i> 1위
+                                    </span>
+                                @elseif($index === 1)
+                                    <span class="badge bg-secondary fs-6">
+                                        <i class="bi bi-award-fill"></i> 2위
+                                    </span>
+                                @elseif($index === 2)
+                                    <span class="badge bg-info fs-6">
+                                        <i class="bi bi-award"></i> 3위
                                     </span>
                                 @else
-                                    {{ $index + 1 }}위
+                                    <span class="text-muted">{{ $index + 1 }}위</span>
                                 @endif
                             </td>
                             <td>
                                 <strong>{{ $stat->institution_name }}</strong>
                             </td>
                             <td>
-                                <span class="badge bg-primary">{{ $stat->submission_count }}개</span>
+                                @if($index === 0)
+                                    <span class="badge bg-warning text-dark fs-6">
+                                        <strong>{{ $stat->submission_count }}개</strong>
+                                    </span>
+                                @elseif($index === 1)
+                                    <span class="badge bg-secondary fs-6">
+                                        <strong>{{ $stat->submission_count }}개</strong>
+                                    </span>
+                                @elseif($index === 2)
+                                    <span class="badge bg-info fs-6">
+                                        <strong>{{ $stat->submission_count }}개</strong>
+                                    </span>
+                                @else
+                                    <span class="badge bg-primary">{{ $stat->submission_count }}개</span>
+                                @endif
                             </td>
                             <td>
                                 <strong class="text-success">{{ number_format($stat->avg_score, 1) }}/40</strong>
@@ -299,8 +320,8 @@
                             </td>
                             <td>
                                 @php
-                                    $totalForInstitution = \App\Models\VideoSubmission::where('institution_name', $stat->institution_name)->count();
-                                    $progressPercent = $totalForInstitution > 0 ? ($stat->submission_count / $totalForInstitution) * 100 : 0;
+                                    // 심사 진행률: 완전히 평가된 영상 / 전체 제출 영상
+                                    $progressPercent = $stat->submission_count > 0 ? ($stat->completed_evaluations / $stat->submission_count) * 100 : 0;
                                 @endphp
                                 <div class="progress" style="height: 20px; width: 100px;">
                                     <div class="progress-bar bg-success" 
@@ -308,6 +329,7 @@
                                         {{ number_format($progressPercent, 0) }}%
                                     </div>
                                 </div>
+                                <small class="text-muted">{{ $stat->completed_evaluations }}/{{ $stat->submission_count }}</small>
                             </td>
                         </tr>
                         @endforeach

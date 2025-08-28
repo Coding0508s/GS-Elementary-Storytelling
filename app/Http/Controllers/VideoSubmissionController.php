@@ -15,6 +15,14 @@ use Illuminate\Support\Str;
 class VideoSubmissionController extends Controller
 {
     /**
+     * 이벤트 소개 페이지 표시
+     */
+    public function showEventIntro()
+    {
+        return view('event-intro');
+    }
+
+    /**
      * 개인정보 수집 동의 페이지 표시
      */
     public function showPrivacyConsent()
@@ -68,12 +76,34 @@ class VideoSubmissionController extends Controller
         // Force PHP upload settings for large files (2GB)
         ini_set('upload_max_filesize', '2048M');
         ini_set('post_max_size', '2048M');
-        ini_set('max_execution_time', '3600');
+        ini_set('max_execution_time', '0'); // 무제한
+        set_time_limit(0); // 추가 시간 제한 제거
         ini_set('max_input_time', '3600');
         ini_set('memory_limit', '1024M');
-        set_time_limit(3600);
         $validator = Validator::make($request->all(), [
-            'region' => 'required|string|max:255',
+            'region' => ['required', 'string', function ($attribute, $value, $fail) {
+                // "시/도 시/군/구" 형태인지 확인
+                $parts = explode(' ', $value, 2);
+                if (count($parts) < 2) {
+                    $fail('올바른 지역 형식을 선택해주세요.');
+                    return;
+                }
+                
+                $province = $parts[0];
+                $city = $parts[1];
+                
+                // 시/도가 유효한지 확인
+                if (!array_key_exists($province, VideoSubmission::REGIONS)) {
+                    $fail('올바른 시/도를 선택해주세요.');
+                    return;
+                }
+                
+                // 시/군/구가 해당 시/도에 속하는지 확인
+                if (!in_array($city, VideoSubmission::REGIONS[$province])) {
+                    $fail('올바른 시/군/구를 선택해주세요.');
+                    return;
+                }
+            }],
             'institution_name' => 'required|string|max:255',
             'class_name' => 'required|string|max:255',
             'student_name_korean' => 'required|string|max:255',
@@ -90,7 +120,7 @@ class VideoSubmissionController extends Controller
                 'max:2097152' // 2GB in KB (2048 * 1024)
             ]
         ], [
-            'region.required' => '거주 지역을 입력해주세요.',
+            'region.required' => '거주 지역을 선택해주세요.',
             'institution_name.required' => '기관명을 입력해주세요.',
             'class_name.required' => '반 이름을 입력해주세요.',
             'student_name_korean.required' => '학생 한글 이름을 입력해주세요.',
@@ -159,6 +189,30 @@ class VideoSubmissionController extends Controller
             return back()->with('error', '업로드 중 오류가 발생했습니다: ' . $e->getMessage())
                         ->withInput();
         }
+    }
+
+    /**
+     * 기관명 자동완성을 위한 API
+     */
+    public function getInstitutions(Request $request)
+    {
+        $query = $request->get('q', '');
+        
+        // Institution 테이블에서 활성화된 기관명만 조회
+        $institutionsQuery = \App\Models\Institution::active()->ordered();
+        
+        // 검색어가 있을 때는 필터링
+        if (strlen($query) >= 1) {
+            $institutionsQuery->search($query);
+            $limit = 10;
+        } else {
+            // 전체 목록일 때는 더 많이 표시
+            $limit = 20;
+        }
+        
+        $institutions = $institutionsQuery->limit($limit)->pluck('name');
+            
+        return response()->json($institutions);
     }
 
     /**

@@ -1,3 +1,6 @@
+{{-- 
+event-intro.blade.php 파일 전체 주석처리
+
 @extends('layouts.event')
 
 @section('title', '2025 GrapeSEED Speak and Shine')
@@ -30,7 +33,7 @@
                                     <i class="bi bi-people-fill me-2 bounce-icon"></i>참가 대상:
                                 </h6>
                                 <p class="mb-0 text-white">
-                                    GrapeSEED를 배우는 초등부 학생 전체
+                                    GrapeSEED를 배우는 예비 초등부 학생 전체
                                 </p>
                             </div>
                         <!-- </div> -->
@@ -333,3 +336,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 @endsection
+
+--}}
+
+{{-- event-intro.blade.php 파일이 주석처리되었습니다. --}}

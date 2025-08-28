@@ -1,12 +1,13 @@
 @if ($paginator->hasPages())
     <nav aria-label="페이지 네비게이션">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
             <!-- 페이지 정보 -->
-            <div class="pagination-info">
+            <div class="pagination-info mb-2 mb-md-0">
                 <small class="text-muted">
-                    전체 {{ number_format($paginator->total()) }}개 중 
-                    {{ number_format(($paginator->currentPage() - 1) * $paginator->perPage() + 1) }}~{{ number_format(min($paginator->currentPage() * $paginator->perPage(), $paginator->total())) }}개 표시
-                    ({{ $paginator->currentPage() }}/{{ $paginator->lastPage() }} 페이지)
+                    <i class="bi bi-info-circle"></i>
+                    전체 <strong>{{ number_format($paginator->total()) }}</strong>개 중 
+                    <strong>{{ number_format(($paginator->currentPage() - 1) * $paginator->perPage() + 1) }}~{{ number_format(min($paginator->currentPage() * $paginator->perPage(), $paginator->total())) }}</strong>개 표시
+                    <span class="badge bg-primary ms-1">{{ $paginator->currentPage() }}/{{ $paginator->lastPage() }} 페이지</span>
                 </small>
             </div>
             

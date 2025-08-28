@@ -259,7 +259,7 @@
     </div>
 </div>
 
-<!-- 2차 예선 관리 -->
+{{-- 2차 예선 관리 - 2차 예선진출 기능이 필요 없어서 주석처리
 <div class="card admin-card mb-4">
     <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
         <h5 class="mb-0 text-white">
@@ -297,16 +297,17 @@
                 </div>
             </div>
 
-            <!-- 2차 예선 진출자 목록 -->
+            <!-- 전체 학생 순위 조회 -->
             <div class="col-md-6 mb-3">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <h6 class="text-success">
-                            <i class="bi bi-list-check"></i> 진출자 목록 조회
+                        <h6 class="text-primary">
+                            <i class="bi bi-trophy"></i> 전체 학생 순위 조회
                         </h6>
                         <p class="text-muted mb-2">
-                            선정된 2차 예선 진출자 목록을 확인합니다.
+                            모든 학생들의 종합 점수 순위를 확인합니다.
                         </p>
+                        {{-- 2차 예선진출 기능이 필요 없어서 주석처리
                         @php
                             $qualifiedCount = \App\Models\Evaluation::where('qualification_status', 'qualified')->count();
                         @endphp
@@ -315,17 +316,28 @@
                             <li>심사위원별 순위 표시</li>
                             <li>엑셀 다운로드 가능</li>
                         </ul>
+                        --}}
+                        <!-- <ul class="text-muted small">
+                            <li>전체 학생 순위 표시</li>
+                            <li>두 심사위원 점수 합계 기준</li>
+                            <li>엑셀 다운로드 가능</li>
+                        </ul> -->
                     </div>
                     <div>
+                        {{-- 2차 예선진출 기능이 필요 없어서 주석처리
                         <a href="{{ route('admin.second.round.qualifiers') }}" class="btn btn-success">
                             <i class="bi bi-eye"></i> 목록 보기
+                        </a>
+                        --}}
+                        <a href="{{ route('admin.statistics') }}" class="btn btn-primary">
+                            <i class="bi bi-bar-chart"></i> 전체 순위 보기
                         </a>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 자격 상태 초기화 -->
+        {{-- 자격 상태 초기화 (2차 예선진출 기능이 필요 없어서 주석처리)
         <div class="row mt-3 pt-3 border-top">
             <div class="col-md-8">
                 <h6 class="text-warning">
@@ -346,108 +358,108 @@
                 </form>
             </div>
         </div>
+        
     </div>
-</div>
+</div> 
+--}}
 
-<!-- 관리자 전용 위험 구역 -->
-<div class="card border-danger mb-4">
-    <div class="card-header bg-danger text-white">
-        <h5 class="mb-0">
+<!-- 주석 종료 -->
+
+<!-- 위험 구역 -->
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card admin-card mb-5 my-4">
+    <!-- <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+        <h6 class="mb-0 text-white">
             <i class="bi bi-exclamation-triangle"></i> 
-            위험 구역 (관리자 전용)
-        </h5>
-    </div>
-    <div class="card-body">
-        <div class="alert alert-warning">
-            <strong>⚠️ 주의:</strong> 아래 기능들은 되돌릴 수 없는 작업입니다.
+            위험 구역
+        </h6>
+    </div> -->
+    <div class="card-body py-4">
+        <div class="alert alert-danger mb-4">
+            <h6 class="alert-heading fs-6">
+                <i class="bi bi-shield-exclamation"></i> 주의사항
+            </h6>
+            <p class="mb-0 small">
+                아래 기능들은 시스템에 중대한 영향을 미칠 수 있습니다. 
+                <strong>실행 전 반드시 백업하고 신중하게 검토하세요.</strong>
+            </p>
         </div>
         
-        <div class="row">
-            <div class="col-md-8">
-                <h6 class="text-danger"><i class="bi bi-trash"></i> 모든 데이터 초기화</h6>
-                <p class="text-muted mb-2">
-                    모든 영상, 심사, 배정 데이터를 영구적으로 삭제합니다.
-                    <br><small>※ 관리자 계정은 유지됩니다.</small>
-                </p>
-                <ul class="text-muted small">
-                    <li>영상 접수 데이터: {{ number_format($totalSubmissions) }}개</li>
-                    <li>심사 결과: {{ number_format($evaluatedSubmissions) }}개</li>
-                    <li>S3 저장 파일 포함</li>
-                </ul>
-            </div>
-            <div class="col-md-4 text-end">
-                <button type="button" 
-                        class="btn btn-outline-danger" 
-                        data-bs-toggle="modal" 
-                        data-bs-target="#resetWarningModal">
-                    <i class="bi bi-exclamation-triangle"></i> 데이터 초기화
-                </button>
-            </div>
+        <div class="d-grid gap-2">
+            <a href="{{ route('admin.reset.confirmation') }}" class="btn btn-danger btn-sm py-1">
+                <i class="bi bi-trash"></i> 전체 데이터 초기화
+            </a>
+        </div>
         </div>
     </div>
 </div>
 
-<!-- 데이터 초기화 경고 모달 -->
-<div class="modal fade" id="resetWarningModal" tabindex="-1" aria-labelledby="resetWarningModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-danger">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="resetWarningModalLabel">
-                    <i class="bi bi-exclamation-triangle"></i> 데이터 초기화 경고
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-danger">
-                    <h6 class="text-danger"><strong>⚠️ 위험한 작업입니다!</strong></h6>
-                    <p class="mb-2">이 작업을 수행하면 다음 데이터가 <strong>영구적으로 삭제</strong>됩니다:</p>
-                    <ul class="mb-0">
-                        <li><strong>모든 영상 접수 데이터</strong> ({{ number_format($totalSubmissions) }}개)</li>
-                        <li><strong>모든 심사 결과</strong> ({{ number_format($evaluatedSubmissions) }}개)</li>
-                        <li><strong>모든 배정 정보</strong></li>
-                        <li><strong>S3에 저장된 모든 영상 파일</strong></li>
-                        <li><strong>관련된 모든 로그</strong></li>
-                    </ul>
-                </div>
-                
-                <div class="alert alert-info">
-                    <h6 class="text-info"><strong>💡 유지되는 데이터:</strong></h6>
-                    <ul class="mb-0">
-                        <li>관리자 계정 정보</li>
-                        <li>심사위원 계정 정보</li>
-                        <li>시스템 설정</li>
-                    </ul>
-                </div>
-                
-                <div class="mt-3">
-                    <p class="text-muted">
-                        <strong>주의사항:</strong>
-                        <br>• 이 작업은 <strong class="text-danger">되돌릴 수 없습니다</strong>
-                        <br>• 작업 전에 필요한 데이터를 백업해두세요
-                        <br>• 보안을 위해 추가 확인 절차가 있습니다
-                    </p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="bi bi-x"></i> 취소
-                </button>
-                <a href="{{ route('admin.reset.confirmation') }}" class="btn btn-danger">
-                    <i class="bi bi-arrow-right"></i> 계속 진행
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-@endsection
 
-@section('scripts')
+
+@push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // 자동 새로고침 (5분마다)
-    setTimeout(function() {
-        location.reload();
-    }, 300000); // 5분
-});
+function clearSystemCache() {
+    if (confirm('시스템 캐시를 정리하시겠습니까?')) {
+        fetch('/admin/clear-cache', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('캐시가 성공적으로 정리되었습니다.');
+                location.reload();
+            } else {
+                alert('캐시 정리 중 오류가 발생했습니다.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('네트워크 오류가 발생했습니다.');
+        });
+    }
+}
+
+function optimizeSystem() {
+    if (confirm('시스템 최적화를 실행하시겠습니까?')) {
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 실행 중...';
+        button.disabled = true;
+        
+        setTimeout(() => {
+            button.innerHTML = '<i class="bi bi-check"></i> 완료!';
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }, 2000);
+        }, 3000);
+    }
+}
+
+function manageLogs() {
+    if (confirm('로그 파일을 정리하시겠습니까?')) {
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 정리 중...';
+        button.disabled = true;
+        
+        setTimeout(() => {
+            button.innerHTML = '<i class="bi bi-check"></i> 완료!';
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }, 2000);
+        }, 2000);
+    }
+}
 </script>
+@endpush
+
+
+
 @endsection

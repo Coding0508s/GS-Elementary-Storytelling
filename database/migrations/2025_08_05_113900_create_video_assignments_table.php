@@ -21,8 +21,9 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable(); // 심사 완료 시간
             $table->timestamps();
             
-            // 하나의 영상은 하나의 심사위원에게만 배정 가능
-            $table->unique(['video_submission_id']);
+            // 같은 심사위원이 같은 영상을 중복 배정받지 않도록 설정
+            // (한 영상이 여러 심사위원에게 배정 가능)
+            $table->unique(['video_submission_id', 'admin_id'], 'unique_video_admin_assignment');
             
             // 심사위원별 배정된 영상 수를 추적하기 위한 인덱스
             $table->index(['admin_id', 'status']);

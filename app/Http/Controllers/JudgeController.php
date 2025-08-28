@@ -35,38 +35,71 @@ class JudgeController extends Controller
         // 최근 배정된 영상들 (최대 5개)
         $recentAssignments = $assignedVideos->take(5);
 
-        // 이 심사위원이 심사한 영상들의 순위 (총점 기준 상위 10명)
-        $completedAssignments = VideoAssignment::where('admin_id', $judge->id)
-            ->where('status', VideoAssignment::STATUS_COMPLETED)
-            ->with(['videoSubmission', 'evaluation'])
+        // 두 심사위원 총합 점수 기준 상위 10명 순위 계산
+        $allEvaluatedVideos = VideoSubmission::with(['evaluations'])
+            ->whereHas('evaluations')
             ->get()
-            ->sort(function($a, $b) {
-                $scoreA = $a->evaluation ? ($a->evaluation->total_score ?? 0) : 0;
-                $scoreB = $b->evaluation ? ($b->evaluation->total_score ?? 0) : 0;
-                if ($scoreA === $scoreB) {
-                    $timeA = $a->videoSubmission ? $a->videoSubmission->created_at : now();
-                    $timeB = $b->videoSubmission ? $b->videoSubmission->created_at : now();
-                    return $timeA <=> $timeB; // 업로드 빠른 순
+            ->map(function ($submission) use ($judge) {
+                // 두 심사위원의 평가 합계 계산
+                $totalScore = $submission->evaluations->sum('total_score');
+                $evaluationCount = $submission->evaluations->count();
+                
+                // 평가가 2개 있는 경우만 포함 (완전히 평가된 영상)
+                if ($evaluationCount < 2) {
+                    return null;
                 }
-                return $scoreB <=> $scoreA; // 점수 높은 순
+                
+                // 이 심사위원이 평가한 영상인지 확인
+                $myEvaluation = $submission->evaluations->where('admin_id', $judge->id)->first();
+                
+                return (object) [
+                    'submission' => $submission,
+                    'total_score' => $totalScore,
+                    'evaluation_count' => $evaluationCount,
+                    'my_evaluation' => $myEvaluation,
+                    'evaluated_by_me' => $myEvaluation !== null
+                ];
             })
-            ->values(); // 키를 재인덱싱하여 0, 1, 2... 순서로 정렬
+            ->filter() // null 값 제거
+            ->sort(function ($a, $b) {
+                // 1차 정렬: 총합 점수 내림차순 (높은 점수가 먼저)
+                if ($a->total_score !== $b->total_score) {
+                    return $b->total_score <=> $a->total_score;
+                }
+                // 2차 정렬: 같은 점수일 때 업로드 빠른 순 (먼저 제출한 사람이 앞)
+                return $a->submission->created_at <=> $b->submission->created_at;
+            })
+            ->values()
+            ->take(10); // 상위 10명
 
-        // 순위 계산 (1위부터 차례대로, 업로드 순서를 고려하여 공동 순위 없음)
+        // 순위 계산 (두 심사위원 총합 점수 기준)
         $myEvaluatedRankings = collect();
 
-        // 상위 10명만 추출하여 1위부터 순서대로 순위 부여
-        foreach ($completedAssignments->take(10) as $index => $assignment) {
+        foreach ($allEvaluatedVideos as $index => $videoData) {
+            $submission = $videoData->submission;
+            $myEvaluation = $videoData->my_evaluation;
+            
+            // 내가 평가한 영상만 표시를 위해 체크 (필요시 주석 해제하여 전체 순위 표시 가능)
+            if (!$videoData->evaluated_by_me) {
+                continue;
+            }
+            
+            // 현재 심사위원의 배정 ID 찾기
+            $myAssignment = VideoAssignment::where('video_submission_id', $submission->id)
+                                         ->where('admin_id', $judge->id)
+                                         ->first();
+            
             $myEvaluatedRankings->push([
-                'rank' => $index + 1, // 1위부터 차례대로 1, 2, 3... (공동 순위 없음)
-                'student_name' => $assignment->videoSubmission->student_name_korean,
-                'institution' => $assignment->videoSubmission->institution_name,
-                'grade' => $assignment->videoSubmission->grade,
-                'total_score' => $assignment->evaluation->total_score,
-                'evaluation_grade' => $this->calculateGrade($assignment->evaluation->total_score),
-                'assignment_id' => $assignment->id,
-                'submission_id' => $assignment->videoSubmission->id,
-                'upload_time' => $assignment->videoSubmission->created_at->format('m/d H:i')
+                'rank' => $index + 1, // 두 심사위원 총합 점수 기준 순위
+                'student_name' => $submission->student_name_korean,
+                'institution' => $submission->institution_name,
+                'grade' => $submission->grade,
+                'total_score' => $videoData->total_score, // 두 심사위원 총합 점수
+                'my_score' => $myEvaluation ? $myEvaluation->total_score : 0, // 내 평가 점수
+                'evaluation_grade' => $this->calculateGrade($videoData->total_score),
+                'submission_id' => $submission->id,
+                'assignment_id' => $myAssignment ? $myAssignment->id : null,
+                'upload_time' => $submission->created_at->format('m/d H:i')
             ]);
         }
 
@@ -108,9 +141,18 @@ class JudgeController extends Controller
         $judge = Auth::guard('admin')->user();
         
         $assignments = VideoAssignment::where('admin_id', $judge->id)
-                                    ->with(['videoSubmission', 'evaluation'])
+                                    ->with(['videoSubmission'])
                                     ->orderBy('created_at', 'asc')
                                     ->paginate(10);
+
+        // 각 assignment에 현재 심사위원의 evaluation만 추가
+        $assignments->getCollection()->transform(function ($assignment) use ($judge) {
+            $currentEvaluation = Evaluation::where('video_submission_id', $assignment->video_submission_id)
+                                         ->where('admin_id', $judge->id)
+                                         ->first();
+            $assignment->setRelation('evaluation', $currentEvaluation);
+            return $assignment;
+        });
 
         return view('judge.video-list', compact('assignments', 'judge'));
     }
@@ -125,10 +167,18 @@ class JudgeController extends Controller
         // 이 심사위원에게 배정된 영상인지 확인
         $assignment = VideoAssignment::where('id', $assignmentId)
                                    ->where('admin_id', $judge->id)
-                                   ->with(['videoSubmission', 'evaluation'])
+                                   ->with(['videoSubmission'])
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+
+        // 현재 심사위원의 기존 평가만 가져오기 (다른 심사위원 점수 숨김)
+        $currentEvaluation = Evaluation::where('video_submission_id', $submission->id)
+                                     ->where('admin_id', $judge->id)
+                                     ->first();
+        
+        // assignment에 현재 심사위원의 evaluation만 설정
+        $assignment->setRelation('evaluation', $currentEvaluation);
 
         // 다음 배정된 영상 정보 가져오기
         $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
@@ -259,10 +309,18 @@ class JudgeController extends Controller
         
         $assignment = VideoAssignment::where('id', $assignmentId)
                                    ->where('admin_id', $judge->id)
-                                   ->with(['videoSubmission', 'evaluation'])
+                                   ->with(['videoSubmission'])
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+
+        // 현재 심사위원의 기존 평가만 가져오기 (다른 심사위원 점수 숨김)
+        $currentEvaluation = Evaluation::where('video_submission_id', $submission->id)
+                                     ->where('admin_id', $judge->id)
+                                     ->first();
+        
+        // assignment에 현재 심사위원의 evaluation만 설정
+        $assignment->setRelation('evaluation', $currentEvaluation);
 
         return view('judge.evaluation-edit', compact('assignment', 'submission', 'judge'));
     }
@@ -340,19 +398,31 @@ class JudgeController extends Controller
 
         $submission = $assignment->videoSubmission;
 
-        // S3 다운로드 URL 생성 (한글 파일명 안전 처리)
-        $downloadUrl = $submission->getS3DownloadUrl(1); // 1시간 유효
-        
-        // 한글 파일명으로 인한 오류 발생 시 안전한 방법 시도
-        if (!$downloadUrl) {
-            $downloadUrl = $submission->getSafeS3DownloadUrl(1);
-        }
+        // S3 또는 로컬 스토리지에 따라 다른 다운로드 방법 사용
+        if ($submission->isStoredOnS3()) {
+            // S3 다운로드 URL 생성 (한글 파일명 안전 처리)
+            $downloadUrl = $submission->getS3DownloadUrl(1); // 1시간 유효
+            
+            // 한글 파일명으로 인한 오류 발생 시 안전한 방법 시도
+            if (!$downloadUrl) {
+                $downloadUrl = $submission->getSafeS3DownloadUrl(1);
+            }
 
-        if (!$downloadUrl) {
-            return back()->with('error', '영상 다운로드 링크를 생성할 수 없습니다.');
-        }
+            if (!$downloadUrl) {
+                return back()->with('error', '영상 다운로드 링크를 생성할 수 없습니다.');
+            }
 
-        return redirect($downloadUrl);
+            return redirect($downloadUrl);
+        } else {
+            // 로컬 파일 직접 다운로드
+            $filePath = storage_path('app/public/' . $submission->video_file_path);
+            
+            if (!file_exists($filePath)) {
+                return back()->with('error', '영상 파일을 찾을 수 없습니다.');
+            }
+
+            return response()->download($filePath, $submission->video_file_name);
+        }
     }
 
     /**
@@ -370,8 +440,14 @@ class JudgeController extends Controller
 
         $submission = $assignment->videoSubmission;
 
-        // S3 스트리밍 URL 생성 (24시간 유효)
-        $streamUrl = $submission->getS3TemporaryUrl(24);
+        // S3 또는 로컬 스토리지에 따라 다른 URL 생성
+        if ($submission->isStoredOnS3()) {
+            // S3 스트리밍 URL 생성 (24시간 유효)
+            $streamUrl = $submission->getS3TemporaryUrl(24);
+        } else {
+            // 로컬 스토리지 URL 생성
+            $streamUrl = $submission->getLocalVideoUrl();
+        }
 
         if (!$streamUrl) {
             return response()->json(['error' => '영상 URL을 생성할 수 없습니다.'], 500);
@@ -381,7 +457,8 @@ class JudgeController extends Controller
             'success' => true,
             'url' => $streamUrl,
             'filename' => $submission->video_file_name,
-            'size' => $submission->getFormattedFileSizeAttribute()
+            'size' => $submission->getFormattedFileSizeAttribute(),
+            'storage_type' => $submission->isStoredOnS3() ? 's3' : 'local'
         ]);
     }
 

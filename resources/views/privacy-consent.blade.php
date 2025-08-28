@@ -94,6 +94,14 @@
 @section('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // 페이지 로드 시 페이드인 효과
+    document.body.style.opacity = '0';
+    document.body.style.transition = 'opacity 0.5s ease-in';
+    
+    setTimeout(function() {
+        document.body.style.opacity = '1';
+    }, 100);
+    
     const checkbox = document.getElementById('privacy_consent');
     const submitBtn = document.getElementById('submit-btn');
     
@@ -107,6 +115,18 @@ document.addEventListener('DOMContentLoaded', function() {
             submitBtn.classList.add('btn-secondary');
         }
     });
+    
+    // 동의 후 계속하기 버튼 클릭 시 부드러운 전환
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (checkbox.checked) {
+                // 페이지 페이드아웃 효과
+                document.body.style.transition = 'opacity 0.3s ease-out';
+                document.body.style.opacity = '0.7';
+            }
+        });
+    }
 });
 </script>
 @endsection 

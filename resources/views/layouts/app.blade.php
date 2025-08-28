@@ -6,6 +6,10 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'GS Elementary Speech Contest')</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="{{ asset('images/favicon.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset('images/favicon.png') }}">
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
@@ -308,6 +312,11 @@
             border-top: 1px solid #f8f9fa;
             color: #6c757d;
             font-size: 0.85rem;
+        }
+        
+        /* 페이지 전환 효과를 위한 기본 스타일 */
+        body {
+            transition: opacity 0.3s ease;
         }
     </style>
     

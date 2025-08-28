@@ -17,15 +17,11 @@ class Evaluation extends Model
         'fluency_score',
         'confidence_score',
         'total_score',
-        'pronunciation_converted',
-        'vocabulary_converted',
-        'fluency_converted',
-        'confidence_converted',
-        'total_converted',
         'comments',
-        'qualification_status',
-        'rank_by_judge',
-        'qualified_at'
+        // 2차 예선진출 기능이 필요 없어서 주석처리
+        // 'qualification_status',
+        // 'rank_by_judge',
+        // 'qualified_at'
     ];
 
     protected $casts = [
@@ -34,19 +30,17 @@ class Evaluation extends Model
         'fluency_score' => 'integer',
         'confidence_score' => 'integer',
         'total_score' => 'integer',
-        'pronunciation_converted' => 'decimal:1',
-        'vocabulary_converted' => 'decimal:1',
-        'fluency_converted' => 'decimal:1',
-        'confidence_converted' => 'decimal:1',
-        'total_converted' => 'decimal:1',
-        'rank_by_judge' => 'integer',
-        'qualified_at' => 'datetime'
+        // 2차 예선진출 기능이 필요 없어서 주석처리
+        // 'rank_by_judge' => 'integer',
+        // 'qualified_at' => 'datetime'
     ];
 
-    // 자격 상태 상수 정의
+    // 자격 상태 상수 정의 (2차 예선진출 기능이 필요 없어서 주석처리)
+    /*
     const QUALIFICATION_PENDING = 'pending';
     const QUALIFICATION_QUALIFIED = 'qualified';
     const QUALIFICATION_NOT_QUALIFIED = 'not_qualified';
+    */
 
     /**
      * 총점 자동 계산
@@ -61,62 +55,53 @@ class Evaluation extends Model
     }
 
     /**
-     * 환산 점수 자동 계산
-     * 공식: (해당 점수 ÷ 전체 점수 합계) × 100
+     * 발음 환산 점수 (가상 속성)
      */
-    public function calculateConvertedScores()
+    public function getPronunciationConvertedAttribute()
     {
-        $totalScore = $this->total_score;
-        
-        // 총점이 0이면 모든 환산 점수도 0
-        if ($totalScore == 0) {
-            $this->pronunciation_converted = 0.0;
-            $this->vocabulary_converted = 0.0;
-            $this->fluency_converted = 0.0;
-            $this->confidence_converted = 0.0;
-            $this->total_converted = 0.0;
-            return;
-        }
-        
-        // 각 항목의 환산 점수 계산 (소수점 1자리 반올림)
-        $this->pronunciation_converted = round(($this->pronunciation_score / $totalScore) * 100, 1);
-        $this->vocabulary_converted = round(($this->vocabulary_score / $totalScore) * 100, 1);
-        $this->fluency_converted = round(($this->fluency_score / $totalScore) * 100, 1);
-        $this->confidence_converted = round(($this->confidence_score / $totalScore) * 100, 1);
-        
-        // 반올림으로 인한 오차 보정 (총합이 정확히 100이 되도록)
-        $convertedTotal = $this->pronunciation_converted + 
-                         $this->vocabulary_converted + 
-                         $this->fluency_converted + 
-                         $this->confidence_converted;
-        
-        if ($convertedTotal != 100.0) {
-            // 가장 큰 점수에 오차를 보정
-            $maxField = $this->getMaxScoreField();
-            $difference = 100.0 - $convertedTotal;
-            $this->{$maxField . '_converted'} = round($this->{$maxField . '_converted'} + $difference, 1);
-        }
-        
-        $this->total_converted = 100.0;
-    }
-    
-    /**
-     * 가장 높은 점수를 받은 항목 찾기 (오차 보정용)
-     */
-    private function getMaxScoreField()
-    {
-        $scores = [
-            'pronunciation' => $this->pronunciation_score,
-            'vocabulary' => $this->vocabulary_score,
-            'fluency' => $this->fluency_score,
-            'confidence' => $this->confidence_score
-        ];
-        
-        return array_keys($scores, max($scores))[0];
+        if ($this->total_score == 0) return 0.0;
+        return round(($this->pronunciation_score / $this->total_score) * 100, 1);
     }
 
     /**
-     * 저장 전에 총점과 환산 점수 자동 계산
+     * 어휘 환산 점수 (가상 속성)
+     */
+    public function getVocabularyConvertedAttribute()
+    {
+        if ($this->total_score == 0) return 0.0;
+        return round(($this->vocabulary_score / $this->total_score) * 100, 1);
+    }
+
+    /**
+     * 유창성 환산 점수 (가상 속성)
+     */
+    public function getFluencyConvertedAttribute()
+    {
+        if ($this->total_score == 0) return 0.0;
+        return round(($this->fluency_score / $this->total_score) * 100, 1);
+    }
+
+    /**
+     * 자신감 환산 점수 (가상 속성)
+     */
+    public function getConfidenceConvertedAttribute()
+    {
+        if ($this->total_score == 0) return 0.0;
+        return round(($this->confidence_score / $this->total_score) * 100, 1);
+    }
+
+    /**
+     * 총 환산 점수 (가상 속성)
+     */
+    public function getTotalConvertedAttribute()
+    {
+        if ($this->total_score == 0) return 0.0;
+        return 100.0;
+    }
+
+
+    /**
+     * 저장 전에 총점 자동 계산
      */
     protected static function boot()
     {
@@ -124,7 +109,6 @@ class Evaluation extends Model
 
         static::saving(function ($evaluation) {
             $evaluation->calculateTotalScore();
-            $evaluation->calculateConvertedScores();
         });
     }
 
