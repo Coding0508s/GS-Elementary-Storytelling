@@ -4,7 +4,13 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title>Laravel</title>
+        <title>GS Elementary Speech Contest</title>
+
+        <!-- Favicon -->
+        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon.png') }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/favicon.png') }}">
+        <link rel="apple-touch-icon" href="{{ asset('images/favicon.png') }}">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
