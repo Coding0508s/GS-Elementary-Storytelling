@@ -896,28 +896,29 @@ public function assignVideo(Request $request)
 
             \DB::commit();
 
-            Log::info('전체 영상 재배정 완료', [
-                'admin_id' => $admin->id,
-                'deleted_assignments' => $deletedAssignments,
-                'deleted_evaluations' => $deletedEvaluations,
-                'reassigned_videos' => $assignedCount,
-                'judges_count' => $adminCount,
-                'timestamp' => now()
-            ]);
-
-            return back()->with('success', 
-                              "전체 영상 재배정이 완료되었습니다.\n" .
-                              "삭제된 기존 배정: {$deletedAssignments}개\n" .
-                              "삭제된 기존 평가: {$deletedEvaluations}개\n" .
-                              "새로 배정된 영상: {$assignedCount}개\n" .
-                              "분배 현황: {$distributionInfo}");
-
         } catch (\Exception $e) {
             \DB::rollback();
             Log::error('전체 영상 재배정 오류: ' . $e->getMessage());
             
             return back()->with('error', '전체 영상 재배정 중 오류가 발생했습니다: ' . $e->getMessage());
         }
+
+        // 트랜잭션 완료 후 로그 및 리다이렉트
+        Log::info('전체 영상 재배정 완료', [
+            'admin_id' => $admin->id,
+            'deleted_assignments' => $deletedAssignments,
+            'deleted_evaluations' => $deletedEvaluations,
+            'reassigned_videos' => $assignedCount,
+            'judges_count' => $adminCount,
+            'timestamp' => now()
+        ]);
+
+        return back()->with('success', 
+                          "전체 영상 재배정이 완료되었습니다.\n" .
+                          "삭제된 기존 배정: {$deletedAssignments}개\n" .
+                          "삭제된 기존 평가: {$deletedEvaluations}개\n" .
+                          "새로 배정된 영상: {$assignedCount}개\n" .
+                          "분배 현황: {$distributionInfo}");
     }
 
     /**
@@ -1059,21 +1060,22 @@ public function assignVideo(Request $request)
 
             \DB::commit();
 
-            return redirect()->route('admin.dashboard')
-                           ->with('success', 
-                                  "데이터 초기화가 완료되었습니다.\n" .
-                                  "삭제된 항목: " .
-                                  "영상 {$stats['submissions_deleted']}개, " .
-                                  "심사 {$stats['evaluations_deleted']}개, " .
-                                  "배정 {$stats['assignments_deleted']}개, " .
-                                  "S3 파일 {$stats['s3_files_deleted']}개");
-
         } catch (\Exception $e) {
             \DB::rollback();
             Log::error('데이터 초기화 오류: ' . $e->getMessage());
             
             return back()->with('error', '데이터 초기화 중 오류가 발생했습니다: ' . $e->getMessage());
         }
+
+        // 트랜잭션 완료 후 리다이렉트
+        return redirect()->route('admin.dashboard')
+                       ->with('success', 
+                              "데이터 초기화가 완료되었습니다.\n" .
+                              "삭제된 항목: " .
+                              "영상 {$stats['submissions_deleted']}개, " .
+                              "심사 {$stats['evaluations_deleted']}개, " .
+                              "배정 {$stats['assignments_deleted']}개, " .
+                              "S3 파일 {$stats['s3_files_deleted']}개");
     }
 
     /**
