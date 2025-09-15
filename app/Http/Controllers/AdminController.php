@@ -296,6 +296,15 @@ class AdminController extends Controller
                            ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
         }
 
+        // 메모리 및 타임아웃 설정
+        ini_set('memory_limit', '512M');
+        set_time_limit(300); // 5분
+        
+        // 출력 버퍼 정리
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+
         $submissions = VideoSubmission::with(['evaluations', 'assignments.admin'])
                                     ->orderBy('created_at', 'asc')
                                     ->get();
@@ -438,29 +447,47 @@ class AdminController extends Controller
             $rowIndex++;
         }
 
-        // 열 너비 자동 조정
-        foreach (range('A', 'AF') as $column) {
+        // 열 너비 자동 조정 (AF열까지)
+        foreach (range('A', 'Z') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+        foreach (range('AA', 'AF') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
         // 파일명 생성
-        $filename = 'speech_contest_data_' . date('Y-m-d_H-i-s') . '.xlsx';
+        $filename = 'storytelling_data_' . date('Y-m-d_H-i-s') . '.xlsx';
 
-        // Excel 파일 생성
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-        
-        // 임시 파일에 저장
-        $tempFile = storage_path('app/temp/' . $filename);
-        if (!file_exists(dirname($tempFile))) {
-            mkdir(dirname($tempFile), 0755, true);
+        try {
+            // Excel 파일 생성
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            
+            // 임시 파일에 저장
+            $tempFile = storage_path('app/temp/' . $filename);
+            if (!file_exists(dirname($tempFile))) {
+                mkdir(dirname($tempFile), 0755, true);
+            }
+            
+            $writer->save($tempFile);
+
+            // 파일이 제대로 생성되었는지 확인
+            if (!file_exists($tempFile) || filesize($tempFile) == 0) {
+                throw new \Exception('Excel 파일 생성에 실패했습니다.');
+            }
+
+            // 파일 다운로드
+            return response()->download($tempFile, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires' => '0',
+                'Pragma' => 'public',
+            ])->deleteFileAfterSend(true);
+            
+        } catch (\Exception $e) {
+            Log::error('Excel download error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Excel 파일 다운로드 중 오류가 발생했습니다: ' . $e->getMessage());
         }
-        
-        $writer->save($tempFile);
-
-        // 파일 다운로드
-        return response()->download($tempFile, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ])->deleteFileAfterSend(true);
     }
 
     /**
