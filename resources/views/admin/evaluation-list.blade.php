@@ -181,11 +181,16 @@
                                         <i class="bi bi-check-circle"></i> 심사완료
                                     </span>
                                     <small class="text-muted">
-                                        총점: <strong>{{ $submission->evaluation->total_score }}/40</strong><br>
-                                        환산: 발음 {{ $submission->evaluation->pronunciation_converted }}%, 
-                                        어휘 {{ $submission->evaluation->vocabulary_converted }}%, 
-                                        유창성 {{ $submission->evaluation->fluency_converted }}%, 
-                                        자신감 {{ $submission->evaluation->confidence_converted }}%
+                                        총점: <strong>{{ $submission->evaluation->total_score }}/70</strong><br>
+                                        <div class="row g-1 mt-1">
+                                            <div class="col-6">발음 {{ $submission->evaluation->pronunciation_converted }}%</div>
+                                            <div class="col-6">어휘 {{ $submission->evaluation->vocabulary_converted }}%</div>
+                                            <div class="col-6">유창성 {{ $submission->evaluation->fluency_converted }}%</div>
+                                            <div class="col-6">자신감 {{ $submission->evaluation->confidence_converted }}%</div>
+                                            <div class="col-6">주제연결성 {{ $submission->evaluation->topic_connection_converted }}%</div>
+                                            <div class="col-6">구성흐름 {{ $submission->evaluation->structure_flow_converted }}%</div>
+                                            <div class="col-12">창의성 {{ $submission->evaluation->creativity_converted }}%</div>
+                                        </div>
                                     </small>
                                 @else
                                     <span class="badge badge-pending d-block">

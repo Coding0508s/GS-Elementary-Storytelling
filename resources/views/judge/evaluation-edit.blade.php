@@ -69,13 +69,25 @@
                         <label class="form-label text-muted small">자신감 점수</label>
                         <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->confidence_score }}/10</p>
                     </div>
-                    <div class="col-12">
-                        <label class="form-label text-muted small">총점</label>
-                        <p class="mb-0 fw-bold text-success fs-4">{{ $assignment->evaluation->total_score }}/40</p>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">주제연결성 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->topic_connection_score }}/10</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">구성·흐름 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->structure_flow_score }}/10</p>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small">창의성 점수</label>
+                        <p class="mb-0 fw-bold text-primary">{{ $assignment->evaluation->creativity_score }}/10</p>
+                    </div>
+                    <div class="col-12 text-center">
+                        <label class="form-label fw-bold fs-5">총점</label>
+                        <p class="mb-0 fw-bold text-success fs-3">{{ $assignment->evaluation->total_score }}/70</p>
                     </div>
                     @if($assignment->evaluation->comments)
                     <div class="col-12 mt-3">
-                        <label class="form-label text-muted small">현재 코멘트</label>
+                        <label class="form-label text-muted small">심사평</label>
                         <div class="bg-light p-3 rounded">
                             <p class="mb-0">{{ $assignment->evaluation->comments }}</p>
                         </div>
@@ -169,12 +181,15 @@
                         'pronunciation_score' => ['title' => '정확한 발음과 자연스러운 억양, 전달력', 'icon' => 'bi-mic'],
                         'vocabulary_score' => ['title' => '올바른 어휘 및 표현 사용', 'icon' => 'bi-book'],
                         'fluency_score' => ['title' => '유창성 수준', 'icon' => 'bi-chat-dots'],
-                        'confidence_score' => ['title' => '자신감, 긍정적이고 밝은 태도', 'icon' => 'bi-emoji-smile']
+                        'confidence_score' => ['title' => '자신감, 긍정적이고 밝은 태도', 'icon' => 'bi-emoji-smile'],
+                        'topic_connection_score' => ['title' => '주제와 발표 내용과의 연결성', 'icon' => 'bi-link-45deg'],
+                        'structure_flow_score' => ['title' => '자연스러운 구성과 흐름', 'icon' => 'bi-arrow-down-up'],
+                        'creativity_score' => ['title' => '창의적 내용', 'icon' => 'bi-lightbulb']
                     ];
                 @endphp
                 
                 @foreach($criteria as $field => $info)
-                <div class="col-md-6 mb-3">
+                <div class="col-lg-4 col-md-6 mb-3">
                     <div class="card h-100">
                         <div class="card-body">
                             <h6 class="card-title">
@@ -205,6 +220,7 @@
                                            min="0" 
                                            max="10" 
                                            value="{{ old($field, $assignment->evaluation->$field) }}"
+                                           style="width: 80px;"
                                            required>
                                 </div>
                             </div>
@@ -212,7 +228,7 @@
                             <!-- 점수 가이드 -->
                             <div class="text-muted small">
                                 <strong>점수 가이드:</strong><br>
-                                0-2: 매우 미흡 | 3-4: 미흡 | 5-6: 보통 | 7-8: 양호 | 9-10: 우수
+                                각 항목별 0-10점으로 평가해주세요
                             </div>
                         </div>
                     </div>
@@ -224,12 +240,9 @@
             <div class="card mb-4">
                 <div class="card-body text-center bg-primary bg-opacity-10">
                     <h5 class="card-title">수정된 총점</h5>
-                    <div class="display-6 fw-bold text-primary">
-                        <span id="total-score">{{ $assignment->evaluation->total_score }}</span> / 40점
-                    </div>
-                    <div class="mt-2">
-                        <span id="grade-badge" class="badge fs-6">등급 계산 중...</span>
-                    </div>
+                        <div class="display-6 fw-bold text-primary">
+                            <span id="total-score">{{ $assignment->evaluation->total_score }}</span> / 70점
+                        </div>
                 </div>
             </div>
             
@@ -267,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const scoreInputs = document.querySelectorAll('input[type="number"]');
     const ranges = document.querySelectorAll('input[type="range"]');
     const totalScoreElement = document.getElementById('total-score');
-    const gradeBadge = document.getElementById('grade-badge');
     
     // 점수 입력과 슬라이더 동기화
     scoreInputs.forEach((input, index) => {
@@ -297,32 +309,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         totalScoreElement.textContent = total;
-        updateGrade(total);
-    }
-    
-    // 등급 업데이트 (0-40점 기준)
-    function updateGrade(total) {
-        let grade, className;
-        
-        if (total >= 36) {
-            grade = '우수';
-            className = 'bg-success text-white';
-        } else if (total >= 31) {
-            grade = '양호';
-            className = 'bg-primary text-white';
-        } else if (total >= 26) {
-            grade = '보통';
-            className = 'bg-info text-white';
-        } else if (total >= 21) {
-            grade = '미흡';
-            className = 'bg-warning text-dark';
-        } else {
-            grade = '매우 미흡';
-            className = 'bg-danger text-white';
-        }
-        
-        gradeBadge.textContent = grade;
-        gradeBadge.className = `badge ${className} fs-6`;
     }
     
     // 폼 제출 시 확인
@@ -416,4 +402,4 @@ function loadAndPlayVideo() {
         });
 }
 </script>
-@endsection 
+@endsection

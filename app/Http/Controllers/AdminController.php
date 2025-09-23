@@ -15,6 +15,13 @@ use App\Models\VideoSubmission;
 use App\Models\Evaluation;
 use App\Models\VideoAssignment;
 use App\Models\Institution;
+use App\Models\AiEvaluation;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Font;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class AdminController extends Controller
 {
@@ -209,10 +216,18 @@ class AdminController extends Controller
             'pronunciation_score' => '정확한 발음과 자연스러운 억양, 전달력',
             'vocabulary_score' => '올바른 어휘 및 표현 사용',
             'fluency_score' => '유창성 수준',
-            'confidence_score' => '자신감, 긍정적이고 밝은 태도'
+            'confidence_score' => '자신감, 긍정적이고 밝은 태도',
+            'topic_connection_score' => '주제와 발표 내용과의 연결성',
+            'structure_flow_score' => '자연스러운 구성과 흐름',
+            'creativity_score' => '창의적 내용'
         ];
 
-        return view('admin.evaluation-form', compact('submission', 'criteriaLabels'));
+        // AI 평가 결과 가져오기 (완료된 것 중 아무거나)
+        $aiEvaluation = AiEvaluation::where('video_submission_id', $submission->id)
+                                  ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
+                                  ->first();
+
+        return view('admin.evaluation-form', compact('submission', 'criteriaLabels', 'aiEvaluation'));
     }
 
     /**
@@ -1807,6 +1822,493 @@ public function assignVideo(Request $request)
         } catch (\Exception $e) {
             \Log::error('심사위원 상태 변경 오류: ' . $e->getMessage());
             return back()->with('error', '심사위원 상태 변경 중 오류가 발생했습니다.');
+        }
+    }
+
+    /**
+     * AI 채점 결과 목록 페이지
+     */
+    public function aiEvaluationList(Request $request)
+    {
+        try {
+            Log::info('AI 평가 목록 페이지 로드', [
+                'admin_id' => Auth::guard('admin')->id(),
+                'request_params' => $request->all()
+            ]);
+
+            $query = AiEvaluation::with(['videoSubmission', 'admin'])
+                ->join('video_submissions', 'ai_evaluations.video_submission_id', '=', 'video_submissions.id')
+                ->select('ai_evaluations.*');
+
+            // 검색 필터
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('video_submissions.student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('video_submissions.student_name_english', 'like', "%{$search}%")
+                      ->orWhere('video_submissions.institution_name', 'like', "%{$search}%");
+                });
+            }
+
+            // 상태 필터
+            if ($request->filled('status')) {
+                $query->where('ai_evaluations.processing_status', $request->status);
+            }
+
+            // 정렬
+            $sortField = $request->get('sort', 'created_at');
+            $sortDirection = $request->get('direction', 'desc');
+            $query->orderBy('ai_evaluations.' . $sortField, $sortDirection);
+
+            $aiEvaluations = $query->paginate(20)->appends($request->query());
+
+            // 통계 정보 계산
+            $totalEvaluations = AiEvaluation::count();
+            $completedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_COMPLETED)->count();
+            $processingEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_PROCESSING)->count();
+            $failedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)->count();
+            $averageScore = AiEvaluation::where('processing_status', AiEvaluation::STATUS_COMPLETED)
+                ->avg('total_score') ?? 0;
+
+            return view('admin.ai-evaluation-list', compact(
+                'aiEvaluations',
+                'totalEvaluations',
+                'completedEvaluations',
+                'processingEvaluations',
+                'failedEvaluations',
+                'averageScore'
+            ));
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 목록 조회 오류: ' . $e->getMessage());
+            return back()->with('error', 'AI 평가 목록을 불러오는 중 오류가 발생했습니다.');
+        }
+    }
+
+    /**
+     * AI 채점 결과 상세 보기
+     */
+    public function showAiEvaluation($id)
+    {
+        try {
+            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])->findOrFail($id);
+            
+            return view('admin.ai-evaluation-detail', compact('aiEvaluation'));
+
+        } catch (ModelNotFoundException $e) {
+            return back()->with('error', '존재하지 않는 AI 평가 결과입니다.');
+        } catch (\Exception $e) {
+            Log::error('AI 평가 상세 조회 오류: ' . $e->getMessage());
+            return back()->with('error', 'AI 평가 상세 정보를 불러오는 중 오류가 발생했습니다.');
+        }
+    }
+
+    /**
+     * AI 평가 결과 전체 초기화
+     */
+    public function resetAiEvaluations()
+    {
+        try {
+            // 관리자만 접근 가능
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '관리자만 접근할 수 있습니다.'
+                ], 403);
+            }
+
+            // 모든 AI 평가 결과 삭제
+            $deletedCount = AiEvaluation::count();
+            AiEvaluation::truncate();
+
+            Log::info('AI 평가 결과 전체 초기화', [
+                'admin_id' => $admin->id,
+                'admin_name' => $admin->name,
+                'deleted_count' => $deletedCount,
+                'timestamp' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'AI 평가 결과가 성공적으로 초기화되었습니다.',
+                'deleted_count' => $deletedCount
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 결과 초기화 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 평가 결과 초기화 중 오류가 발생했습니다.'
+            ], 500);
+        }
+    }
+
+    /**
+     * AI 평가 상세 정보 반환 (Ajax용)
+     */
+    public function getAiEvaluationDetail($id)
+    {
+        try {
+            Log::info('AI 평가 상세 조회 요청', ['id' => $id]);
+            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])->findOrFail($id);
+            Log::info('AI 평가 상세 조회 성공', ['id' => $id, 'status' => $aiEvaluation->processing_status]);
+            
+            return response()->json([
+                'success' => true,
+                'aiEvaluation' => [
+                    'id' => $aiEvaluation->id,
+                    'pronunciation_score' => $aiEvaluation->pronunciation_score,
+                    'vocabulary_score' => $aiEvaluation->vocabulary_score,
+                    'fluency_score' => $aiEvaluation->fluency_score,
+                    'total_score' => $aiEvaluation->total_score,
+                    'ai_feedback' => $aiEvaluation->ai_feedback,
+                    'transcription' => $aiEvaluation->transcription,
+                    'status' => $aiEvaluation->processing_status,
+                    'created_at' => $aiEvaluation->created_at->toISOString(),
+                    'processed_at' => $aiEvaluation->processed_at ? $aiEvaluation->processed_at->toISOString() : null,
+                    'video_submission' => [
+                        'student_name_korean' => $aiEvaluation->videoSubmission->student_name_korean,
+                        'student_name_english' => $aiEvaluation->videoSubmission->student_name_english,
+                        'school_name' => $aiEvaluation->videoSubmission->institution_name,
+                        'grade' => $aiEvaluation->videoSubmission->grade,
+                        'required_task' => $aiEvaluation->videoSubmission->unit_topic,
+                        'selected_question' => null
+                    ],
+                    'judge' => [
+                        'name' => $aiEvaluation->admin->name
+                    ]
+                ]
+            ]);
+
+        } catch (ModelNotFoundException $e) {
+            Log::warning('AI 평가를 찾을 수 없음', ['id' => $id]);
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 평가 결과를 찾을 수 없습니다.'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('AI 평가 상세 조회 오류: ' . $e->getMessage(), ['id' => $id]);
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 평가 상세 정보를 불러올 수 없습니다.'
+            ], 500);
+        }
+    }
+
+    /**
+     * 영상 보기
+     */
+    public function viewVideo($id)
+    {
+        try {
+            $submission = VideoSubmission::with(['assignments'])->findOrFail($id);
+            
+            // 영상 URL 생성 (S3 또는 로컬)
+            $videoUrl = null;
+            try {
+                if ($submission->isStoredOnS3()) {
+                    $videoUrl = $submission->getS3TemporaryUrl(24); // 24시간 유효
+                } else {
+                    $videoUrl = $submission->getLocalVideoUrl();
+                }
+            } catch (\Exception $e) {
+                Log::warning('영상 URL 생성 실패: ' . $e->getMessage());
+                $videoUrl = null;
+            }
+
+            return view('admin.video-view', compact('submission', 'videoUrl'));
+
+        } catch (ModelNotFoundException $e) {
+            return back()->with('error', '존재하지 않는 영상입니다.');
+        } catch (\Exception $e) {
+            Log::error('영상 보기 오류: ' . $e->getMessage());
+            return back()->with('error', '영상을 불러오는 중 오류가 발생했습니다.');
+        }
+    }
+
+    /**
+     * AI 설정 페이지
+     */
+    public function aiSettings()
+    {
+        // 관리자만 접근 가능
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        $currentApiKey = config('services.openai.api_key');
+        $apiKeySet = !empty($currentApiKey) && $currentApiKey !== 'your-openai-api-key-here';
+        
+        // FFmpeg 설치 상태 확인
+        $ffmpegInstalled = $this->checkFFmpegInstallation();
+        
+        // AI 평가 통계
+        $aiStats = [
+            'total_evaluations' => AiEvaluation::count(),
+            'completed_evaluations' => AiEvaluation::where('processing_status', 'completed')->count(),
+            'failed_evaluations' => AiEvaluation::where('processing_status', 'failed')->count(),
+        ];
+
+        return view('admin.ai-settings', compact('apiKeySet', 'ffmpegInstalled', 'aiStats'));
+    }
+
+    /**
+     * AI 설정 업데이트
+     */
+    public function updateAiSettings(Request $request)
+    {
+        // 관리자만 접근 가능
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        $request->validate([
+            'openai_api_key' => 'required|string|min:20'
+        ]);
+
+        try {
+            // config/services.php 파일 업데이트
+            $configPath = config_path('services.php');
+            $configContent = file_get_contents($configPath);
+            
+            // OpenAI API 키 부분 찾기 및 교체
+            $pattern = "/'openai'\s*=>\s*\[\s*'api_key'\s*=>\s*env\('OPENAI_API_KEY'(?:,\s*'[^']*')?\),?\s*\]/";
+            $replacement = "'openai' => [\n        'api_key' => env('OPENAI_API_KEY', '" . $request->openai_api_key . "'),\n    ]";
+            
+            $newContent = preg_replace($pattern, $replacement, $configContent);
+            
+            if ($newContent && $newContent !== $configContent) {
+                file_put_contents($configPath, $newContent);
+                
+                // 설정 캐시 지우기
+                \Artisan::call('config:clear');
+                
+                Log::info('OpenAI API 키 업데이트', [
+                    'admin_id' => $admin->id,
+                    'admin_name' => $admin->name,
+                    'timestamp' => now()
+                ]);
+
+                return back()->with('success', 'OpenAI API 키가 성공적으로 업데이트되었습니다.');
+            } else {
+                return back()->with('error', 'config/services.php 파일 업데이트에 실패했습니다.');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('AI 설정 업데이트 오류: ' . $e->getMessage());
+            return back()->with('error', 'AI 설정 업데이트 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * FFmpeg 설치 상태 확인
+     */
+    private function checkFFmpegInstallation()
+    {
+        $possiblePaths = [
+            '/usr/bin/ffmpeg',
+            '/usr/local/bin/ffmpeg',
+            '/opt/homebrew/bin/ffmpeg',
+            'ffmpeg',
+        ];
+
+        foreach ($possiblePaths as $path) {
+            if (shell_exec("which $path 2>/dev/null")) {
+                return [
+                    'installed' => true,
+                    'path' => $path,
+                    'version' => trim(shell_exec("$path -version 2>&1 | head -n 1"))
+                ];
+            }
+        }
+
+        return [
+            'installed' => false,
+            'path' => null,
+            'version' => null
+        ];
+    }
+
+    /**
+     * AI 채점 결과 엑셀 다운로드
+     */
+    public function downloadAiEvaluationExcel(Request $request)
+    {
+        try {
+            Log::info('AI 평가 엑셀 다운로드 시작', [
+                'admin_id' => Auth::guard('admin')->id(),
+                'request_params' => $request->all()
+            ]);
+
+            $query = AiEvaluation::with(['videoSubmission', 'admin'])
+                ->join('video_submissions', 'ai_evaluations.video_submission_id', '=', 'video_submissions.id')
+                ->select('ai_evaluations.*');
+
+            // 완료된 평가만 다운로드
+            $query->where('ai_evaluations.processing_status', AiEvaluation::STATUS_COMPLETED);
+            
+            Log::info('쿼리 조건 설정 완료', [
+                'status_filter' => AiEvaluation::STATUS_COMPLETED
+            ]);
+
+            // 검색 필터 적용
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('video_submissions.student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('video_submissions.student_name_english', 'like', "%{$search}%")
+                      ->orWhere('video_submissions.institution_name', 'like', "%{$search}%");
+                });
+            }
+
+            $aiEvaluations = $query->orderBy('ai_evaluations.created_at', 'desc')->get();
+
+            Log::info('AI 평가 데이터 조회 완료', [
+                'count' => $aiEvaluations->count(),
+                'first_evaluation_id' => $aiEvaluations->first()->id ?? 'none'
+            ]);
+
+            // AI 평가 결과가 없는 경우 처리
+            if ($aiEvaluations->isEmpty()) {
+                Log::warning('다운로드할 AI 평가 결과가 없음');
+                return back()->with('error', '[Excel Download] 다운로드할 완료된 AI 평가 결과가 없습니다.');
+            }
+
+            // Excel 파일 생성
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            
+            // 시트 이름 설정
+            $sheet->setTitle('AI 평가 결과');
+            
+            // 헤더 설정
+            $headers = [
+                'ID', '학생명(한글)', '학생명(영문)', '기관명', '학년', '나이',
+                '발음/억양/전달력', '어휘/표현', '유창성', 'AI 총점',
+                'AI 심사평', '음성인식 텍스트', '평가일시', '평가자'
+            ];
+            
+            // 헤더 행 추가
+            $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
+            foreach ($headers as $index => $header) {
+                $sheet->setCellValue($columns[$index] . '1', $header);
+            }
+            
+            // 헤더 스타일 설정
+            $headerRange = 'A1:' . $columns[count($headers) - 1] . '1';
+            $sheet->getStyle($headerRange)->applyFromArray([
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => 'FFFFFF'],
+                    'size' => 12
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => '4472C4']
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER
+                ],
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => '000000']
+                    ]
+                ]
+            ]);
+            
+            // 데이터 행 추가
+            $row = 2;
+            foreach ($aiEvaluations as $evaluation) {
+                $data = [
+                    $evaluation->videoSubmission->id,
+                    $evaluation->videoSubmission->student_name_korean,
+                    $evaluation->videoSubmission->student_name_english,
+                    $evaluation->videoSubmission->institution_name,
+                    $evaluation->videoSubmission->grade,
+                    $evaluation->videoSubmission->age,
+                    $evaluation->pronunciation_score,
+                    $evaluation->vocabulary_score,
+                    $evaluation->fluency_score,
+                    $evaluation->total_score,
+                    $evaluation->ai_feedback ?? '',
+                    $evaluation->transcription ?? '',
+                    $evaluation->processed_at ? $evaluation->processed_at->format('Y-m-d H:i:s') : '',
+                    $evaluation->admin->name ?? ''
+                ];
+                
+                foreach ($data as $index => $value) {
+                    $sheet->setCellValue($columns[$index] . $row, $value);
+                }
+                $row++;
+            }
+            
+            // 컬럼 너비 자동 조정
+            foreach ($columns as $index => $col) {
+                if ($index >= count($headers)) break;
+                
+                if (in_array($col, ['K', 'L'])) { // AI 심사평, 음성인식 텍스트 컬럼
+                    $sheet->getColumnDimension($col)->setWidth(50);
+                } else {
+                    $sheet->getColumnDimension($col)->setAutoSize(true);
+                }
+            }
+            
+            // 데이터 영역 스타일 설정
+            $dataRange = 'A2:' . $columns[count($headers) - 1] . ($row - 1);
+            $sheet->getStyle($dataRange)->applyFromArray([
+                'alignment' => [
+                    'vertical' => Alignment::VERTICAL_TOP,
+                    'wrapText' => true // 텍스트 자동 줄바꿈
+                ],
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => 'CCCCCC']
+                    ]
+                ]
+            ]);
+            
+            // 점수 컬럼 가운데 정렬
+            $scoreColumns = ['G', 'H', 'I', 'J']; // 발음, 어휘, 유창성, AI 총점
+            foreach ($scoreColumns as $col) {
+                $sheet->getStyle($col . '2:' . $col . ($row - 1))->getAlignment()
+                     ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
+            
+            // 파일명 생성
+            $filename = 'AI평가결과_' . date('Y-m-d_H-i-s') . '.xlsx';
+            
+            // Excel 파일을 메모리에 저장
+            $writer = new Xlsx($spreadsheet);
+            $tempFile = tempnam(sys_get_temp_dir(), 'excel');
+            $writer->save($tempFile);
+            
+            // 응답 생성
+            $response = response()->download($tempFile, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"'
+            ])->deleteFileAfterSend(true);
+
+            Log::info('AI 평가 결과 Excel 다운로드', [
+                'admin_id' => Auth::guard('admin')->id(),
+                'count' => count($aiEvaluations),
+                'filename' => $filename
+            ]);
+
+            return $response;
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 결과 엑셀 다운로드 오류: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return back()->with('error', '[Excel Download Error] AI 평가 결과 Excel 파일 생성 중 오류가 발생했습니다: ' . $e->getMessage());
         }
     }
 }

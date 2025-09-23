@@ -113,7 +113,7 @@
                             <p>재생 버튼을 클릭해 주세요.</p>
                         </div>
                     </div>
-                    <video id="video-player" class="w-100 h-100" controls style="display: none; max-height: 400px;">
+                    <video id="video-player" class="w-100" controls style="display: none; aspect-ratio: 16/9; max-height: 400px;">
                         <source src="" type="video/mp4">
                         <p>브라우저가 영상 재생을 지원하지 않습니다.</p>
                     </video>
@@ -131,15 +131,57 @@
                             </small>
                         </div>
                         <div class="col-md-4 text-end">
-                            <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-outline-primary btn-sm" id="load-video-btn">
-                                    <i class="bi bi-play-fill"></i> 재생
-                                </button>
-                                <a href="{{ route('judge.video.download', $assignment->id) }}" 
-                                   class="btn btn-outline-success btn-sm"
-                                   target="_blank">
-                                    <i class="bi bi-download"></i> 다운로드
-                                </a>
+                            <div class="btn-group-vertical btn-group-sm" role="group">
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="load-video-btn">
+                                        <i class="bi bi-play-fill"></i> 재생
+                                    </button>
+                                    <a href="{{ route('judge.video.download', $assignment->id) }}" 
+                                       class="btn btn-outline-success btn-sm"
+                                       target="_blank">
+                                        <i class="bi bi-download"></i> 다운로드
+                                    </a>
+                                </div>
+                                
+                                <!-- AI 평가 버튼 -->
+                                @php
+                                    // auth('admin')->id()가 문자열을 반환하는 경우 숫자 ID로 변환
+                                    $currentAdminId = auth('admin')->user()->id ?? auth('admin')->id();
+                                    $aiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
+                                    
+                                    // 디버깅용 - 브라우저 콘솔에서 확인 가능
+                                    echo "<script>console.log('=== PHP 디버깅 ===');</script>";
+                                    echo "<script>console.log('PHP currentAdminId: " . $currentAdminId . "');</script>";
+                                    echo "<script>console.log('PHP aiEval: " . ($aiEval ? 'exists' : 'null') . "');</script>";
+                                    if ($aiEval) {
+                                        echo "<script>console.log('PHP aiEval status: " . $aiEval->processing_status . "');</script>";
+                                        echo "<script>console.log('PHP aiEval id: " . $aiEval->id . "');</script>";
+                                    }
+                                    echo "<script>console.log('PHP 조건 결과: " . (!$aiEval || $aiEval->processing_status === 'failed' ? 'AI 평가 버튼' : ($aiEval->processing_status === 'processing' ? '처리중 버튼' : ($aiEval->processing_status === 'completed' ? '결과 보기 버튼' : '알 수 없음'))) . "');</script>";
+                                @endphp
+                                <div class="btn-group mt-1" role="group">
+                                    @if(!$aiEval || $aiEval->processing_status === 'failed')
+                                        <button type="button" 
+                                                class="btn btn-outline-info btn-sm ai-evaluate-btn"
+                                                data-assignment-id="{{ $assignment->id }}"
+                                                title="AI로 평가하기">
+                                            <i class="bi bi-robot"></i> AI 평가
+                                        </button>
+                                    @elseif($aiEval->processing_status === 'processing')
+                                        <button type="button" 
+                                                class="btn btn-warning btn-sm" 
+                                                disabled>
+                                            <i class="bi bi-arrow-clockwise"></i> 처리중...
+                                        </button>
+                                    @elseif($aiEval->processing_status === 'completed')
+                                        <button type="button" 
+                                                class="btn btn-success btn-sm view-ai-result-btn"
+                                                data-ai-evaluation-id="{{ $aiEval->id }}"
+                                                title="AI 평가 결과 보기">
+                                            <i class="bi bi-check-circle"></i> 결과 보기
+                                        </button>
+                                    @endif
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -201,12 +243,15 @@
                         'pronunciation_score' => ['title' => '발음·억양', 'icon' => 'bi-mic'],
                         'vocabulary_score' => ['title' => '어휘·표현', 'icon' => 'bi-book'],
                         'fluency_score' => ['title' => '유창성', 'icon' => 'bi-chat-dots'],
-                        'confidence_score' => ['title' => '자신감', 'icon' => 'bi-emoji-smile']
+                        'confidence_score' => ['title' => '자신감', 'icon' => 'bi-emoji-smile'],
+                        'topic_connection_score' => ['title' => '주제연결성', 'icon' => 'bi-link-45deg'],
+                        'structure_flow_score' => ['title' => '구성·흐름', 'icon' => 'bi-arrow-down-up'],
+                        'creativity_score' => ['title' => '창의성', 'icon' => 'bi-lightbulb']
                     ];
                 @endphp
                 
                 @foreach($criteria as $field => $info)
-                <div class="col-md-3 mb-3">
+                <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
                     <div class="card h-100">
                         <div class="card-body p-3">
                             <h6 class="card-title">
@@ -241,8 +286,7 @@
                             
                             <!-- 점수 가이드 -->
                             <div class="text-muted" style="font-size: 0.7rem;">
-                                0-2: 매우미흡 | 3-4: 미흡<br>
-                                5-6: 보통 | 7-8: 양호 | 9-10: 우수
+                                각 항목별 0-10점으로 평가해주세요
                             </div>
                         </div>
                     </div>
@@ -255,10 +299,7 @@
                 <div class="card-body text-center bg-primary bg-opacity-10">
                     <h5 class="card-title">총점</h5>
                     <div class="display-6 fw-bold text-primary">
-                        <span id="total-score">{{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}</span> / 40점
-                    </div>
-                    <div class="mt-2">
-                        <span id="grade-badge" class="badge fs-6">등급 계산 중...</span>
+                        <span id="total-score">{{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}</span> / 70점
                     </div>
                 </div>
             </div>
@@ -273,9 +314,6 @@
                           name="comments" 
                           rows="4"
                           placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요...">{{ old('comments', $assignment->evaluation->comments ?? '') }}</textarea>
-                <div class="form-text">
-                    학생과 학부모에게 도움이 될 수 있는 피드백을 남겨주세요.
-                </div>
             </div>
             
             <!-- 제출 버튼 -->
@@ -324,9 +362,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const scoreInputs = document.querySelectorAll('input[type="number"]');
     const ranges = document.querySelectorAll('input[type="range"]');
     const totalScoreElement = document.getElementById('total-score');
-    const gradeBadge = document.getElementById('grade-badge');
     
-        // 영상 로드 버튼 클릭
+    // AI 평가 결과 자동 반영
+    @if($aiEvaluation && !$assignment->evaluation)
+    const aiScores = {
+        pronunciation_score: {{ $aiEvaluation->pronunciation_score ?? 0 }},
+        vocabulary_score: {{ $aiEvaluation->vocabulary_score ?? 0 }},
+        fluency_score: {{ $aiEvaluation->fluency_score ?? 0 }}
+    };
+    
+    console.log('AI 평가 결과 자동 반영:', aiScores);
+    
+    // AI 점수를 해당 입력 필드에 자동 설정
+    Object.keys(aiScores).forEach(scoreType => {
+        const scoreInput = document.getElementById(scoreType);
+        const scoreRange = document.getElementById(scoreType + '_range');
+        
+        if (scoreInput && aiScores[scoreType] > 0) {
+            scoreInput.value = aiScores[scoreType];
+            if (scoreRange) {
+                scoreRange.value = aiScores[scoreType];
+            }
+            
+            // 입력 필드에 AI 점수임을 표시
+            scoreInput.style.backgroundColor = '#e3f2fd';
+            scoreInput.title = 'AI가 평가한 점수가 자동 반영되었습니다. 필요시 수정 가능합니다.';
+            
+            console.log(`${scoreType}: ${aiScores[scoreType]}점 자동 설정`);
+        }
+    });
+    
+    // AI 점수 자동 반영 알림 표시
+    const aiNotification = document.createElement('div');
+    aiNotification.className = 'alert alert-info alert-dismissible fade show mt-3';
+    aiNotification.innerHTML = `
+        <i class="bi bi-robot"></i> 
+        <strong>AI 평가 결과가 자동 반영되었습니다!</strong><br>
+        발음(${aiScores.pronunciation_score}점), 어휘(${aiScores.vocabulary_score}점), 유창성(${aiScores.fluency_score}점)이 설정되었습니다. 필요시 수정 가능합니다.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // 폼 시작 부분에 알림 추가
+    const formCard = document.querySelector('.card.admin-card');
+    if (formCard) {
+        formCard.insertBefore(aiNotification, formCard.firstChild);
+    }
+    
+    // AI 점수 반영 후 총점 재계산
+    setTimeout(() => calculateTotal(), 100);
+    @endif
+    
+    // 영상 로드 버튼 클릭
     loadVideoBtn.addEventListener('click', function() {
         loadVideo();
     });
@@ -419,32 +505,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         totalScoreElement.textContent = total;
-        updateGrade(total);
-    }
-    
-    // 등급 업데이트 (0-40점 기준)
-    function updateGrade(total) {
-        let grade, className;
-        
-        if (total >= 36) {
-            grade = '우수';
-            className = 'bg-success text-white';
-        } else if (total >= 31) {
-            grade = '양호';
-            className = 'bg-primary text-white';
-        } else if (total >= 26) {
-            grade = '보통';
-            className = 'bg-info text-white';
-        } else if (total >= 21) {
-            grade = '미흡';
-            className = 'bg-warning text-dark';
-        } else {
-            grade = '매우 미흡';
-            className = 'bg-danger text-white';
-        }
-        
-        gradeBadge.textContent = grade;
-        gradeBadge.className = `badge ${className} fs-6`;
     }
     
     // 폼 제출 시 확인
@@ -459,8 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const total = scores.reduce((sum, score) => sum + score, 0);
-        const confirmMessage = `심사 결과를 저장하시겠습니까?\n\n총점: ${total}/40점\n` + 
-                             `등급: ${gradeBadge.textContent}`;
+        const confirmMessage = `심사 결과를 저장하시겠습니까?\n\n총점: ${total}/70점`;
         
         if (!confirm(confirmMessage)) {
             e.preventDefault();
@@ -476,6 +535,354 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 초기 총점 계산
     calculateTotal();
+    
+    // AI 평가 관련 변수 설정
+    @php
+        $currentAdminId = auth('admin')->user()->id ?? auth('admin')->id();
+        $currentAiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
+    @endphp
+    
+    const currentAdminId = {{ $currentAdminId ?? 'null' }};
+    const assignmentId = {{ $assignment->id }};
+    const hasAiEvaluation = {{ $currentAiEval ? 'true' : 'false' }};
+    const aiEvaluateUrl = '{{ url("/judge/ai-evaluate") }}';
+    
+    // 디버깅 정보 출력
+    console.log('=== AI 평가 디버깅 정보 ===');
+    console.log('currentAdminId:', currentAdminId);
+    console.log('assignmentId:', assignmentId);
+    console.log('hasAiEvaluation:', hasAiEvaluation);
+    console.log('aiEvaluateUrl:', aiEvaluateUrl);
+    console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'));
+    
+    @if($currentAiEval)
+    const aiEvaluationData = {
+        id: {{ $currentAiEval->id }},
+        status: '{{ $currentAiEval->processing_status }}',
+        admin_id: {{ $currentAiEval->admin_id }}
+    };
+    console.log('aiEvaluationData:', aiEvaluationData);
+    @else
+    const aiEvaluationData = null;
+    console.log('aiEvaluationData:', null);
+    @endif
+    
+    console.log('페이지 로드 - AI 평가 상태 확인 시작');
+    
+    // 1초 후 버튼 상태 확인 및 동기화 (DOM 로드 완료 후)
+    setTimeout(function() {
+        const existingViewBtn = document.querySelector('.view-ai-result-btn');
+        const existingAiBtn = document.querySelector('.ai-evaluate-btn');
+        
+        console.log('DOM 로드 후 버튼 상태:');
+        console.log('- 결과 보기 버튼:', existingViewBtn);
+        console.log('- AI 평가 버튼:', existingAiBtn);
+        
+        // DOM 구조 디버깅
+        const videoControlPanel = document.querySelector('.p-3.bg-light.border-top');
+        console.log('- 영상 컨트롤 패널:', videoControlPanel);
+        
+        const btnGroupVertical = document.querySelector('.btn-group-vertical');
+        console.log('- 버튼 그룹 세로:', btnGroupVertical);
+        
+        const allBtnGroups = document.querySelectorAll('.btn-group');
+        console.log('- 모든 버튼 그룹들:', allBtnGroups);
+        
+        allBtnGroups.forEach((group, index) => {
+            console.log(`  - 버튼 그룹 ${index}:`, group);
+            console.log(`    - 내용:`, group.innerHTML);
+        });
+        
+        if (hasAiEvaluation && aiEvaluationData) {
+            console.log('AI 평가 데이터 로드:', aiEvaluationData);
+            
+            // completed 상태인데 AI 평가 버튼이 표시되는 경우 강제 동기화
+            if (aiEvaluationData.status === 'completed' && existingAiBtn && !existingViewBtn) {
+                console.log('⚠️ 상태 불일치 감지 - 강제 동기화 실행');
+                syncAiEvaluationButton(aiEvaluationData);
+            } else if (aiEvaluationData.status === 'completed' && existingViewBtn) {
+                console.log('✅ 버튼 상태 정상 (완료됨)');
+            } else if (aiEvaluationData.status === 'processing') {
+                console.log('✅ 버튼 상태 정상 (처리중)');
+            } else if (aiEvaluationData.status === 'failed' && existingAiBtn) {
+                console.log('✅ 버튼 상태 정상 (실패 - 재시도 가능)');
+            }
+        } else {
+            console.log('AI 평가 데이터 없음 - AI 평가 버튼이 표시되어야 함');
+            if (existingAiBtn) {
+                console.log('✅ AI 평가 버튼 정상 발견');
+            } else {
+                console.log('⚠️ AI 평가 버튼을 찾을 수 없습니다');
+                // 버튼 컨테이너가 있는지 확인
+                const buttonContainer = document.querySelector('.btn-group.mt-1[role="group"]');
+                console.log('- 버튼 컨테이너:', buttonContainer);
+                if (buttonContainer) {
+                    console.log('- 컨테이너 내부:', buttonContainer.innerHTML);
+                }
+            }
+        }
+    }, 1000);
+    
+    // AI 평가 버튼 클릭 이벤트
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.ai-evaluate-btn')) {
+            e.preventDefault();
+            const button = e.target.closest('.ai-evaluate-btn');
+            const assignmentId = button.dataset.assignmentId;
+            
+            if (confirm('AI 평가를 시작하시겠습니까? 처리에 시간이 걸릴 수 있습니다.')) {
+                // 버튼 비활성화 및 로딩 상태 표시
+                button.disabled = true;
+                button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 처리중...';
+                button.classList.remove('btn-outline-info');
+                button.classList.add('btn-warning');
+                
+                // AI 평가 요청
+                console.log('=== AI 평가 요청 시작 ===');
+                console.log('요청 URL:', `${aiEvaluateUrl}/${assignmentId}`);
+                console.log('Assignment ID:', assignmentId);
+                
+                fetch(`${aiEvaluateUrl}/${assignmentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                })
+                .then(response => {
+                    console.log('=== AI 평가 응답 상태 ===');
+                    console.log('Response status:', response.status);
+                    console.log('Response statusText:', response.statusText);
+                    console.log('Response headers:', response.headers);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('=== AI 평가 응답 데이터 ===');
+                    console.log('Response data:', data);
+                    if (data.success) {
+                        // syncAiEvaluationButton 함수를 사용하여 버튼 상태 업데이트
+                        const newAiEvalData = {
+                            id: data.ai_evaluation_id,
+                            status: 'completed',
+                            admin_id: currentAdminId
+                        };
+                        syncAiEvaluationButton(newAiEvalData);
+                        
+                        // AI 평가 결과 영역이 없다면 페이지 새로고침
+                        if (!document.querySelector('.card.admin-card h5 i.bi-robot')) {
+                            setTimeout(() => location.reload(), 1000);
+                        }
+                        
+                        alert('AI 평가가 완료되었습니다! "결과 보기" 버튼을 클릭하여 결과를 확인하세요.');
+                    } else {
+                        alert('AI 평가 중 오류가 발생했습니다: ' + (data.message || '알 수 없는 오류'));
+                        // 버튼 복원
+                        button.disabled = false;
+                        button.innerHTML = '<i class="bi bi-robot"></i> AI 평가';
+                        button.classList.remove('btn-warning');
+                        button.classList.add('btn-outline-info');
+                    }
+                })
+                .catch(error => {
+                    console.error('=== AI 평가 요청 오류 ===');
+                    console.error('Error type:', error.name);
+                    console.error('Error message:', error.message);
+                    console.error('Error stack:', error.stack);
+                    console.error('Full error object:', error);
+                    
+                    alert('AI 평가 요청 중 오류가 발생했습니다: ' + error.message);
+                    // 버튼 복원
+                    button.disabled = false;
+                    button.innerHTML = '<i class="bi bi-robot"></i> AI 평가';
+                    button.classList.remove('btn-warning');
+                    button.classList.add('btn-outline-info');
+                });
+            }
+        }
+        
+        // AI 결과 보기 버튼 클릭 이벤트
+        if (e.target.closest('.view-ai-result-btn')) {
+            e.preventDefault();
+            const button = e.target.closest('.view-ai-result-btn');
+            const aiEvaluationId = button.dataset.aiEvaluationId;
+            
+            // AI 평가 결과 모달 표시
+            showAiResultModal(aiEvaluationId);
+        }
+    });
+
+    // AI 평가 결과 모달 표시 함수
+    function showAiResultModal(aiEvaluationId) {
+        const aiResultUrl = '{{ url("/judge/ai-result") }}';
+        fetch(`${aiResultUrl}/${aiEvaluationId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const modal = createAiResultModal(data.aiEvaluation);
+                    document.body.appendChild(modal);
+                    const bsModal = new bootstrap.Modal(modal);
+                    bsModal.show();
+                    
+                    // 모달 닫힐 때 DOM에서 제거
+                    modal.addEventListener('hidden.bs.modal', function() {
+                        document.body.removeChild(modal);
+                    });
+                } else {
+                    alert('AI 평가 결과를 불러올 수 없습니다.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('AI 평가 결과 조회 중 오류가 발생했습니다.');
+            });
+    }
+
+    // AI 평가 버튼 상태 동기화 함수
+    function syncAiEvaluationButton(aiEvalData) {
+        console.log('syncAiEvaluationButton 호출:', aiEvalData);
+        
+        // 모든 AI 관련 버튼 찾기
+        const aiButtonContainer = document.querySelector('.btn-group.mt-1[role="group"]');
+        console.log('AI 버튼 컨테이너:', aiButtonContainer);
+        
+        if (!aiButtonContainer) {
+            console.error('AI 버튼 컨테이너를 찾을 수 없습니다.');
+            return;
+        }
+        
+        // 기존 AI 관련 버튼들 찾기
+        const existingButtons = aiButtonContainer.querySelectorAll('button');
+        console.log('기존 버튼들:', existingButtons);
+        
+        // AI 관련 버튼들만 제거
+        existingButtons.forEach(btn => {
+            if (btn.classList.contains('ai-evaluate-btn') || 
+                btn.classList.contains('view-ai-result-btn') ||
+                (btn.classList.contains('btn-warning') && btn.disabled && btn.innerHTML.includes('처리중'))) {
+                console.log('기존 AI 버튼 제거:', btn.className, btn.innerHTML);
+                btn.remove();
+            }
+        });
+        
+        // 상태에 따라 적절한 버튼 생성
+        let newButton = null;
+        
+        if (aiEvalData.status === 'completed') {
+            newButton = document.createElement('button');
+            newButton.type = 'button';
+            newButton.className = 'btn btn-success btn-sm view-ai-result-btn';
+            newButton.setAttribute('data-ai-evaluation-id', aiEvalData.id);
+            newButton.title = 'AI 평가 결과 보기';
+            newButton.innerHTML = '<i class="bi bi-check-circle"></i> 결과 보기';
+            console.log('완료 상태 - 결과 보기 버튼 생성');
+        } else if (aiEvalData.status === 'processing') {
+            newButton = document.createElement('button');
+            newButton.type = 'button';
+            newButton.className = 'btn btn-warning btn-sm';
+            newButton.disabled = true;
+            newButton.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 처리중...';
+            console.log('처리중 상태 버튼 생성');
+        } else if (aiEvalData.status === 'failed' || !aiEvalData.status) {
+            newButton = document.createElement('button');
+            newButton.type = 'button';
+            newButton.className = 'btn btn-outline-info btn-sm ai-evaluate-btn';
+            newButton.setAttribute('data-assignment-id', assignmentId);
+            newButton.title = 'AI로 평가하기';
+            newButton.innerHTML = '<i class="bi bi-robot"></i> AI 평가';
+            console.log('실패/없음 상태 - AI 평가 버튼 생성');
+        }
+        
+        if (newButton) {
+            aiButtonContainer.appendChild(newButton);
+            console.log('새 버튼 추가 완료:', newButton.className, newButton.innerHTML);
+        } else {
+            console.error('새 버튼을 생성하지 못했습니다. 상태:', aiEvalData.status);
+        }
+    }
+
+    // AI 결과 모달 생성 함수
+    function createAiResultModal(aiEvaluation) {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-robot"></i> AI 평가 결과
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">발음 및 전달력</h6>
+                                        <h3 class="text-primary">${aiEvaluation.pronunciation_score}/10</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">어휘 및 표현</h6>
+                                        <h3 class="text-success">${aiEvaluation.vocabulary_score}/10</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">유창성</h6>
+                                        <h3 class="text-info">${aiEvaluation.fluency_score}/10</h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">총점</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <h2 class="text-primary">${aiEvaluation.total_score}/30</h2>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">AI 심사평</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0">${aiEvaluation.ai_feedback || '심사평이 없습니다.'}</p>
+                            </div>
+                        </div>
+                        
+                        ${aiEvaluation.transcription ? `
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">음성 전사 결과</h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0" style="font-family: monospace; font-size: 0.9em;">${aiEvaluation.transcription}</p>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        return modal;
+    }
 });
 </script>
 @endsection 

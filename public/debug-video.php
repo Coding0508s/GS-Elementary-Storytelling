@@ -44,7 +44,7 @@ if ($submission) {
     // 실제 비디오 플레이어 테스트
     echo "<div style='padding: 20px; border: 1px solid #ccc; margin: 20px;'>";
     echo "<h3>비디오 플레이어 테스트:</h3>";
-    echo "<video controls style='max-width: 600px; width: 100%;'>";
+    echo "<video controls style='max-width: 600px; width: 100%; aspect-ratio: 16/9;'>";
     echo "<source src='{$url}' type='video/mp4'>";
     echo "브라우저가 비디오를 지원하지 않습니다.";
     echo "</video>";

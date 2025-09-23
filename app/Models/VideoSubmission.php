@@ -191,6 +191,22 @@ class VideoSubmission extends Model
     }
 
     /**
+     * AI 평가 관계 (단수)
+     */
+    public function aiEvaluation()
+    {
+        return $this->hasOne(AiEvaluation::class);
+    }
+
+    /**
+     * AI 평가 관계 (복수)
+     */
+    public function aiEvaluations()
+    {
+        return $this->hasMany(AiEvaluation::class);
+    }
+
+    /**
      * 영상 파일 URL 가져오기 (S3 임시 URL)
      */
     public function getVideoUrlAttribute()

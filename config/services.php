@@ -41,4 +41,8 @@ return [
         'from_number' => env('TWILIO_FROM_NUMBER'),
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+    ],
+
 ];

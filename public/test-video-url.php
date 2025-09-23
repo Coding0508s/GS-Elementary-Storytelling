@@ -20,7 +20,7 @@ foreach ($videoFiles as $file) {
         echo "<p>파일 크기: " . round(filesize($filePath) / 1024 / 1024, 2) . " MB</p>";
         
         // 비디오 플레이어
-        echo "<video controls style='max-width: 400px; width: 100%;'>";
+        echo "<video controls style='max-width: 400px; width: 100%; aspect-ratio: 16/9;'>";
         echo "<source src='{$url}' type='video/mp4'>";
         echo "브라우저가 비디오를 지원하지 않습니다.";
         echo "</video>";

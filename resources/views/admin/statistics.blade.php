@@ -92,7 +92,7 @@
             </div>
             <div class="col-md-4 mb-3">
                 <div class="text-center">
-                    <h3 class="text-danger">{{ number_format($averageScores->avg_total ?? 0, 1) }}/40</h3>
+                    <h3 class="text-danger">{{ number_format($averageScores->avg_total ?? 0, 1) }}/70</h3>
                     <small class="text-muted">전체 평균</small>
                 </div>
             </div>
@@ -162,7 +162,6 @@
                             <th>유창성</th>
                             <th>자신감</th>
                             <th>총점</th>
-                            <th>등급</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -192,30 +191,7 @@
                             <td><span class="badge bg-success">{{ $student->vocabulary_score }}</span></td>
                             <td><span class="badge bg-info">{{ $student->fluency_score }}</span></td>
                             <td><span class="badge bg-warning">{{ $student->confidence_score }}</span></td>
-                            <td><strong class="text-danger">{{ $student->total_score }}/80</strong></td>
-                            <td>
-                                @php
-                                    $grade = '';
-                                    $class = '';
-                                    if ($student->total_score >= 36) {
-                                        $grade = '우수';
-                                        $class = 'bg-success';
-                                    } elseif ($student->total_score >= 31) {
-                                        $grade = '양호';
-                                        $class = 'bg-primary';
-                                    } elseif ($student->total_score >= 26) {
-                                        $grade = '보통';
-                                        $class = 'bg-info';
-                                    } elseif ($student->total_score >= 21) {
-                                        $grade = '미흡';
-                                        $class = 'bg-warning';
-                                    } else {
-                                        $grade = '매우 미흡';
-                                        $class = 'bg-danger';
-                                    }
-                                @endphp
-                                <span class="badge {{ $class }}">{{ $grade }}</span>
-                            </td>
+                            <td><strong class="text-danger">{{ $student->total_score }}/70</strong></td>
                         </tr>
                         @endforeach
                     </tbody>
@@ -247,9 +223,8 @@
                             <th width="10%">제출수 순위</th>
                             <th width="30%">기관명</th>
                             <th width="15%">제출 수</th>
-                            <th width="15%">평균 점수</th>
-                            <th width="15%">등급</th>
-                            <th width="15%">진행률</th>
+                            <th width="20%">평균 점수</th>
+                            <th width="20%">진행률</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -293,30 +268,7 @@
                                 @endif
                             </td>
                             <td>
-                                <strong class="text-success">{{ number_format($stat->avg_score, 1) }}/40</strong>
-                            </td>
-                            <td>
-                                @php
-                                    $grade = '';
-                                    $class = '';
-                                    if ($stat->avg_score >= 36) {
-                                        $grade = '우수';
-                                        $class = 'bg-success';
-                                    } elseif ($stat->avg_score >= 31) {
-                                        $grade = '양호';
-                                        $class = 'bg-primary';
-                                    } elseif ($stat->avg_score >= 26) {
-                                        $grade = '보통';
-                                        $class = 'bg-info';
-                                    } elseif ($stat->avg_score >= 21) {
-                                        $grade = '미흡';
-                                        $class = 'bg-warning';
-                                    } else {
-                                        $grade = '매우 미흡';
-                                        $class = 'bg-danger';
-                                    }
-                                @endphp
-                                <span class="badge {{ $class }}">{{ $grade }}</span>
+                                <strong class="text-success">{{ number_format($stat->avg_score, 1) }}/70</strong>
                             </td>
                             <td>
                                 @php

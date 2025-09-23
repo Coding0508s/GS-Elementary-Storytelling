@@ -5,7 +5,7 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .video-container { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
-        video { max-width: 600px; width: 100%; }
+        video { max-width: 600px; width: 100%; aspect-ratio: 16/9; }
     </style>
 </head>
 <body>

@@ -150,7 +150,7 @@
                 <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
             </div>
             <h1><i class="bi bi-shield-lock admin-icon"></i> <span class="contest-title">관리자 로그인</span></h1>
-            <p>Speech Contest 관리자/심사위원 페이지 접속</p>
+            <p>Storytelling 관리자/심사위원 페이지 접속</p>
         </div>
         
         @if(session('success'))

@@ -5,13 +5,9 @@ use App\Http\Controllers\VideoSubmissionController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\JudgeController;
 
-// 메인 페이지 - 바로 개인정보 동의 페이지로 이동
-Route::get('/', [VideoSubmissionController::class, 'showPrivacyConsent'])
+// 메인 페이지 - 이벤트 소개 페이지
+Route::get('/', [VideoSubmissionController::class, 'showEventIntro'])
     ->name('event.intro');
-
-// 기존 이벤트 소개 페이지 (주석처리)
-// Route::get('/event-intro', [VideoSubmissionController::class, 'showEventIntro'])
-//     ->name('event.intro.original');
 
 // 개인정보 수집 동의 관련 라우트
 Route::get('/privacy-consent', [VideoSubmissionController::class, 'showPrivacyConsent'])
@@ -83,6 +79,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/assignments/reassign-all', [AdminController::class, 'reassignAll'])
             ->name('assignment.reassign.all');
         
+        // 심사위원 계정 자동 생성
+        Route::post('/assignments/create-judges', [AdminController::class, 'createMissingJudges'])
+            ->name('assignment.create.judges');
+        
         // 데이터 다운로드
         Route::get('/download/excel', [AdminController::class, 'downloadExcel'])
             ->name('download.excel');
@@ -114,56 +114,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/reset-execute', [AdminController::class, 'executeReset'])
             ->name('reset.execute');
         
-        // 비밀번호 재설정
-        Route::get('/password-reset', [AdminController::class, 'showPasswordReset'])
-            ->name('password.reset');
-        
-        Route::post('/password-reset', [AdminController::class, 'resetPassword'])
-            ->name('password.reset.execute');
-        
-        // 심사위원 관리
-        Route::get('/judge-management', [AdminController::class, 'showJudgeManagement'])
-            ->name('judge.management');
-        
-        Route::post('/judge-create', [AdminController::class, 'createJudge'])
-            ->name('judge.create');
-        
-        Route::delete('/judge-delete/{id}', [AdminController::class, 'deleteJudge'])
-            ->name('judge.delete');
-        
-        Route::patch('/judge-toggle-status/{id}', [AdminController::class, 'toggleJudgeStatus'])
-            ->name('judge.toggle.status');
-
-        // AI 채점 결과 관리 (구체적인 라우트를 먼저 정의)
-        Route::get('/ai-evaluations/export', [AdminController::class, 'downloadAiEvaluationExcel'])
-            ->name('ai-evaluations.export');
-        
-        // AI 평가 관리
-        Route::get('/ai-evaluations', [AdminController::class, 'aiEvaluationList'])
-            ->name('ai.evaluation.list');
-        
-        Route::get('/ai-evaluations/{id}', [AdminController::class, 'showAiEvaluation'])
-            ->name('ai.evaluation.show');
-        
-        Route::delete('/ai-evaluations/reset', [AdminController::class, 'resetAiEvaluations'])
-            ->name('ai-evaluations.reset');
-        
-        Route::get('/ai-evaluation/{id}', [AdminController::class, 'getAiEvaluationDetail'])
-            ->name('ai-evaluation.detail');
-        
-        // 영상 보기
-        Route::get('/video/{id}/view', [AdminController::class, 'viewVideo'])
-            ->name('video.view');
-        
-        // AI 설정 관리
-        Route::get('/ai-settings', [AdminController::class, 'aiSettings'])
-            ->name('ai.settings');
-        
-        Route::post('/ai-settings', [AdminController::class, 'updateAiSettings'])
-            ->name('ai.settings.update');
-        
-        // 2차 예선 진출 관리 (필요 없어서 주석처리)
-        /*
+        // 2차 예선 진출 관리
         Route::post('/qualify-second-round', [AdminController::class, 'qualifySecondRound'])
             ->name('qualify.second.round');
         
@@ -175,13 +126,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         
         Route::post('/reset-qualification', [AdminController::class, 'resetQualificationStatus'])
             ->name('reset.qualification');
-        */
-        
-        // 임시 라우트: 2차 예선 관련 페이지 접근 시 통계 페이지로 리다이렉트
-        Route::get('/second-round-qualifiers', function() {
-            return redirect()->route('admin.statistics');
-        })->name('second.round.qualifiers');
-        
     });
 });
 
@@ -228,15 +172,5 @@ Route::prefix('judge')->name('judge.')->group(function () {
         
         Route::get('/video/{id}/stream', [JudgeController::class, 'getVideoStreamUrl'])
             ->name('video.stream');
-
-        // AI 평가
-        Route::post('/ai-evaluate/{id}', [JudgeController::class, 'performAiEvaluation'])
-            ->name('ai.evaluation.perform');
-        
-        Route::get('/ai-evaluation/{id}/result', [JudgeController::class, 'showAiEvaluation'])
-            ->name('ai.evaluation.result');
-        
-        Route::get('/ai-result/{id}', [JudgeController::class, 'showAiResult'])
-            ->name('ai.result.show');
     });
 });

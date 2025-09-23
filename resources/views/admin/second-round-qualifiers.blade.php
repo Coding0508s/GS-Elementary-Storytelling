@@ -78,7 +78,6 @@
                                 <th>나이</th>
                                 <th>Unit 주제</th>
                                 <th>총점</th>
-                                <th>등급</th>
                                 <th>제출일시</th>
                                 <th>진출 확정일</th>
                             </tr>
@@ -122,36 +121,7 @@
                                         @endif
                                     </td>
                                     <td>
-                                        <strong class="text-primary">{{ $evaluation->total_score }}/40</strong>
-                                    </td>
-                                    <td>
-                                        @php
-                                            $grade = '';
-                                            $badgeClass = '';
-                                            if ($evaluation->total_score >= 36) {
-                                                $grade = 'A+';
-                                                $badgeClass = 'bg-success';
-                                            } elseif ($evaluation->total_score >= 32) {
-                                                $grade = 'A';
-                                                $badgeClass = 'bg-success';
-                                            } elseif ($evaluation->total_score >= 28) {
-                                                $grade = 'B+';
-                                                $badgeClass = 'bg-primary';
-                                            } elseif ($evaluation->total_score >= 24) {
-                                                $grade = 'B';
-                                                $badgeClass = 'bg-primary';
-                                            } elseif ($evaluation->total_score >= 20) {
-                                                $grade = 'C+';
-                                                $badgeClass = 'bg-warning text-dark';
-                                            } elseif ($evaluation->total_score >= 16) {
-                                                $grade = 'C';
-                                                $badgeClass = 'bg-warning text-dark';
-                                            } else {
-                                                $grade = 'D';
-                                                $badgeClass = 'bg-danger';
-                                            }
-                                        @endphp
-                                        <span class="badge {{ $badgeClass }}">{{ $grade }}</span>
+                                        <strong class="text-primary">{{ $evaluation->total_score }}/70</strong>
                                     </td>
                                     <td>
                                         <small class="text-info">{{ $submission->created_at->format('m/d H:i') }}</small>

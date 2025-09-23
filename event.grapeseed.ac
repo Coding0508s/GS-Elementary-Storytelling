@@ -1,0 +1,79 @@
+#
+# You should look at the following URL's in order to grasp a solid understanding
+# of Nginx configuration files in order to fully unleash the power of Nginx.
+# https://www.nginx.com/resources/wiki/start/
+# https://www.nginx.com/resources/wiki/start/topics/tutorials/config_pitfalls/
+# https://wiki.debian.org/Nginx/DirectoryStructure
+#
+# In most cases, administrators will remove this file from sites-enabled/ and
+# leave it as reference inside of sites-available where it will continue to be
+# updated by the nginx packaging team.
+#
+# This file will automatically load configuration files provided by other
+# applications, such as Drupal or Wordpress. These applications will be made
+# available underneath a path with that package name, such as /drupal8.
+#
+# Please see /usr/share/doc/nginx-doc/examples/ for more detailed examples.
+##
+
+# Default server configuration
+#
+
+# HTTPS 서버 블록
+# HTTPS 서버 블록
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name event.grapeseed.ac;
+
+    # --- SSL 인증서 설정 ---
+    ssl_certificate /etc/letsencrypt/live/event.grapeseed.ac/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/event.grapeseed.ac/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    index index.php;
+
+    # === speech-contest 프로젝트 처리 (/speech-contest/ 경로) ===
+    location /speech-contest {
+        alias /var/www/html/speech-contest/public;
+        try_files $uri $uri/ /speech-contest/index.php?$query_string;
+
+        location ~ \.php$ {
+            if (!-f $request_filename) {
+                return 404;
+            }
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+            # Laravel에 정확한 경로를 알려주는 핵심 코드입니다.
+            fastcgi_param SCRIPT_NAME /speech-contest/index.php;
+        }
+    }
+
+    # === storytelling 프로젝트 처리 (기본 경로 '/') ===
+    location / {
+        root /var/www/html/storytelling/public;
+        try_files $uri $uri/ /index.php?$query_string;
+
+        location ~ \.php$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+            # 여기가 원래의 올바른 설정입니다.
+            fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        }
+    }
+
+    # .htaccess와 같은 숨김 파일 접근 차단
+    location ~ /\.ht {
+        deny all;
+    }
+}
+
+# HTTP -> HTTPS 리디렉션 서버 블록
+server {
+    listen 80;
+    listen [::]:80;
+    server_name event.grapeseed.ac;
+    return 301 https://$host$request_uri;
+}

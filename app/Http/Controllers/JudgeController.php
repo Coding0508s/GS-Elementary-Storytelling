@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use App\Models\Admin;
 use App\Models\VideoSubmission;
 use App\Models\Evaluation;
 use App\Models\VideoAssignment;
+use App\Models\AiEvaluation;
+use App\Services\OpenAiService;
 
 class JudgeController extends Controller
 {
@@ -188,7 +191,13 @@ class JudgeController extends Controller
                                         ->orderBy('created_at', 'asc')
                                         ->first();
 
-        return view('judge.evaluation-form', compact('assignment', 'submission', 'judge', 'nextAssignment'));
+        // AI 평가 결과 가져오기 (해당 심사위원의 AI 평가)
+        $aiEvaluation = AiEvaluation::where('video_submission_id', $submission->id)
+                                  ->where('admin_id', $judge->id)
+                                  ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
+                                  ->first();
+
+        return view('judge.evaluation-form', compact('assignment', 'submission', 'judge', 'nextAssignment', 'aiEvaluation'));
     }
 
     /**
@@ -211,6 +220,9 @@ class JudgeController extends Controller
             'vocabulary_score' => 'required|integer|min:0|max:10',
             'fluency_score' => 'required|integer|min:0|max:10',
             'confidence_score' => 'required|integer|min:0|max:10',
+            'topic_connection_score' => 'required|integer|min:0|max:10',
+            'structure_flow_score' => 'required|integer|min:0|max:10',
+            'creativity_score' => 'required|integer|min:0|max:10',
             'comments' => 'nullable|string|max:1000'
         ], [
             'pronunciation_score.required' => '발음 점수를 입력해주세요.',
@@ -225,6 +237,15 @@ class JudgeController extends Controller
             'confidence_score.required' => '자신감 점수를 입력해주세요.',
             'confidence_score.min' => '자신감 점수는 0점 이상이어야 합니다.',
             'confidence_score.max' => '자신감 점수는 10점 이하여야 합니다.',
+            'topic_connection_score.required' => '주제연결성 점수를 입력해주세요.',
+            'topic_connection_score.min' => '주제연결성 점수는 0점 이상이어야 합니다.',
+            'topic_connection_score.max' => '주제연결성 점수는 10점 이하여야 합니다.',
+            'structure_flow_score.required' => '구성·흐름 점수를 입력해주세요.',
+            'structure_flow_score.min' => '구성·흐름 점수는 0점 이상이어야 합니다.',
+            'structure_flow_score.max' => '구성·흐름 점수는 10점 이하여야 합니다.',
+            'creativity_score.required' => '창의성 점수를 입력해주세요.',
+            'creativity_score.min' => '창의성 점수는 0점 이상이어야 합니다.',
+            'creativity_score.max' => '창의성 점수는 10점 이하여야 합니다.',
         ]);
 
         if ($validator->fails()) {
@@ -243,6 +264,9 @@ class JudgeController extends Controller
                 'vocabulary_score' => $request->vocabulary_score,
                 'fluency_score' => $request->fluency_score,
                 'confidence_score' => $request->confidence_score,
+                'topic_connection_score' => $request->topic_connection_score,
+                'structure_flow_score' => $request->structure_flow_score,
+                'creativity_score' => $request->creativity_score,
                 'comments' => $request->comments
             ]);
             
@@ -256,6 +280,9 @@ class JudgeController extends Controller
                 'vocabulary_score' => $request->vocabulary_score,
                 'fluency_score' => $request->fluency_score,
                 'confidence_score' => $request->confidence_score,
+                'topic_connection_score' => $request->topic_connection_score,
+                'structure_flow_score' => $request->structure_flow_score,
+                'creativity_score' => $request->creativity_score,
                 'comments' => $request->comments
             ]);
         }
@@ -344,6 +371,9 @@ class JudgeController extends Controller
             'vocabulary_score' => 'required|integer|min:0|max:10',
             'fluency_score' => 'required|integer|min:0|max:10',
             'confidence_score' => 'required|integer|min:0|max:10',
+            'topic_connection_score' => 'required|integer|min:0|max:10',
+            'structure_flow_score' => 'required|integer|min:0|max:10',
+            'creativity_score' => 'required|integer|min:0|max:10',
             'comments' => 'nullable|string|max:1000'
         ]);
 
@@ -361,6 +391,9 @@ class JudgeController extends Controller
             'vocabulary_score' => $request->vocabulary_score,
             'fluency_score' => $request->fluency_score,
             'confidence_score' => $request->confidence_score,
+            'topic_connection_score' => $request->topic_connection_score,
+            'structure_flow_score' => $request->structure_flow_score,
+            'creativity_score' => $request->creativity_score,
             'comments' => $request->comments
         ]);
 
@@ -460,6 +493,248 @@ class JudgeController extends Controller
             'size' => $submission->getFormattedFileSizeAttribute(),
             'storage_type' => $submission->isStoredOnS3() ? 's3' : 'local'
         ]);
+    }
+
+    /**
+     * AI 평가 실행 (Ajax 요청용)
+     */
+    public function performAiEvaluation(Request $request, $id)
+    {
+        Log::info('AI 평가 요청 시작', [
+            'assignment_id' => $id,
+            'user_id' => Auth::guard('admin')->id(),
+            'request_data' => $request->all()
+        ]);
+
+        try {
+            $judge = Auth::guard('admin')->user();
+            
+            if (!$judge) {
+                Log::error('AI 평가 요청 - 인증되지 않은 사용자');
+                return response()->json([
+                    'success' => false,
+                    'message' => '인증이 필요합니다.'
+                ], 401);
+            }
+
+            Log::info('AI 평가 요청 - 심사위원 정보', [
+                'judge_id' => $judge->id,
+                'judge_name' => $judge->name
+            ]);
+            
+            // VideoAssignment에서 해당 assignment 찾기
+            $assignment = VideoAssignment::where('id', $id)
+                ->where('admin_id', $judge->id)
+                ->with('videoSubmission')
+                ->first();
+
+            Log::info('AI 평가 요청 - Assignment 조회 결과', [
+                'assignment_found' => $assignment ? true : false,
+                'assignment_id' => $id,
+                'judge_id' => $judge->id
+            ]);
+
+            if (!$assignment) {
+                Log::error('AI 평가 요청 - Assignment를 찾을 수 없음', [
+                    'assignment_id' => $id,
+                    'judge_id' => $judge->id
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => '해당 배정을 찾을 수 없습니다.'
+                ], 404);
+            }
+
+            $submission = $assignment->videoSubmission;
+
+            // 이미 AI 평가가 진행 중이거나 완료된 경우 체크
+            $existingAiEvaluation = AiEvaluation::where('video_submission_id', $submission->id)
+                ->where('admin_id', $judge->id)
+                ->first();
+
+            if ($existingAiEvaluation) {
+                if ($existingAiEvaluation->processing_status === AiEvaluation::STATUS_COMPLETED) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => '이미 AI 평가가 완료되었습니다.',
+                        'ai_evaluation_id' => $existingAiEvaluation->id
+                    ]);
+                } elseif ($existingAiEvaluation->processing_status === AiEvaluation::STATUS_PROCESSING) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'AI 평가가 현재 진행 중입니다.'
+                    ]);
+                }
+            }
+
+            // 영상 파일이 S3에 있는지 확인
+            if (!$submission->isStoredOnS3()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'S3에 저장된 영상만 AI 평가가 가능합니다.'
+                ]);
+            }
+
+            // AI 평가 레코드 생성 또는 업데이트
+            $aiEvaluation = AiEvaluation::updateOrCreate(
+                [
+                    'video_submission_id' => $submission->id,
+                    'admin_id' => $judge->id
+                ],
+                [
+                    'processing_status' => AiEvaluation::STATUS_PROCESSING,
+                    'error_message' => null,
+                    'ai_feedback' => '대용량 파일 처리 중입니다. 영상 길이에 따라 5-15분 소요될 수 있습니다.'
+                ]
+            );
+
+            // OpenAI API를 사용한 실제 AI 평가 처리
+            try {
+                // API 키가 설정되어 있는지 확인
+                $apiKey = config('services.openai.api_key');
+                
+                if (empty($apiKey) || $apiKey === 'your-openai-api-key-here') {
+                    Log::warning('OpenAI API 키가 설정되지 않음. 더미 데이터 사용.');
+                    
+                    // API 키가 없으면 더미 데이터 사용
+                    $aiEvaluation->update([
+                        'pronunciation_score' => rand(7, 10),
+                        'vocabulary_score' => rand(7, 10),
+                        'fluency_score' => rand(7, 10),
+                        'transcription' => 'Hello, my name is John. I am a student presenting about my favorite hobby. I really enjoy reading books because they help me learn new things and improve my vocabulary. Thank you for listening to my presentation.',
+                        'ai_feedback' => '[Demo Mode] This is a simulated AI evaluation. The student demonstrates good basic English skills with clear pronunciation and appropriate vocabulary for their level. Areas for improvement include expanding sentence complexity and using more varied expressions.',
+                        'processing_status' => AiEvaluation::STATUS_COMPLETED,
+                        'processed_at' => now()
+                    ]);
+                } else {
+                    // 실제 OpenAI API 사용
+                    $openAiService = new OpenAiService();
+                    $result = $openAiService->evaluateVideo($submission->video_file_path);
+
+                    // 결과 저장
+                    $aiEvaluation->update([
+                        'pronunciation_score' => $result['pronunciation_score'],
+                        'vocabulary_score' => $result['vocabulary_score'],
+                        'fluency_score' => $result['fluency_score'],
+                        'transcription' => $result['transcription'],
+                        'ai_feedback' => $result['ai_feedback'],
+                        'processing_status' => AiEvaluation::STATUS_COMPLETED,
+                        'processed_at' => now()
+                    ]);
+                }
+
+                // 총점 계산
+                $aiEvaluation->calculateTotalScore();
+                $aiEvaluation->save();
+
+                Log::info('AI 평가 완료', [
+                    'assignment_id' => $id,
+                    'submission_id' => $submission->id,
+                    'judge_id' => $judge->id,
+                    'total_score' => $aiEvaluation->total_score
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'AI 평가가 성공적으로 완료되었습니다.',
+                    'ai_evaluation_id' => $aiEvaluation->id
+                ]);
+
+            } catch (\Exception $e) {
+                // 오류 발생 시 상태 업데이트
+                $aiEvaluation->update([
+                    'processing_status' => AiEvaluation::STATUS_FAILED,
+                    'error_message' => $e->getMessage()
+                ]);
+
+                Log::error('AI 평가 실패', [
+                    'assignment_id' => $id,
+                    'submission_id' => $submission->id,
+                    'judge_id' => $judge->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI 평가 중 오류가 발생했습니다: ' . $e->getMessage()
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 실행 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 평가를 실행할 수 없습니다.'
+            ]);
+        }
+    }
+
+    /**
+     * AI 평가 결과 보기
+     */
+    public function showAiEvaluation($id)
+    {
+        try {
+            $judge = Auth::guard('admin')->user();
+            $submission = VideoSubmission::findOrFail($id);
+            
+            $aiEvaluation = AiEvaluation::where('video_submission_id', $id)
+                ->where('admin_id', $judge->id)
+                ->first();
+
+            if (!$aiEvaluation) {
+                return back()->with('error', 'AI 평가 결과를 찾을 수 없습니다.');
+            }
+
+            return view('judge.ai-evaluation-result', compact('submission', 'aiEvaluation'));
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 결과 조회 오류: ' . $e->getMessage());
+            return back()->with('error', 'AI 평가 결과를 불러올 수 없습니다.');
+        }
+    }
+
+    /**
+     * AI 평가 결과 조회 (Ajax용)
+     */
+    public function showAiResult($aiEvaluationId)
+    {
+        try {
+            $judge = Auth::guard('admin')->user();
+            
+            $aiEvaluation = AiEvaluation::where('id', $aiEvaluationId)
+                ->where('admin_id', $judge->id)
+                ->first();
+
+            if (!$aiEvaluation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI 평가 결과를 찾을 수 없습니다.'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'aiEvaluation' => [
+                    'id' => $aiEvaluation->id,
+                    'pronunciation_score' => $aiEvaluation->pronunciation_score,
+                    'vocabulary_score' => $aiEvaluation->vocabulary_score,
+                    'fluency_score' => $aiEvaluation->fluency_score,
+                    'total_score' => $aiEvaluation->total_score,
+                    'ai_feedback' => $aiEvaluation->ai_feedback,
+                    'transcription' => $aiEvaluation->transcription,
+                    'processed_at' => $aiEvaluation->processed_at ? $aiEvaluation->processed_at->format('Y-m-d H:i:s') : null
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 결과 Ajax 조회 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 평가 결과를 불러올 수 없습니다.'
+            ], 500);
+        }
     }
 
     /**

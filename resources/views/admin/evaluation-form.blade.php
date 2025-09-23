@@ -187,11 +187,8 @@
                     <h4 class="mb-0">
                         총점: <span id="total-score" class="text-primary fw-bold">
                             {{ $submission->evaluation ? $submission->evaluation->total_score : 0 }}
-                        </span> / 40점
+                        </span> / 70점
                     </h4>
-                    <div class="mt-2">
-                        <span id="grade-badge" class="badge fs-6">등급 계산 중...</span>
-                    </div>
                 </div>
             </div>
             
@@ -205,9 +202,9 @@
                           name="comments" 
                           rows="4"
                           placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요...">{{ old('comments', $submission->evaluation->comments ?? '') }}</textarea>
-                <div class="form-text">
+              <!--   <div class="form-text">
                     학생과 학부모에게 도움이 될 수 있는 건설적인 피드백을 남겨주세요.
-                </div>
+                </div> -->
             </div>
             
             <!-- 제출 버튼 -->
@@ -235,7 +232,55 @@ document.addEventListener('DOMContentLoaded', function() {
     const scoreInputs = document.querySelectorAll('input[type="number"]');
     const ranges = document.querySelectorAll('input[type="range"]');
     const totalScoreElement = document.getElementById('total-score');
-    const gradeBadge = document.getElementById('grade-badge');
+    
+    // AI 평가 결과 자동 반영
+    @if($aiEvaluation && !$submission->evaluation)
+    const aiScores = {
+        pronunciation_score: {{ $aiEvaluation->pronunciation_score ?? 0 }},
+        vocabulary_score: {{ $aiEvaluation->vocabulary_score ?? 0 }},
+        fluency_score: {{ $aiEvaluation->fluency_score ?? 0 }}
+    };
+    
+    console.log('AI 평가 결과 자동 반영:', aiScores);
+    
+    // AI 점수를 해당 입력 필드에 자동 설정
+    Object.keys(aiScores).forEach(scoreType => {
+        const scoreInput = document.getElementById(scoreType);
+        const scoreRange = document.getElementById(scoreType + '_range');
+        
+        if (scoreInput && aiScores[scoreType] > 0) {
+            scoreInput.value = aiScores[scoreType];
+            if (scoreRange) {
+                scoreRange.value = aiScores[scoreType];
+            }
+            
+            // 입력 필드에 AI 점수임을 표시
+            scoreInput.style.backgroundColor = '#e3f2fd';
+            scoreInput.title = 'AI가 평가한 점수가 자동 반영되었습니다. 필요시 수정 가능합니다.';
+            
+            console.log(`${scoreType}: ${aiScores[scoreType]}점 자동 설정`);
+        }
+    });
+    
+    // AI 점수 자동 반영 알림 표시
+    const aiNotification = document.createElement('div');
+    aiNotification.className = 'alert alert-info alert-dismissible fade show mb-4';
+    aiNotification.innerHTML = `
+        <i class="bi bi-robot"></i> 
+        <strong>AI 평가 결과가 자동 반영되었습니다!</strong><br>
+        발음(${aiScores.pronunciation_score}점), 어휘(${aiScores.vocabulary_score}점), 유창성(${aiScores.fluency_score}점)이 설정되었습니다. 필요시 수정 가능합니다.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // 심사 폼 카드 위에 알림 추가
+    const evaluationCard = document.querySelector('.card.admin-card:last-of-type');
+    if (evaluationCard) {
+        evaluationCard.parentNode.insertBefore(aiNotification, evaluationCard);
+    }
+    
+    // AI 점수 반영 후 총점 재계산
+    setTimeout(() => calculateTotal(), 100);
+    @endif
     
     // 점수 입력과 슬라이더 동기화
     scoreInputs.forEach((input, index) => {
@@ -265,32 +310,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         totalScoreElement.textContent = total;
-        updateGrade(total);
-    }
-    
-    // 등급 업데이트
-    function updateGrade(total) {
-        let grade, className;
-        
-        if (total >= 36) {
-            grade = '우수 (A등급)';
-            className = 'bg-success';
-        } else if (total >= 31) {
-            grade = '양호 (B등급)';
-            className = 'bg-primary';
-        } else if (total >= 26) {
-            grade = '보통 (C등급)';
-            className = 'bg-info';
-        } else if (total >= 21) {
-            grade = '미흡 (D등급)';
-            className = 'bg-warning';
-        } else {
-            grade = '매우 미흡 (F등급)';
-            className = 'bg-danger';
-        }
-        
-        gradeBadge.textContent = grade;
-        gradeBadge.className = `badge fs-6 ${className}`;
     }
     
     // 폼 제출 시 확인
@@ -305,8 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const total = scores.reduce((sum, score) => sum + score, 0);
-        const confirmMessage = `심사 결과를 저장하시겠습니까?\n\n총점: ${total}/40점\n` + 
-                             `등급: ${gradeBadge.textContent}`;
+        const confirmMessage = `심사 결과를 저장하시겠습니까?\n\n총점: ${total}/70점`;
         
         if (!confirm(confirmMessage)) {
             e.preventDefault();

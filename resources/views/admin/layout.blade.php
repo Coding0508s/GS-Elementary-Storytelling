@@ -353,6 +353,16 @@
                             <i class="bi bi-clipboard-check"></i> 심사 관리
                         </a>
                         
+                        <a class="nav-link {{ request()->routeIs('admin.ai.evaluation.*') ? 'active' : '' }}" 
+                           href="{{ route('admin.ai.evaluation.list') }}">
+                            <i class="bi bi-robot"></i> AI 채점 결과
+                        </a>
+                        
+                        <a class="nav-link {{ request()->routeIs('admin.ai.settings*') ? 'active' : '' }}" 
+                           href="{{ route('admin.ai.settings') }}">
+                            <i class="bi bi-gear"></i> AI 설정
+                        </a>
+                        
                         <a class="nav-link {{ request()->routeIs('admin.assignment.*') ? 'active' : '' }}" 
                            href="{{ route('admin.assignment.list') }}">
                             <i class="bi bi-person-check"></i> 영상 배정 관리
