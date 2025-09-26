@@ -177,13 +177,12 @@ class VideoSubmissionController extends Controller
                 'status' => VideoSubmission::STATUS_UPLOADED
             ]);
 
-            // SMS 알림 발송 (성능을 위해 조건부 처리)
+            // SMS 알림은 응답 반환 후 비동기로 처리
             if (config('services.twilio.account_sid')) {
                 try {
-                    $this->sendSmsNotification($submission);
-                } catch (\Exception $e) {
-                    // SMS 실패가 업로드 성공을 방해하지 않도록 함
-                    Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
+                    \App\Jobs\SendSmsNotificationJob::dispatch($submission->id)->afterResponse();
+                } catch (\Throwable $e) {
+                    Log::warning('SMS Job 디스패치 실패', ['error' => $e->getMessage()]);
                 }
             }
 
