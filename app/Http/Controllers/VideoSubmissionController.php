@@ -146,15 +146,7 @@ class VideoSubmissionController extends Controller
         }
 
         try {
-            // S3 파일 존재 확인
-            if (!Storage::disk('s3')->exists($request->s3_key)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => '업로드된 파일을 찾을 수 없습니다.'
-                ], 404);
-            }
-
-            // S3 키에서 파일명 추출
+            // S3 키에서 파일명 추출 (파일 존재 확인 생략으로 성능 최적화)
             $s3Key = $request->s3_key;
             $fileName = basename($s3Key);
             

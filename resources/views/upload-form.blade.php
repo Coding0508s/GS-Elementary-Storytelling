@@ -560,39 +560,78 @@ document.addEventListener('DOMContentLoaded', function() {
                 grade: document.getElementById('grade').value
             };
 
-            // S3에 파일 업로드 (사용자 정보 포함)
+            // S3에 파일 업로드 (사용자 정보 포함) - 최적화된 방식
             console.log('S3 업로드 시작...');
-            const uploadResult = await s3Uploader.uploadFile(
-                file,
-                // 진행률 콜백
-                (progress) => {
-                    progressBar.style.width = progress.percent + '%';
-                    progressText.textContent = Math.round(progress.percent) + '%';
-                    console.log('업로드 진행률:', progress.percent + '%');
-                },
-                // 완료 콜백
-                (result) => {
-                    uploadedFileInfo = result;
-                    console.log('S3 업로드 완료 콜백:', result);
-                },
-                // 오류 콜백
-                (error) => {
-                    console.error('S3 업로드 오류 콜백:', error);
-                    throw error;
-                },
-                // 사용자 정보 전달
-                userInfo
-            );
             
+            // Presigned URL 요청
+            const presignedResponse = await fetch('/api/s3/presigned-url', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    filename: file.name,
+                    content_type: file.type,
+                    file_size: file.size,
+                    institution_name: userInfo.institution_name,
+                    student_name_korean: userInfo.student_name_korean,
+                    grade: userInfo.grade
+                })
+            });
+
+            if (!presignedResponse.ok) {
+                throw new Error('Presigned URL 생성에 실패했습니다.');
+            }
+
+            const presignedData = await presignedResponse.json();
+            console.log('Presigned URL 생성 완료:', presignedData);
+
+            // S3에 직접 업로드
+            const xhr = new XMLHttpRequest();
+            const uploadPromise = new Promise((resolve, reject) => {
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        progressBar.style.width = percent + '%';
+                        progressText.textContent = Math.round(percent) + '%';
+                        console.log('업로드 진행률:', percent + '%');
+                    }
+                });
+
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 204) {
+                        console.log('S3 업로드 완료!');
+                        resolve({
+                            s3_key: presignedData.s3_key,
+                            url: presignedData.s3_url
+                        });
+                    } else {
+                        reject(new Error('S3 업로드 실패'));
+                    }
+                });
+
+                xhr.addEventListener('error', () => {
+                    reject(new Error('S3 업로드 오류'));
+                });
+
+                xhr.open('PUT', presignedData.presigned_url);
+                xhr.setRequestHeader('Content-Type', file.type);
+                xhr.send(file);
+            });
+
+            const uploadResult = await uploadPromise;
             console.log('S3 업로드 완전 완료, 결과:', uploadResult);
 
-            // 업로드된 파일 정보를 폼에 추가
-            const s3Key = uploadResult.s3_key || uploadResult.file_info?.s3_key;
-            const s3Url = uploadResult.url || uploadResult.file_info?.url;
+            // 업로드된 파일 정보를 폼에 추가 (최적화: notifyUploadComplete 생략)
+            const s3Key = uploadResult.s3_key;
+            const s3Url = uploadResult.url;
             
             if (!s3Key || !s3Url) {
                 throw new Error('S3 업로드 정보가 불완전합니다.');
             }
+            
+            console.log('폼 데이터 준비:', { s3Key, s3Url, fileSize: file.size, contentType: file.type });
             
             formData.append('s3_key', s3Key);
             formData.append('s3_url', s3Url);
