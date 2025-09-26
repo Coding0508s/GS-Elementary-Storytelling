@@ -8,7 +8,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\VideoSubmission;
+use App\Services\TwilioSmsService;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ProcessVideoSubmission implements ShouldQueue
 {
@@ -39,12 +41,30 @@ class ProcessVideoSubmission implements ShouldQueue
 
             // SMS 알림 발송
             if (config('services.twilio.account_sid')) {
-                SendSmsNotificationJob::dispatch($submission->id);
+                $this->sendSms($submission);
             }
-        } catch (\Exception $e) {
+        } catch (Throwable $e) {
             Log::error('ProcessVideoSubmission Job 실패', [
                 'error' => $e->getMessage(),
                 'data' => $this->data,
+            ]);
+        }
+    }
+
+    /**
+     * Send SMS Notification.
+     *
+     * @param VideoSubmission $submission
+     */
+    private function sendSms(VideoSubmission $submission)
+    {
+        try {
+            $twilioService = new TwilioSmsService();
+            $twilioService->sendUploadCompletionNotification($submission);
+        } catch (Throwable $e) {
+            Log::warning('SMS 알림 발송 실패 (Job 내에서)', [
+                'submission_id' => $submission->id,
+                'error' => $e->getMessage()
             ]);
         }
     }
