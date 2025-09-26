@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use App\Jobs\ProcessVideoSubmission;
 
 class VideoSubmissionController extends Controller
 {
@@ -96,6 +97,12 @@ class VideoSubmissionController extends Controller
             'student_name_english', 'grade', 'age', 'parent_name', 'parent_phone', 
             'unit_topic', 's3_key', 's3_url', 'file_size', 'content_type'
         ]);
+
+        // 추가 데이터 준비
+        $validatedData['video_file_name'] = basename($request->s3_key);
+        $validatedData['privacy_consent'] = true;
+        $validatedData['privacy_consent_at'] = now();
+        $validatedData['status'] = VideoSubmission::STATUS_UPLOADED;
 
         // 백그라운드 처리를 위해 Job 디스패치
         ProcessVideoSubmission::dispatch($validatedData)->afterResponse();
