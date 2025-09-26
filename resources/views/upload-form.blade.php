@@ -659,23 +659,8 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file_size', file.size);
             formData.append('content_type', file.type);
             
-            // 서버 제출 전 FormData 내용 로깅
-            console.log('서버 제출할 FormData 내용:');
-            for (let [key, value] of formData.entries()) {
-                if (key !== 's3_key' && key !== 's3_url') { // 민감한 정보는 제외
-                    console.log(`${key}: ${value}`);
-                }
-            }
-            console.log('s3_key 길이:', s3Key.length);
-            console.log('s3_url 시작:', s3Url.substring(0, 50) + '...');
-            
-            // 서버에 폼 데이터 제출
-            console.log('서버에 폼 데이터 제출 시작:', {
-                has_s3_key: formData.has('s3_key'),
-                has_s3_url: formData.has('s3_url'),
-                file_size: formData.get('file_size'),
-                content_type: formData.get('content_type')
-            });
+            // 서버에 폼 데이터 제출 (로깅 최소화로 성능 향상)
+            console.log('서버 제출 시작...');
 
             const response = await fetch('{{ route("upload.process") }}', {
                 method: 'POST',
@@ -685,50 +670,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            console.log('서버 응답 상태:', response.status, response.statusText);
-
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('서버 응답 오류:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    responseText: errorText
-                });
-                
-                try {
-                    const errorData = JSON.parse(errorText);
-                    console.error('서버 오류 상세:', errorData);
-                    
-                    if (errorData.errors) {
-                        console.error('유효성 검사 오류:', errorData.errors);
-                        const errorMessages = Object.entries(errorData.errors)
-                            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-                            .join('\n');
-                        throw new Error(`입력 데이터 오류:\n${errorMessages}`);
-                    }
-                    
-                    throw new Error(errorData.message || '서버 오류가 발생했습니다.');
-                } catch (parseError) {
-                    console.error('JSON 파싱 오류:', parseError);
-                    throw new Error(`서버 오류 (${response.status}): ${errorText.substring(0, 200)}...`);
-                }
+                const errorData = await response.json().catch(() => ({ message: '서버 오류가 발생했습니다.' }));
+                throw new Error(errorData.message || `서버 오류 (${response.status})`);
             }
 
             const result = await response.json();
-            console.log('서버 응답 데이터:', result);
             
-            // 성공 시 리다이렉트
+            // 성공 시 즉시 리다이렉트 (UI 업데이트 생략으로 속도 향상)
             if (result.success) {
-                progressBar.style.width = '100%';
-                progressText.textContent = '완료!';
-                submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> 업로드 완료!';
-                
-                console.log('성공! 리다이렉트 URL:', result.redirect_url);
-                
-                // 즉시 리다이렉트 (더 빠른 사용자 경험)
                 window.location.href = result.redirect_url || '{{ route("upload.success") }}';
             } else {
-                console.error('업로드 실패:', result);
                 throw new Error(result.message || '업로드에 실패했습니다.');
             }
 

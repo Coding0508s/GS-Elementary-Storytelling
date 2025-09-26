@@ -138,11 +138,6 @@ class VideoSubmissionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            Log::error('S3 직접 업로드 유효성 검사 실패', [
-                'errors' => $validator->errors(),
-                'request_data' => $request->except(['s3_key', 's3_url'])
-            ]);
-            
             return response()->json([
                 'success' => false,
                 'message' => '입력 데이터가 유효하지 않습니다.',
@@ -182,23 +177,24 @@ class VideoSubmissionController extends Controller
                 'status' => VideoSubmission::STATUS_UPLOADED
             ]);
 
-            // SMS 알림 발송
-            $this->sendSmsNotification($submission);
+            // SMS 알림 발송 (성능을 위해 조건부 처리)
+            if (config('services.twilio.account_sid')) {
+                try {
+                    $this->sendSmsNotification($submission);
+                } catch (\Exception $e) {
+                    // SMS 실패가 업로드 성공을 방해하지 않도록 함
+                    Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
+                }
+            }
 
             // 세션에 submission_id 저장 (성공 페이지에서 사용)
             session(['submission_id' => $submission->id]);
 
-            Log::info('S3 직접 업로드 완료', [
-                'submission_id' => $submission->id,
-                's3_key' => $request->s3_key,
-                'student_name' => $request->student_name_korean
-            ]);
+            // 성공 로깅 간소화
 
             return response()->json([
                 'success' => true,
-                'message' => '업로드가 성공적으로 완료되었습니다.',
-                'redirect_url' => route('upload.success'),
-                'submission_id' => $submission->id
+                'redirect_url' => route('upload.success')
             ]);
 
         } catch (\Exception $e) {
