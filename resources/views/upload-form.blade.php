@@ -561,30 +561,41 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             // S3에 파일 업로드 (사용자 정보 포함)
+            console.log('S3 업로드 시작...');
             const uploadResult = await s3Uploader.uploadFile(
                 file,
                 // 진행률 콜백
                 (progress) => {
                     progressBar.style.width = progress.percent + '%';
                     progressText.textContent = Math.round(progress.percent) + '%';
+                    console.log('업로드 진행률:', progress.percent + '%');
                 },
                 // 완료 콜백
                 (result) => {
                     uploadedFileInfo = result;
-                    console.log('S3 업로드 완료:', result);
+                    console.log('S3 업로드 완료 콜백:', result);
                 },
                 // 오류 콜백
                 (error) => {
-                    console.error('S3 업로드 오류:', error);
+                    console.error('S3 업로드 오류 콜백:', error);
                     throw error;
                 },
                 // 사용자 정보 전달
                 userInfo
             );
+            
+            console.log('S3 업로드 완전 완료, 결과:', uploadResult);
 
             // 업로드된 파일 정보를 폼에 추가
-            formData.append('s3_key', uploadResult.s3_key);
-            formData.append('s3_url', uploadResult.url);
+            const s3Key = uploadResult.s3_key || uploadResult.file_info?.s3_key;
+            const s3Url = uploadResult.url || uploadResult.file_info?.url;
+            
+            if (!s3Key || !s3Url) {
+                throw new Error('S3 업로드 정보가 불완전합니다.');
+            }
+            
+            formData.append('s3_key', s3Key);
+            formData.append('s3_url', s3Url);
             formData.append('file_size', file.size);
             formData.append('content_type', file.type);
             

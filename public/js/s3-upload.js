@@ -47,8 +47,9 @@ class S3DirectUpload {
             return {
                 success: true,
                 s3_key: presignedData.s3_key,
-                url: completeResult.file_info.url,
-                ...completeResult
+                url: completeResult.file_info?.url || uploadResult.url,
+                ...completeResult,
+                file_info: completeResult.file_info
             };
 
         } catch (error) {
