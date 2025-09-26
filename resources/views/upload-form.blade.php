@@ -634,9 +634,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 console.log('성공! 리다이렉트 URL:', result.redirect_url);
                 
-                setTimeout(() => {
-                    window.location.href = result.redirect_url || '{{ route("upload.success") }}';
-                }, 1500);
+                // 즉시 리다이렉트 (더 빠른 사용자 경험)
+                window.location.href = result.redirect_url || '{{ route("upload.success") }}';
             } else {
                 console.error('업로드 실패:', result);
                 throw new Error(result.message || '업로드에 실패했습니다.');
