@@ -600,23 +600,44 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 xhr.addEventListener('load', () => {
-                    if (xhr.status === 204) {
+                    console.log('S3 업로드 응답:', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseHeaders: xhr.getAllResponseHeaders()
+                    });
+                    
+                    if (xhr.status === 204 || xhr.status === 200) {
                         console.log('S3 업로드 완료!');
                         resolve({
                             s3_key: presignedData.s3_key,
                             url: presignedData.s3_url
                         });
                     } else {
-                        reject(new Error('S3 업로드 실패'));
+                        console.error('S3 업로드 실패 - 상태 코드:', xhr.status, xhr.statusText);
+                        reject(new Error(`S3 업로드 실패: ${xhr.status} ${xhr.statusText}`));
                     }
                 });
 
-                xhr.addEventListener('error', () => {
-                    reject(new Error('S3 업로드 오류'));
+                xhr.addEventListener('error', (event) => {
+                    console.error('S3 업로드 네트워크 오류:', event);
+                    reject(new Error('S3 업로드 네트워크 오류'));
+                });
+
+                xhr.addEventListener('timeout', () => {
+                    console.error('S3 업로드 타임아웃');
+                    reject(new Error('S3 업로드 타임아웃'));
                 });
 
                 xhr.open('PUT', presignedData.presigned_url);
+                xhr.timeout = 300000; // 5분 타임아웃
                 xhr.setRequestHeader('Content-Type', file.type);
+                
+                console.log('S3 PUT 요청 시작:', {
+                    url: presignedData.presigned_url,
+                    contentType: file.type,
+                    fileSize: file.size
+                });
+                
                 xhr.send(file);
             });
 
@@ -681,8 +702,42 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
         } catch (error) {
-            console.error('업로드 실패:', error);
-            alert('업로드 중 오류가 발생했습니다: ' + error.message);
+            console.error('S3 업로드 실패:', error);
+            
+            // S3 업로드 실패 시 기존 서버 업로드로 fallback
+            console.log('기존 서버 업로드 방식으로 fallback 시도...');
+            
+            try {
+                // 서버 업로드 방식으로 전환
+                progressText.textContent = '서버 업로드 방식으로 재시도 중...';
+                
+                const serverFormData = new FormData(form);
+                serverFormData.append('video_file', file);
+                
+                const response = await fetch('{{ route("upload.process") }}', {
+                    method: 'POST',
+                    body: serverFormData,
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        progressBar.style.width = '100%';
+                        progressText.textContent = '완료!';
+                        submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> 업로드 완료!';
+                        
+                        window.location.href = result.redirect_url || '{{ route("upload.success") }}';
+                        return;
+                    }
+                }
+                throw new Error('서버 업로드도 실패했습니다.');
+            } catch (fallbackError) {
+                console.error('Fallback 업로드도 실패:', fallbackError);
+                alert('업로드 중 오류가 발생했습니다: ' + error.message + '\n서버 업로드로 재시도했지만 실패했습니다.');
+            }
             
             // UI 복원
             submitBtn.disabled = false;

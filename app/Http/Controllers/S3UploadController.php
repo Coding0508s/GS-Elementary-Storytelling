@@ -111,6 +111,7 @@ class S3UploadController extends Controller
                 'Key' => $uniqueFilename,
                 'ContentType' => $contentType,
                 'ContentLength' => $fileSize,
+                'ACL' => 'private', // 명시적 ACL 설정
             ]);
 
             $presignedUrl = $s3Client->createPresignedRequest($command, '+15 minutes')->getUri();
@@ -125,7 +126,10 @@ class S3UploadController extends Controller
             return response()->json([
                 'presigned_url' => (string) $presignedUrl,
                 's3_key' => $uniqueFilename,
+                's3_url' => 'https://' . config('filesystems.disks.s3.bucket') . '.s3.' . config('filesystems.disks.s3.region') . '.amazonaws.com/' . $uniqueFilename,
                 'expires_in' => 900, // 15분
+                'bucket' => config('filesystems.disks.s3.bucket'),
+                'region' => config('filesystems.disks.s3.region'),
             ]);
 
         } catch (\Exception $e) {
