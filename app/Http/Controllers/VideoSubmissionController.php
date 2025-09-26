@@ -90,82 +90,22 @@ class VideoSubmissionController extends Controller
      */
     private function handleS3DirectUpload(Request $request)
     {
-        // 최소한의 필수 검증만 수행 (성능 최적화)
-        $validator = Validator::make($request->all(), [
-            'region' => 'required|string|max:100',
-            'institution_name' => 'required|string|max:255',
-            'student_name_korean' => 'required|string|max:255',
-            'grade' => 'required|string|max:50',
-            'parent_phone' => 'required|string|max:20',
-            's3_key' => 'required|string',
-            's3_url' => 'required|string'
+        // 필수 데이터만 추출
+        $validatedData = $request->only([
+            'region', 'institution_name', 'class_name', 'student_name_korean', 
+            'student_name_english', 'grade', 'age', 'parent_name', 'parent_phone', 
+            'unit_topic', 's3_key', 's3_url', 'file_size', 'content_type'
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => '입력 데이터가 유효하지 않습니다.',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        // 백그라운드 처리를 위해 Job 디스패치
+        ProcessVideoSubmission::dispatch($validatedData)->afterResponse();
 
-        try {
-            // S3 키에서 파일명 추출 (파일 존재 확인 생략으로 성능 최적화)
-            $s3Key = $request->s3_key;
-            $fileName = basename($s3Key);
-            
-            // 파일 크기 정보 추출 (업로드 완료 콜백에서 전달받은 정보 사용)
-            $fileSize = $request->input('file_size', 0);
-            $contentType = $request->input('content_type', 'video/quicktime');
-            
-            // 데이터베이스에 핵심 정보만 저장 (성능 최적화)
-            $submission = VideoSubmission::create([
-                'region' => $request->region,
-                'institution_name' => $request->institution_name,
-                'class_name' => $request->input('class_name', ''),
-                'student_name_korean' => $request->student_name_korean,
-                'student_name_english' => $request->input('student_name_english', ''),
-                'grade' => $request->grade,
-                'age' => $request->input('age', 0),
-                'parent_name' => $request->input('parent_name', ''),
-                'parent_phone' => $request->parent_phone,
-                'unit_topic' => $request->input('unit_topic'),
-                'video_file_path' => $s3Key,
-                'video_file_name' => $fileName,
-                'video_file_type' => $contentType,
-                'video_file_size' => $fileSize,
-                'video_url' => $request->s3_url,
-                'upload_method' => 's3_direct',
-                'privacy_consent' => true,
-                'privacy_consent_at' => now(),
-                'status' => VideoSubmission::STATUS_UPLOADED
-            ]);
-
-            // SMS 알림은 응답 반환 후 비동기로 처리
-            if (config('services.twilio.account_sid')) {
-                try {
-                    \App\Jobs\SendSmsNotificationJob::dispatch($submission->id)->afterResponse();
-                } catch (\Throwable $e) {
-                    Log::warning('SMS Job 디스패치 실패', ['error' => $e->getMessage()]);
-                }
-            }
-
-            // 즉시 응답 반환 (세션 저장 생략으로 성능 향상)
-            return response()->json([
-                'success' => true,
-                'redirect_url' => route('upload.success'),
-                'submission_id' => $submission->id
-            ]);
-
-        } catch (\Exception $e) {
-            // 간소화된 에러 로깅
-            Log::error('업로드 처리 실패: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => '업로드 처리 중 오류가 발생했습니다.'
-            ], 500);
-        }
+        // 즉시 응답 반환
+        return response()->json([
+            'success' => true,
+            'message' => '업로드 데이터가 성공적으로 접수되었습니다. 처리 완료 후 알림이 발송됩니다.',
+            'redirect_url' => route('upload.success')
+        ]);
     }
 
     /**
