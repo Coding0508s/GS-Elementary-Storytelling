@@ -8,8 +8,8 @@ use App\Services\NotificationService;
 use App\Services\TwilioSmsService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class VideoSubmissionController extends Controller
@@ -121,7 +121,7 @@ class VideoSubmissionController extends Controller
             'parent_phone' => 'required|string|max:20',
             'unit_topic' => 'nullable|string|max:255',
             's3_key' => 'required|string',
-            's3_url' => 'required|url'
+            's3_url' => 'required|string' // URL 검증을 완화
         ], [
             'region.required' => '거주 지역을 선택해주세요.',
             'institution_name.required' => '기관명을 입력해주세요.',
@@ -138,6 +138,11 @@ class VideoSubmissionController extends Controller
         ]);
 
         if ($validator->fails()) {
+            Log::error('S3 직접 업로드 유효성 검사 실패', [
+                'errors' => $validator->errors(),
+                'request_data' => $request->except(['s3_key', 's3_url'])
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => '입력 데이터가 유효하지 않습니다.',

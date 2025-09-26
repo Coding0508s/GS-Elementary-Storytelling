@@ -659,6 +659,16 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file_size', file.size);
             formData.append('content_type', file.type);
             
+            // 서버 제출 전 FormData 내용 로깅
+            console.log('서버 제출할 FormData 내용:');
+            for (let [key, value] of formData.entries()) {
+                if (key !== 's3_key' && key !== 's3_url') { // 민감한 정보는 제외
+                    console.log(`${key}: ${value}`);
+                }
+            }
+            console.log('s3_key 길이:', s3Key.length);
+            console.log('s3_url 시작:', s3Url.substring(0, 50) + '...');
+            
             // 서버에 폼 데이터 제출
             console.log('서버에 폼 데이터 제출 시작:', {
                 has_s3_key: formData.has('s3_key'),
@@ -678,9 +688,30 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('서버 응답 상태:', response.status, response.statusText);
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: '서버 응답을 읽을 수 없습니다.' }));
-                console.error('서버 오류 응답:', errorData);
-                throw new Error(errorData.message || '서버 오류가 발생했습니다.');
+                const errorText = await response.text();
+                console.error('서버 응답 오류:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    responseText: errorText
+                });
+                
+                try {
+                    const errorData = JSON.parse(errorText);
+                    console.error('서버 오류 상세:', errorData);
+                    
+                    if (errorData.errors) {
+                        console.error('유효성 검사 오류:', errorData.errors);
+                        const errorMessages = Object.entries(errorData.errors)
+                            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+                            .join('\n');
+                        throw new Error(`입력 데이터 오류:\n${errorMessages}`);
+                    }
+                    
+                    throw new Error(errorData.message || '서버 오류가 발생했습니다.');
+                } catch (parseError) {
+                    console.error('JSON 파싱 오류:', parseError);
+                    throw new Error(`서버 오류 (${response.status}): ${errorText.substring(0, 200)}...`);
+                }
             }
 
             const result = await response.json();
@@ -702,42 +733,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
         } catch (error) {
-            console.error('S3 업로드 실패:', error);
-            
-            // S3 업로드 실패 시 기존 서버 업로드로 fallback
-            console.log('기존 서버 업로드 방식으로 fallback 시도...');
-            
-            try {
-                // 서버 업로드 방식으로 전환
-                progressText.textContent = '서버 업로드 방식으로 재시도 중...';
-                
-                const serverFormData = new FormData(form);
-                serverFormData.append('video_file', file);
-                
-                const response = await fetch('{{ route("upload.process") }}', {
-                    method: 'POST',
-                    body: serverFormData,
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    }
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.success) {
-                        progressBar.style.width = '100%';
-                        progressText.textContent = '완료!';
-                        submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> 업로드 완료!';
-                        
-                        window.location.href = result.redirect_url || '{{ route("upload.success") }}';
-                        return;
-                    }
-                }
-                throw new Error('서버 업로드도 실패했습니다.');
-            } catch (fallbackError) {
-                console.error('Fallback 업로드도 실패:', fallbackError);
-                alert('업로드 중 오류가 발생했습니다: ' + error.message + '\n서버 업로드로 재시도했지만 실패했습니다.');
-            }
+            console.error('업로드 실패:', error);
+            alert('업로드 중 오류가 발생했습니다: ' + error.message);
             
             // UI 복원
             submitBtn.disabled = false;
