@@ -677,7 +677,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const result = await response.json();
             
-            // 성공 시 즉시 리다이렉트 (submission_id 포함)
+            // 성공 시 즉시 리다이렉트 (UI 업데이트 생략으로 속도 향상)
             if (result.success) {
                 window.location.href = result.redirect_url || '{{ route("upload.success") }}';
             } else {
