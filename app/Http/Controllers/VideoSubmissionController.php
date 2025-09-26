@@ -90,51 +90,15 @@ class VideoSubmissionController extends Controller
      */
     private function handleS3DirectUpload(Request $request)
     {
+        // 최소한의 필수 검증만 수행 (성능 최적화)
         $validator = Validator::make($request->all(), [
-            'region' => ['required', 'string', function ($attribute, $value, $fail) {
-                $parts = explode(' ', $value, 2);
-                if (count($parts) < 2) {
-                    $fail('올바른 지역 형식을 선택해주세요.');
-                    return;
-                }
-                
-                $province = $parts[0];
-                $city = $parts[1];
-                
-                if (!array_key_exists($province, VideoSubmission::REGIONS)) {
-                    $fail('올바른 시/도를 선택해주세요.');
-                    return;
-                }
-                
-                if (!in_array($city, VideoSubmission::REGIONS[$province])) {
-                    $fail('올바른 시/군/구를 선택해주세요.');
-                    return;
-                }
-            }],
+            'region' => 'required|string|max:100',
             'institution_name' => 'required|string|max:255',
-            'class_name' => 'required|string|max:255',
             'student_name_korean' => 'required|string|max:255',
-            'student_name_english' => 'required|string|max:255',
             'grade' => 'required|string|max:50',
-            'age' => 'required|integer|min:1|max:100',
-            'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
-            'unit_topic' => 'nullable|string|max:255',
             's3_key' => 'required|string',
-            's3_url' => 'required|string' // URL 검증을 완화
-        ], [
-            'region.required' => '거주 지역을 선택해주세요.',
-            'institution_name.required' => '기관명을 입력해주세요.',
-            'class_name.required' => '반 이름을 입력해주세요.',
-            'student_name_korean.required' => '학생 한글 이름을 입력해주세요.',
-            'student_name_english.required' => '학생 영어 이름을 입력해주세요.',
-            'grade.required' => '학년을 입력해주세요.',
-            'age.required' => '나이를 입력해주세요.',
-            'age.integer' => '나이는 숫자로 입력해주세요.',
-            'parent_name.required' => '학부모 성함을 입력해주세요.',
-            'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
-            's3_key.required' => 'S3 파일 키가 필요합니다.',
-            's3_url.required' => 'S3 파일 URL이 필요합니다.'
+            's3_url' => 'required|string'
         ]);
 
         if ($validator->fails()) {
@@ -154,24 +118,24 @@ class VideoSubmissionController extends Controller
             $fileSize = $request->input('file_size', 0);
             $contentType = $request->input('content_type', 'video/quicktime');
             
-            // 데이터베이스에 정보 저장
+            // 데이터베이스에 핵심 정보만 저장 (성능 최적화)
             $submission = VideoSubmission::create([
                 'region' => $request->region,
                 'institution_name' => $request->institution_name,
-                'class_name' => $request->class_name,
+                'class_name' => $request->input('class_name', ''),
                 'student_name_korean' => $request->student_name_korean,
-                'student_name_english' => $request->student_name_english,
+                'student_name_english' => $request->input('student_name_english', ''),
                 'grade' => $request->grade,
-                'age' => $request->age,
-                'parent_name' => $request->parent_name,
+                'age' => $request->input('age', 0),
+                'parent_name' => $request->input('parent_name', ''),
                 'parent_phone' => $request->parent_phone,
-                'unit_topic' => $request->unit_topic,
-                'video_file_path' => $s3Key, // S3 키 저장
-                'video_file_name' => $fileName, // 파일명 저장
-                'video_file_type' => $contentType, // 실제 Content-Type 사용
-                'video_file_size' => $fileSize, // 실제 파일 크기 저장
-                'video_url' => $request->s3_url, // S3 URL 저장
-                'upload_method' => 's3_direct', // 업로드 방법 기록
+                'unit_topic' => $request->input('unit_topic'),
+                'video_file_path' => $s3Key,
+                'video_file_name' => $fileName,
+                'video_file_type' => $contentType,
+                'video_file_size' => $fileSize,
+                'video_url' => $request->s3_url,
+                'upload_method' => 's3_direct',
                 'privacy_consent' => true,
                 'privacy_consent_at' => now(),
                 'status' => VideoSubmission::STATUS_UPLOADED
@@ -186,21 +150,16 @@ class VideoSubmissionController extends Controller
                 }
             }
 
-            // 세션에 submission_id 저장 (성공 페이지에서 사용)
-            session(['submission_id' => $submission->id]);
-
-            // 성공 로깅 간소화
-
+            // 즉시 응답 반환 (세션 저장 생략으로 성능 향상)
             return response()->json([
                 'success' => true,
-                'redirect_url' => route('upload.success')
+                'redirect_url' => route('upload.success'),
+                'submission_id' => $submission->id
             ]);
 
         } catch (\Exception $e) {
-            Log::error('S3 직접 업로드 처리 실패', [
-                'error' => $e->getMessage(),
-                'request_data' => $request->except(['s3_key', 's3_url'])
-            ]);
+            // 간소화된 에러 로깅
+            Log::error('업로드 처리 실패: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
@@ -366,13 +325,10 @@ class VideoSubmissionController extends Controller
     {
         $submission = null;
         
-        // 세션에서 submission_id 가져오기
-        if ($request->session()->has('submission_id')) {
-            $submissionId = $request->session()->get('submission_id');
+        // URL 파라미터에서 submission_id 가져오기 (성능 최적화)
+        if ($request->has('id')) {
+            $submissionId = $request->input('id');
             $submission = VideoSubmission::find($submissionId);
-            
-            // 보안을 위해 세션에서 ID 제거
-            $request->session()->forget('submission_id');
         }
         
         return view('upload-success', compact('submission'));

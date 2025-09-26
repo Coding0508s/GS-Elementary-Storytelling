@@ -677,9 +677,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const result = await response.json();
             
-            // 성공 시 즉시 리다이렉트 (UI 업데이트 생략으로 속도 향상)
+            // 성공 시 즉시 리다이렉트 (submission_id 포함)
             if (result.success) {
-                window.location.href = result.redirect_url || '{{ route("upload.success") }}';
+                const redirectUrl = result.redirect_url || '{{ route("upload.success") }}';
+                const finalUrl = result.submission_id ? 
+                    `${redirectUrl}?id=${result.submission_id}` : 
+                    redirectUrl;
+                window.location.href = finalUrl;
             } else {
                 throw new Error(result.message || '업로드에 실패했습니다.');
             }
