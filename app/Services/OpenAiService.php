@@ -441,7 +441,7 @@ Important notes:
             ]);
 
         } catch (\Exception $e) {
-            Log::error('AI 비디오 평가 오류: ' . $e->getMessage());
+            Log::error('AI  영상 평가 오류: ' . $e->getMessage());
             throw $e;
         }
     }

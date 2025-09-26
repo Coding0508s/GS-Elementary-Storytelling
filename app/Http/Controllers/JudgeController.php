@@ -99,7 +99,7 @@ class JudgeController extends Controller
                 'grade' => $submission->grade,
                 'total_score' => $videoData->total_score, // 두 심사위원 총합 점수
                 'my_score' => $myEvaluation ? $myEvaluation->total_score : 0, // 내 평가 점수
-                'evaluation_grade' => $this->calculateGrade($videoData->total_score),
+                'evaluation_grade' => null, // 등급 시스템 제거됨
                 'submission_id' => $submission->id,
                 'assignment_id' => $myAssignment ? $myAssignment->id : null,
                 'upload_time' => $submission->created_at->format('m/d H:i')
@@ -118,23 +118,6 @@ class JudgeController extends Controller
         ));
     }
 
-    /**
-     * 점수에 따른 등급 계산
-     */
-    private function calculateGrade($totalScore)
-    {
-        if ($totalScore >= 36) {
-            return '우수';
-        } elseif ($totalScore >= 31) {
-            return '양호';
-        } elseif ($totalScore >= 26) {
-            return '보통';
-        } elseif ($totalScore >= 21) {
-            return '미흡';
-        } else {
-            return '매우 미흡';
-        }
-    }
 
     /**
      * 심사할 영상 목록
@@ -197,7 +180,12 @@ class JudgeController extends Controller
                                   ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
                                   ->first();
 
-        return view('judge.evaluation-form', compact('assignment', 'submission', 'judge', 'nextAssignment', 'aiEvaluation'));
+        // 다른 심사위원이 이미 채점했는지 확인
+        $otherEvaluation = Evaluation::where('video_submission_id', $submission->id)
+                                   ->where('admin_id', '!=', $judge->id)
+                                   ->first();
+
+        return view('judge.evaluation-form', compact('assignment', 'submission', 'judge', 'nextAssignment', 'aiEvaluation', 'otherEvaluation'));
     }
 
     /**
@@ -213,6 +201,15 @@ class JudgeController extends Controller
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+
+        // 해당 영상이 이미 다른 심사위원에 의해 채점되었는지 확인
+        $existingOtherEvaluation = Evaluation::where('video_submission_id', $submission->id)
+                                           ->where('admin_id', '!=', $judge->id)
+                                           ->first();
+
+        if ($existingOtherEvaluation) {
+            return back()->with('error', '이 영상은 이미 다른 심사위원에 의해 채점되었습니다.');
+        }
 
         // 검증 규칙
         $validator = Validator::make($request->all(), [
@@ -323,8 +320,7 @@ class JudgeController extends Controller
         // 배정 상태를 심사 중으로 변경
         $assignment->startEvaluation();
 
-        return redirect()->route('judge.evaluation.show', $assignmentId)
-                        ->with('success', '심사를 시작합니다.');
+        return redirect()->route('judge.evaluation.show', $assignmentId);
     }
 
     /**
@@ -364,6 +360,15 @@ class JudgeController extends Controller
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+
+        // 해당 영상이 이미 다른 심사위원에 의해 채점되었는지 확인 (수정 시에도 체크)
+        $existingOtherEvaluation = Evaluation::where('video_submission_id', $submission->id)
+                                           ->where('admin_id', '!=', $judge->id)
+                                           ->first();
+
+        if ($existingOtherEvaluation) {
+            return back()->with('error', '이 영상은 이미 다른 심사위원에 의해 채점되었기 때문에 수정할 수 없습니다.');
+        }
 
         // 검증 규칙
         $validator = Validator::make($request->all(), [

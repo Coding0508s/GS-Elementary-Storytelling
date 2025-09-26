@@ -29,7 +29,9 @@ class VideoSubmission extends Model
         'privacy_consent_at',
         'notification_sent',
         'notification_sent_at',
-        'status'
+        'status',
+        'video_url',
+        'upload_method'
     ];
 
     protected $casts = [

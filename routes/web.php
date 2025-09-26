@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\VideoSubmissionController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\JudgeController;
+use App\Http\Controllers\S3UploadController;
 
 // 메인 페이지 - 바로 개인정보 동의 페이지로 이동
 Route::get('/', [VideoSubmissionController::class, 'showPrivacyConsent'])
@@ -34,6 +35,19 @@ Route::get('/upload-success', [VideoSubmissionController::class, 'showUploadSucc
 // 기관명 자동완성 API
 Route::get('/api/institutions', [VideoSubmissionController::class, 'getInstitutions'])
     ->name('api.institutions');
+
+// S3 직접 업로드 관련 API
+Route::post('/api/s3/presigned-url', [S3UploadController::class, 'generatePresignedUrl'])
+    ->name('api.s3.presigned-url');
+
+Route::post('/api/s3/upload-complete', [S3UploadController::class, 'uploadComplete'])
+    ->name('api.s3.upload-complete');
+
+Route::delete('/api/s3/delete-file', [S3UploadController::class, 'deleteFile'])
+    ->name('api.s3.delete-file');
+
+Route::get('/api/s3/file-url', [S3UploadController::class, 'getFileUrl'])
+    ->name('api.s3.file-url');
 
 // ============================================
 // 관리자 페이지 라우트

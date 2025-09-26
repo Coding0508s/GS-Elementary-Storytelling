@@ -15,7 +15,7 @@
     <div class="col-md-10">
         <div class="text-center mb-4">
             <h2><i class="bi bi-shield-check"></i> 개인정보 수집 및 이용 동의</h2>
-            <p class="text-muted">비디오 업로드를 시작하기 전에 개인정보 처리 방침에 동의해주세요.</p>
+            <p class="text-muted">영상 업로드를 시작하기 전에 개인정보 처리 방침에 동의해주세요.</p>
         </div>
 
         <div class="card mb-4">
@@ -82,7 +82,7 @@
 
                     <p class="text-muted mt-3 small">
                         <i class="bi bi-info-circle"></i> 
-                        개인정보 수집 및 이용에 동의해야 비디오 업로드가 가능합니다.
+                        개인정보 수집 및 이용에 동의해야 영상 업로드가 가능합니다.
                     </p>
                 </div>
             </div>

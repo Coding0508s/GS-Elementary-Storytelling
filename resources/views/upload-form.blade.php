@@ -14,11 +14,11 @@
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-10">
         <div class="text-center mb-2">
-            <h2><i class="bi bi-cloud-upload"></i> 비디오 업로드</h2>
-            <p class="text-muted">학생 정보와 Unit 비디오를 업로드해주세요.</p>
+            <h2><i class="bi bi-cloud-upload"></i> 영상 업로드</h2>
+            <p class="text-muted">학생 정보와 Unit 영상을 업로드해주세요.</p>
         </div>
 
-        <form action="{{ route('upload.process') }}" method="POST" enctype="multipart/form-data" id="upload-form">
+        <form id="upload-form">
             @csrf
             
             <!-- 학생 기본 정보 -->
@@ -185,13 +185,13 @@
                         <h6>여기를 클릭하여 비디오 파일을 선택하거나 여기에 드래그하세요</h6>
                         <p class="text-muted">
                             지원 형식: MP4, MOV<br>
-                            최대 크기: 2GB
+                            최대 크기: 1GB
                         </p>
                         <input type="file" 
                                class="d-none" 
                                id="video_file" 
                                name="video_file" 
-                               accept=".mp4,.mov,video/mp4,video/quicktime"
+                               accept=".mp4,.mov,.avi,.wmv,.flv,.webm,.mkv,video/mp4,video/quicktime,video/avi,video/x-msvideo,video/x-ms-wmv,video/x-flv,video/webm,video/x-matroska"
                                required>
                         <div id="file-info" class="mt-3 d-none">
                             <div class="alert alert-info">
@@ -228,6 +228,9 @@
                     
                     <p class="text-muted mt-2 small">
                         <i class="bi bi-info-circle"></i> 
+                        <b>영상 제출시 업로드에는 시간이 다소 소요될 수 있으니,</b><br>
+                        <b>충분한 여유 시간을 두고 진행해주시기 바랍니다. </b>
+                        <br>
                         업로드가 완료되면 입력하신 전화번호로 알림을 보내드립니다.
                     </p>
                     
@@ -245,6 +248,9 @@
 @endsection
 
 @section('scripts')
+<!-- S3 직접 업로드 라이브러리 -->
+<script src="{{ asset('js/s3-upload.js') }}"></script>
+
 <!-- 지역 데이터를 JavaScript로 전달하기 위한 숨겨진 요소 -->
 <script type="application/json" id="regions-data">@json(\App\Models\VideoSubmission::REGIONS)</script>
 
@@ -463,16 +469,16 @@ document.addEventListener('DOMContentLoaded', function() {
             // 파일 크기 체크 (2GB)
             const maxSize = 2 * 1024 * 1024 * 1024; // 2GB
             if (file.size > maxSize) {
-                alert('파일 크기가 2GB를 초과합니다. 더 작은 파일을 선택해주세요.');
+                alert('파일 크기가 1GB를 초과합니다. 더 작은 파일을 선택해주세요.');
                 fileInput.value = '';
                 fileInfo.classList.add('d-none');
                 return;
             }
             
             // 파일 형식 체크
-            const allowedTypes = ['video/mp4', 'video/quicktime'];
+            const allowedTypes = ['video/mp4', 'video/quicktime', 'video/avi', 'video/x-msvideo', 'video/x-ms-wmv', 'video/x-flv', 'video/webm', 'video/x-matroska'];
             if (!allowedTypes.includes(file.type)) {
-                alert('MP4 또는 MOV 형식의 파일만 업로드 가능합니다.');
+                alert('지원하지 않는 파일 형식입니다. (MP4, AVI, MOV, WMV, FLV, WEBM, MKV만 허용)');
                 fileInput.value = '';
                 fileInfo.classList.add('d-none');
                 return;
@@ -524,23 +530,104 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 폼 제출 시 진행률 표시
-    document.getElementById('upload-form').addEventListener('submit', function(e) {
+    // S3 직접 업로드 인스턴스 생성
+    const s3Uploader = new S3DirectUpload();
+    let uploadedFileInfo = null;
+
+    // 폼 제출 시 S3 직접 업로드 처리
+    document.getElementById('upload-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('영상 파일을 선택해주세요.');
+            return;
+        }
+
+        // 폼 데이터 수집
+        const formData = new FormData(this);
+        
+        // 버튼 비활성화 및 UI 업데이트
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 업로드 중...';
         uploadProgress.classList.remove('d-none');
         
-        // 가상의 진행률 표시 (실제로는 서버에서 처리)
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress > 90) {
-                progress = 90;
-                clearInterval(interval);
+        try {
+            // 사용자 정보 수집
+            const userInfo = {
+                institution_name: document.getElementById('institution_name').value,
+                student_name_korean: document.getElementById('student_name_korean').value,
+                grade: document.getElementById('grade').value
+            };
+
+            // S3에 파일 업로드 (사용자 정보 포함)
+            const uploadResult = await s3Uploader.uploadFile(
+                file,
+                // 진행률 콜백
+                (progress) => {
+                    progressBar.style.width = progress.percent + '%';
+                    progressText.textContent = Math.round(progress.percent) + '%';
+                },
+                // 완료 콜백
+                (result) => {
+                    uploadedFileInfo = result;
+                    console.log('S3 업로드 완료:', result);
+                },
+                // 오류 콜백
+                (error) => {
+                    console.error('S3 업로드 오류:', error);
+                    throw error;
+                },
+                // 사용자 정보 전달
+                userInfo
+            );
+
+            // 업로드된 파일 정보를 폼에 추가
+            formData.append('s3_key', uploadResult.s3_key);
+            formData.append('s3_url', uploadResult.url);
+            formData.append('file_size', file.size);
+            formData.append('content_type', file.type);
+            
+            // 서버에 폼 데이터 제출
+            const response = await fetch('{{ route("upload.process") }}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || '서버 오류가 발생했습니다.');
             }
-            progressBar.style.width = progress + '%';
-            progressText.textContent = Math.round(progress) + '%';
-        }, 200);
+
+            const result = await response.json();
+            
+            // 성공 시 리다이렉트
+            if (result.success) {
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> 업로드 완료!';
+                
+                setTimeout(() => {
+                    window.location.href = result.redirect_url || '{{ route("upload.success") }}';
+                }, 1000);
+            } else {
+                throw new Error(result.message || '업로드에 실패했습니다.');
+            }
+
+        } catch (error) {
+            console.error('업로드 실패:', error);
+            alert('업로드 중 오류가 발생했습니다: ' + error.message);
+            
+            // UI 복원
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-upload"></i> 제출하기';
+            uploadProgress.classList.add('d-none');
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+        }
     });
     
     // 전화번호 포맷팅

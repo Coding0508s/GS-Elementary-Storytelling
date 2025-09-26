@@ -65,11 +65,11 @@ class VideoSubmissionController extends Controller
         $request->session()->put('privacy_consent_time', now());
 
         return redirect()->route('upload.form')
-                        ->with('success', '개인정보 수집 및 이용에 동의해주셔서 감사합니다. 이제 비디오를 업로드할 수 있습니다.');
+                        ->with('success', '개인정보 수집 및 이용에 동의해주셔서 감사합니다. 이제 영상을 업로드할 수 있습니다.');
     }
 
     /**
-     * 비디오 업로드 처리
+     * 영상 업로드 처리
      */
     public function uploadVideo(Request $request)
     {
@@ -130,7 +130,7 @@ class VideoSubmissionController extends Controller
             'age.integer' => '나이는 숫자로 입력해주세요.',
             'parent_name.required' => '학부모 성함을 입력해주세요.',
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
-            'video_file.required' => '비디오 파일을 선택해주세요.',
+            'video_file.required' => '영상 파일을 선택해주세요.',
             'video_file.mimes' => 'MP4 또는 MOV 형식의 파일만 업로드 가능합니다.',
             'video_file.max' => '파일 크기는 2GB를 초과할 수 없습니다.'
         ]);
@@ -182,7 +182,7 @@ class VideoSubmissionController extends Controller
             $request->session()->forget(['privacy_consent', 'privacy_consent_time']);
 
             return redirect()->route('upload.success')
-                           ->with('success', '비디오가 성공적으로 업로드되었습니다. 곧 SMS 알림을 받으실 수 있습니다.')
+                           ->with('success', '영상이 성공적으로 업로드되었습니다. 곧 SMS 알림을 받으실 수 있습니다.')
                            ->with('submission_id', $submission->id);
 
         } catch (\Exception $e) {

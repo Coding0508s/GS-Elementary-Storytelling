@@ -68,7 +68,7 @@ log_warning() {
 
 # 1. 프로젝트 디렉토리로 이동
 log_info "프로젝트 디렉토리로 이동 중..."
-cd /var/www/storytelling
+cd /var/www/html/storytelling
 
 # 2. Git 상태 확인
 log_info "현재 Git 상태 확인 중..."
@@ -78,8 +78,8 @@ echo
 # 3. 최신 변경사항 가져오기
 log_info "최신 변경사항을 가져오는 중..."
 git fetch origin
-git checkout deployment-setup
-git pull origin deployment-setup
+git checkout master
+git pull origin master
 log_success "코드 업데이트 완료"
 
 # 4. Composer 의존성 업데이트
@@ -129,10 +129,10 @@ log_success "최적화 완료"
 
 # 10. 권한 설정
 log_info "파일 권한을 설정하는 중..."
-chown -R www-data:www-data /var/www/storytelling
-chmod -R 755 /var/www/storytelling
-chmod -R 775 /var/www/storytelling/storage
-chmod -R 775 /var/www/storytelling/bootstrap/cache
+chown -R www-data:www-data /var/www/html/storytelling
+chmod -R 755 /var/www/html/storytelling
+chmod -R 775 /var/www/html/storytelling/storage
+chmod -R 775 /var/www/html/storytelling/bootstrap/cache
 log_success "권한 설정 완료"
 
 # 11. 웹 서버 재시작
@@ -175,7 +175,7 @@ if [ $? -eq 0 ]; then
     echo
     log_warning "중요: .env 파일에 실제 OpenAI API 키를 설정하세요:"
     echo "ssh $SSH_USER@$SERVER_IP"
-    echo "nano /var/www/storytelling/.env"
+    echo "nano /var/www/html/storytelling/.env"
     echo "# OPENAI_API_KEY=your_actual_api_key_here"
 else
     log_error "서버 업데이트 중 오류가 발생했습니다."

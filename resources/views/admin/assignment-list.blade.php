@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1><i class="bi bi-person-check"></i> 영상 심사 관리</h1>
-        <p class="text-muted mb-0">업로드된 영상을 심사위원에게 배정하여 중복 심사를 방지합니다. (영상당 최대 2명)</p>
+        <p class="text-muted mb-0">업로드된 영상을 심사위원에게 배정합니다. (영상당 1명의 심사위원)</p>
     </div>
     <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> 대시보드로 돌아가기
@@ -45,7 +45,7 @@
                 <div class="display-4 text-warning mb-2">
                     <i class="bi bi-clock"></i>
                 </div>
-                <h3 class="text-warning">{{ number_format($unassignedVideos->count() + $partiallyAssignedVideos->count()) }}</h3>
+                <h3 class="text-warning">{{ number_format($unassignedVideos->count()) }}</h3>
                 <p class="card-text text-muted">배정 필요</p>
             </div>
         </div>
@@ -75,10 +75,10 @@
                 <form action="{{ route('admin.assignment.auto') }}" method="POST" class="d-inline">
                     @csrf
                     <button type="submit" class="btn btn-admin">
-                        <i class="bi bi-shuffle"></i> 자동 배정 (2명씩)
+                        <i class="bi bi-shuffle"></i> 자동 배정 (1명씩)
                     </button>
                 </form>
-                <small class="text-muted d-block mt-2">각 영상을 2명의 심사위원에게 자동으로 배정합니다.</small>
+                <small class="text-muted d-block mt-2">각 영상을 1명의 심사위원에게 자동으로 균등 배정합니다.</small>
             </div>
             <div class="col-md-6 mb-3">
                 <form action="{{ route('admin.assignment.reassign.all') }}" method="POST" class="d-inline" 
@@ -88,7 +88,7 @@
                         <i class="bi bi-arrow-clockwise"></i> 전체 재배정
                     </button>
                 </form>
-                <small class="text-muted d-block mt-2">모든 영상을 삭제 후 랜덤하게 재배정합니다. (기존 평가 삭제됨)</small>
+                <small class="text-muted d-block mt-2">모든 영상을 삭제 후 1명씩 랜덤하게 재배정합니다. (기존 평가 삭제됨)</small>
             </div>
         </div>
     </div>
@@ -169,8 +169,8 @@
                                 @endif
                             </td>
                             <td>
-                                @if($video->assignments->count() < 2)
-                                    <!-- 추가 배정 가능 -->
+                                @if($video->assignments->count() < 1)
+                                    <!-- 배정 가능 -->
                                     <form action="{{ route('admin.assignment.assign') }}" method="POST" class="d-inline">
                                         @csrf
                                         <input type="hidden" name="video_submission_id" value="{{ $video->id }}">
@@ -186,6 +186,10 @@
                                             <i class="bi bi-plus"></i> 배정
                                         </button>
                                     </form>
+                                @else
+                                    <span class="text-success">
+                                        <i class="bi bi-check-circle"></i> 배정 완료
+                                    </span>
                                 @endif
                                 
                                 <!-- 배정 취소 버튼들 -->
@@ -220,70 +224,6 @@
         @endif
     </div>
 </div>
-
-<!-- 부분 배정된 영상 (1명만 배정됨) -->
-@if($partiallyAssignedVideos->count() > 0)
-<div class="card admin-card mb-4">
-    <div class="card-header bg-warning text-dark">
-        <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> 추가 배정 필요한 영상 (1명만 배정됨)</h5>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-admin table-hover">
-                <thead>
-                    <tr>
-                        <th>접수번호</th>
-                        <th>학생명</th>
-                        <th>기관명</th>
-                        <th>현재 배정된 심사위원</th>
-                        <th>추가 배정</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($partiallyAssignedVideos as $video)
-                    <tr>
-                        <td>{{ $video->receipt_number }}</td>
-                        <td>
-                            <strong>{{ $video->student_name_korean }}</strong><br>
-                            <small class="text-muted">{{ $video->student_name_english }}</small>
-                        </td>
-                        <td>
-                            {{ $video->institution_name }}<br>
-                            <small class="text-muted">{{ $video->class_name }}</small>
-                        </td>
-                        <td>
-                            @foreach($video->assignments as $assignment)
-                                <div class="mb-1">
-                                    <strong>{{ $assignment->admin->name }}</strong>
-                                    <span class="badge bg-primary">배정됨</span>
-                                </div>
-                            @endforeach
-                        </td>
-                        <td>
-                            <form action="{{ route('admin.assignment.assign') }}" method="POST" class="d-inline">
-                                @csrf
-                                <input type="hidden" name="video_submission_id" value="{{ $video->id }}">
-                                <select name="admin_id" class="form-select form-select-sm d-inline-block" style="width: auto;">
-                                    <option value="">심사위원 선택</option>
-                                    @foreach($admins as $admin)
-                                        @if(!$video->assignments->contains('admin_id', $admin->id))
-                                            <option value="{{ $admin->id }}">{{ $admin->name }}</option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                                <button type="submit" class="btn btn-sm btn-warning">
-                                    <i class="bi bi-plus"></i> 2번째 심사위원 배정
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-@endif
 
 <!-- 미배정 영상 목록 -->
 <div class="card admin-card">
@@ -328,13 +268,13 @@
                                     @csrf
                                     <input type="hidden" name="video_submission_id" value="{{ $video->id }}">
                                     <select name="admin_id" class="form-select form-select-sm" style="width: 150px;">
-                                        <option value="">1차 심사위원 선택</option>
+                                        <option value="">심사위원 선택</option>
                                         @foreach($admins as $admin)
                                             <option value="{{ $admin->id }}">{{ $admin->name }}</option>
                                         @endforeach
                                     </select>
                                     <button type="submit" class="btn btn-sm btn-primary mt-1">
-                                        <i class="bi bi-person-plus"></i> 1차 배정
+                                        <i class="bi bi-person-plus"></i> 배정
                                     </button>
                                 </form>
                             </td>

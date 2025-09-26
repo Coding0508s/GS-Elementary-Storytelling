@@ -9,7 +9,7 @@
 </div>
 
 @if(session('success'))
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
+    <div class="alert alert-success alert-dismissible fade show" role="alert" id="success-alert">
         <i class="bi bi-check-circle"></i> {{ session('success') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
@@ -23,6 +23,15 @@
                 <li>{{ $error }}</li>
             @endforeach
         </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
+@if(isset($otherEvaluation) && $otherEvaluation)
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i> 
+        <strong>주의:</strong> 이 영상은 이미 다른 심사위원에 의해 채점되었습니다. 
+        현재 시스템에서는 1개의 영상을 1명의 심사위원만 채점할 수 있습니다.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
@@ -281,7 +290,8 @@
                                        max="10" 
                                        value="{{ old($field, $assignment->evaluation->$field ?? '') }}"
                                        placeholder="0-10"
-                                       required>
+                                       required
+                                       {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
                             </div>
                             
                             <!-- 점수 가이드 -->
@@ -313,7 +323,8 @@
                           id="comments" 
                           name="comments" 
                           rows="4"
-                          placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요...">{{ old('comments', $assignment->evaluation->comments ?? '') }}</textarea>
+                          placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요..."
+                          {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>{{ old('comments', $assignment->evaluation->comments ?? '') }}</textarea>
             </div>
             
             <!-- 제출 버튼 -->
@@ -322,8 +333,12 @@
                    class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> 취소
                 </a>
-                <button type="submit" class="btn btn-admin">
-                    @if($assignment->evaluation)
+                <button type="submit" 
+                        class="btn btn-admin"
+                        {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
+                    @if(isset($otherEvaluation) && $otherEvaluation)
+                        <i class="bi bi-lock"></i> 다른 심사위원이 채점 완료
+                    @elseif($assignment->evaluation)
                         <i class="bi bi-pencil"></i> 심사 결과 수정
                     @else
                         <i class="bi bi-check-circle"></i> 심사 완료
@@ -882,6 +897,25 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
         return modal;
+    }
+});
+
+// 중복 알림 방지
+document.addEventListener('DOMContentLoaded', function() {
+    // 성공 알림이 있으면 3초 후 자동으로 숨기기
+    const successAlert = document.getElementById('success-alert');
+    if (successAlert) {
+        setTimeout(() => {
+            successAlert.style.display = 'none';
+        }, 3000);
+    }
+    
+    // 중복 알림 제거 (같은 메시지가 여러 개 있으면 하나만 남기기)
+    const alerts = document.querySelectorAll('.alert-success');
+    if (alerts.length > 1) {
+        for (let i = 1; i < alerts.length; i++) {
+            alerts[i].remove();
+        }
     }
 });
 </script>

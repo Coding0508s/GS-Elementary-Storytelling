@@ -65,24 +65,33 @@ class VideoSubmissionController extends Controller
         $request->session()->put('privacy_consent_time', now());
 
         return redirect()->route('upload.form')
-                        ->with('success', '개인정보 수집 및 이용에 동의해주셔서 감사합니다. 이제 비디오를 업로드할 수 있습니다.');
+                        ->with('success', '개인정보 수집 및 이용에 동의해주셔서 감사합니다. 이제 영상을 업로드할 수 있습니다.');
     }
 
     /**
-     * 비디오 업로드 처리
+     * 비디오 업로드 처리 (S3 직접 업로드 지원)
      */
     public function uploadVideo(Request $request)
     {
-        // Force PHP upload settings for large files (2GB)
-        ini_set('upload_max_filesize', '2048M');
-        ini_set('post_max_size', '2048M');
-        ini_set('max_execution_time', '0'); // 무제한
-        set_time_limit(0); // 추가 시간 제한 제거
-        ini_set('max_input_time', '3600');
-        ini_set('memory_limit', '1024M');
+        // S3 직접 업로드인지 확인
+        $isS3DirectUpload = $request->has('s3_key') && $request->has('s3_url');
+        
+        if ($isS3DirectUpload) {
+            // S3 직접 업로드 처리
+            return $this->handleS3DirectUpload($request);
+        } else {
+            // 기존 서버 업로드 처리
+            return $this->handleServerUpload($request);
+        }
+    }
+
+    /**
+     * S3 직접 업로드 처리
+     */
+    private function handleS3DirectUpload(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'region' => ['required', 'string', function ($attribute, $value, $fail) {
-                // "시/도 시/군/구" 형태인지 확인
                 $parts = explode(' ', $value, 2);
                 if (count($parts) < 2) {
                     $fail('올바른 지역 형식을 선택해주세요.');
@@ -92,13 +101,148 @@ class VideoSubmissionController extends Controller
                 $province = $parts[0];
                 $city = $parts[1];
                 
-                // 시/도가 유효한지 확인
                 if (!array_key_exists($province, VideoSubmission::REGIONS)) {
                     $fail('올바른 시/도를 선택해주세요.');
                     return;
                 }
                 
-                // 시/군/구가 해당 시/도에 속하는지 확인
+                if (!in_array($city, VideoSubmission::REGIONS[$province])) {
+                    $fail('올바른 시/군/구를 선택해주세요.');
+                    return;
+                }
+            }],
+            'institution_name' => 'required|string|max:255',
+            'class_name' => 'required|string|max:255',
+            'student_name_korean' => 'required|string|max:255',
+            'student_name_english' => 'required|string|max:255',
+            'grade' => 'required|string|max:50',
+            'age' => 'required|integer|min:1|max:100',
+            'parent_name' => 'required|string|max:255',
+            'parent_phone' => 'required|string|max:20',
+            'unit_topic' => 'nullable|string|max:255',
+            's3_key' => 'required|string',
+            's3_url' => 'required|url'
+        ], [
+            'region.required' => '거주 지역을 선택해주세요.',
+            'institution_name.required' => '기관명을 입력해주세요.',
+            'class_name.required' => '반 이름을 입력해주세요.',
+            'student_name_korean.required' => '학생 한글 이름을 입력해주세요.',
+            'student_name_english.required' => '학생 영어 이름을 입력해주세요.',
+            'grade.required' => '학년을 입력해주세요.',
+            'age.required' => '나이를 입력해주세요.',
+            'age.integer' => '나이는 숫자로 입력해주세요.',
+            'parent_name.required' => '학부모 성함을 입력해주세요.',
+            'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
+            's3_key.required' => 'S3 파일 키가 필요합니다.',
+            's3_url.required' => 'S3 파일 URL이 필요합니다.'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => '입력 데이터가 유효하지 않습니다.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // S3 파일 존재 확인
+            if (!Storage::disk('s3')->exists($request->s3_key)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '업로드된 파일을 찾을 수 없습니다.'
+                ], 404);
+            }
+
+            // S3 키에서 파일명 추출
+            $s3Key = $request->s3_key;
+            $fileName = basename($s3Key);
+            
+            // 파일 크기 정보 추출 (업로드 완료 콜백에서 전달받은 정보 사용)
+            $fileSize = $request->input('file_size', 0);
+            $contentType = $request->input('content_type', 'video/quicktime');
+            
+            // 데이터베이스에 정보 저장
+            $submission = VideoSubmission::create([
+                'region' => $request->region,
+                'institution_name' => $request->institution_name,
+                'class_name' => $request->class_name,
+                'student_name_korean' => $request->student_name_korean,
+                'student_name_english' => $request->student_name_english,
+                'grade' => $request->grade,
+                'age' => $request->age,
+                'parent_name' => $request->parent_name,
+                'parent_phone' => $request->parent_phone,
+                'unit_topic' => $request->unit_topic,
+                'video_file_path' => $s3Key, // S3 키 저장
+                'video_file_name' => $fileName, // 파일명 저장
+                'video_file_type' => $contentType, // 실제 Content-Type 사용
+                'video_file_size' => $fileSize, // 실제 파일 크기 저장
+                'video_url' => $request->s3_url, // S3 URL 저장
+                'upload_method' => 's3_direct', // 업로드 방법 기록
+                'privacy_consent' => true,
+                'privacy_consent_at' => now(),
+                'status' => VideoSubmission::STATUS_UPLOADED
+            ]);
+
+            // SMS 알림 발송
+            $this->sendSmsNotification($submission);
+
+            Log::info('S3 직접 업로드 완료', [
+                'submission_id' => $submission->id,
+                's3_key' => $request->s3_key,
+                'student_name' => $request->student_name_korean
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => '업로드가 성공적으로 완료되었습니다.',
+                'redirect_url' => route('upload.success'),
+                'submission_id' => $submission->id
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('S3 직접 업로드 처리 실패', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->except(['s3_key', 's3_url'])
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '업로드 처리 중 오류가 발생했습니다.'
+            ], 500);
+        }
+    }
+
+    /**
+     * 기존 서버 업로드 처리 (하위 호환성)
+     */
+    private function handleServerUpload(Request $request)
+    {
+        // Force PHP upload settings for large files (2GB)
+        ini_set('upload_max_filesize', '2048M');
+        ini_set('post_max_size', '2048M');
+        ini_set('max_execution_time', '0');
+        set_time_limit(0);
+        ini_set('max_input_time', '3600');
+        ini_set('memory_limit', '1024M');
+        
+        $validator = Validator::make($request->all(), [
+            'region' => ['required', 'string', function ($attribute, $value, $fail) {
+                $parts = explode(' ', $value, 2);
+                if (count($parts) < 2) {
+                    $fail('올바른 지역 형식을 선택해주세요.');
+                    return;
+                }
+                
+                $province = $parts[0];
+                $city = $parts[1];
+                
+                if (!array_key_exists($province, VideoSubmission::REGIONS)) {
+                    $fail('올바른 시/도를 선택해주세요.');
+                    return;
+                }
+                
                 if (!in_array($city, VideoSubmission::REGIONS[$province])) {
                     $fail('올바른 시/군/구를 선택해주세요.');
                     return;
@@ -116,8 +260,8 @@ class VideoSubmissionController extends Controller
             'video_file' => [
                 'required',
                 'file',
-                'mimes:mp4,mov',
-                'max:2097152' // 2GB in KB (2048 * 1024)
+                'mimes:mp4,mov,avi,wmv,flv,webm,mkv',
+                'max:2097152' // 2GB in KB
             ]
         ], [
             'region.required' => '거주 지역을 선택해주세요.',
@@ -130,9 +274,9 @@ class VideoSubmissionController extends Controller
             'age.integer' => '나이는 숫자로 입력해주세요.',
             'parent_name.required' => '학부모 성함을 입력해주세요.',
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
-            'video_file.required' => '비디오 파일을 선택해주세요.',
-            'video_file.mimes' => 'MP4 또는 MOV 형식의 파일만 업로드 가능합니다.',
-            'video_file.max' => '파일 크기는 2GB를 초과할 수 없습니다.'
+            'video_file.required' => '영상 파일을 선택해주세요.',
+            'video_file.mimes' => '지원하지 않는 파일 형식입니다. (MP4, AVI, MOV, WMV, FLV, WEBM, MKV만 허용)',
+            'video_file.max' => '파일 크기는 1GB를 초과할 수 없습니다.'
         ]);
 
         if ($validator->fails()) {
@@ -142,14 +286,19 @@ class VideoSubmissionController extends Controller
         try {
             $videoFile = $request->file('video_file');
             
-            // 고유한 파일명 생성
-            $fileName = time() . '_' . Str::random(10) . '.' . $videoFile->getClientOriginalExtension();
+            // 사용자 정의 파일명 생성
+            $fileName = $this->generateCustomFilename(
+                $request->institution_name,
+                $request->student_name_korean,
+                $request->grade,
+                $videoFile->getClientOriginalName()
+            );
             
             // 파일을 S3에 저장
             $filePath = $videoFile->storeAs('videos', $fileName, 's3');
             
             // S3에 저장된 파일의 URL 생성
-            $fileUrl = Storage::disk('s3')->url($filePath);
+            $fileUrl = $this->getS3Url($filePath);
 
             // 데이터베이스에 정보 저장
             $submission = VideoSubmission::create([
@@ -182,7 +331,7 @@ class VideoSubmissionController extends Controller
             $request->session()->forget(['privacy_consent', 'privacy_consent_time']);
 
             return redirect()->route('upload.success')
-                           ->with('success', '비디오가 성공적으로 업로드되었습니다. 곧 SMS 알림을 받으실 수 있습니다.')
+                           ->with('success', '영상이 성공적으로 업로드되었습니다. 곧 SMS 알림을 받으실 수 있습니다.')
                            ->with('submission_id', $submission->id);
 
         } catch (\Exception $e) {
@@ -327,5 +476,84 @@ class VideoSubmissionController extends Controller
         }
     }
 
+    /**
+     * S3 URL 생성 헬퍼 메서드
+     */
+    private function getS3Url($s3Key)
+    {
+        try {
+            return Storage::disk('s3')->url($s3Key);
+        } catch (\Exception $e) {
+            Log::warning('S3 URL 생성 실패', ['s3_key' => $s3Key, 'error' => $e->getMessage()]);
+            return '';
+        }
+    }
 
+    /**
+     * 사용자 정의 파일명 생성
+     * 형식: 기관명_이름_학년_원본파일명_타임스탬프.확장자
+     */
+    private function generateCustomFilename($institutionName, $studentName, $grade, $originalFilename)
+    {
+        // 원본 파일명에서 확장자를 먼저 추출
+        $extension = pathinfo($originalFilename, PATHINFO_EXTENSION);
+        $baseOriginalFilename = pathinfo($originalFilename, PATHINFO_FILENAME);
+
+        // 안전한 파일명을 위해 특수문자 제거 및 공백을 언더스코어로 변경
+        $safeInstitution = $this->sanitizeFilename($institutionName ?? 'Unknown');
+        $safeStudentName = $this->sanitizeFilename($studentName ?? 'Unknown');
+        $safeGrade = $this->sanitizeFilename($grade ?? 'Unknown');
+        $safeOriginalName = $this->sanitizeFilename($baseOriginalFilename ?? 'video');
+
+        // 타임스탬프 추가 (중복 방지)
+        $timestamp = date('Ymd_His');
+
+        // 확장자가 없으면 기본값으로 mp4 설정
+        if (empty($extension)) {
+            $extension = 'mp4';
+        }
+
+        // 최종 파일명 생성
+        $customFilename = sprintf(
+            '%s_%s_%s_%s_%s.%s',
+            $safeInstitution,
+            $safeStudentName,
+            $safeGrade,
+            $safeOriginalName,
+            $timestamp,
+            $extension
+        );
+        
+        // 파일명 길이 제한 (S3 키 길이 제한 고려)
+        if (strlen($customFilename) > 200) {
+            $customFilename = substr($customFilename, 0, 200) . '.' . $extension;
+        }
+        
+        return $customFilename;
+    }
+
+    /**
+     * 파일명 안전화 (특수문자 제거, 공백 보존)
+     */
+    private function sanitizeFilename($filename)
+    {
+        // 한글, 영문, 숫자, 공백, 언더스코어, 하이픈만 허용
+        $filename = preg_replace('/[^가-힣a-zA-Z0-9 _-]/', '_', $filename);
+        
+        // 연속된 공백을 하나로 변경
+        $filename = preg_replace('/\s+/', ' ', $filename);
+        
+        // 연속된 언더스코어를 하나로 변경
+        $filename = preg_replace('/_+/', '_', $filename);
+        
+        // 앞뒤 공백과 언더스코어 제거
+        $filename = trim($filename, ' _');
+        
+        // 빈 문자열인 경우 기본값
+        if (empty($filename)) {
+            $filename = 'Unknown';
+        }
+        
+        return $filename;
+    }
 }

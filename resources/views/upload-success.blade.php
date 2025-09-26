@@ -37,7 +37,7 @@
                     @endif
                     
                     <p class="lead mb-4">
-                        Speech Contest 비디오가 성공적으로 업로드되었습니다.
+                        Storytelling Contest 영상이 성공적으로 업로드되었습니다.
                     </p>
                     
                     <div class="alert alert-success">
@@ -109,7 +109,7 @@
                         <div class="alert alert-warning">
                             <i class="bi bi-exclamation-triangle"></i>
                             <strong>중요 안내</strong><br>
-                            • 접수된 비디오는 수정 또는 재업로드가 불가능합니다.<br>
+                            • 접수된 영상은 수정 또는 재업로드가 불가능합니다.<br>
                             • 문의사항은 각 교육기관을 통해 연락해주세요.<br>
                             • 개인정보는 대회 종료 후 안전하게 폐기됩니다.
                         </div>

@@ -543,6 +543,9 @@ class AdminController extends Controller
             AVG(vocabulary_score) as avg_vocabulary,
             AVG(fluency_score) as avg_fluency,
             AVG(confidence_score) as avg_confidence,
+            AVG(topic_connection_score) as avg_topic_connection,
+            AVG(structure_flow_score) as avg_structure_flow,
+            AVG(creativity_score) as avg_creativity,
             AVG(total_score) as avg_total
         ')->first();
 
@@ -551,11 +554,11 @@ class AdminController extends Controller
         if ($evaluatedSubmissions > 0) {
             $scoreDistribution = Evaluation::selectRaw('
                 CASE 
-                    WHEN total_score >= 36 THEN "우수 (36-40점)"
-                    WHEN total_score >= 31 THEN "양호 (31-35점)"
-                    WHEN total_score >= 26 THEN "보통 (26-30점)"
-                    WHEN total_score >= 21 THEN "미흡 (21-25점)"
-                    ELSE "매우 미흡 (20점 이하)"
+                    WHEN total_score >= 63 THEN "우수 (63-70점)"
+                    WHEN total_score >= 56 THEN "양호 (56-62점)"
+                    WHEN total_score >= 49 THEN "보통 (49-55점)"
+                    WHEN total_score >= 42 THEN "미흡 (42-48점)"
+                    ELSE "매우 미흡 (41점 이하)"
                 END as grade,
                 COUNT(*) as count
             ')
@@ -577,15 +580,15 @@ class AdminController extends Controller
         ->map(function ($submissions, $institutionName) {
             $submissionCount = $submissions->count(); // 실제 제출 수
             
-            // 두 심사위원의 평균 점수 계산 (완전히 평가된 영상만)
+            // 한 심사위원의 평균 점수 계산 (완전히 평가된 영상만)
             $completedEvaluations = $submissions->filter(function ($submission) {
-                return $submission->evaluations->count() >= 2;
+                return $submission->evaluations->count() >= 1;
             });
             
             $avgScore = null;
             if ($completedEvaluations->count() > 0) {
                 $totalScores = $completedEvaluations->map(function ($submission) {
-                    return $submission->evaluations->sum('total_score'); // 두 심사위원 점수 합계
+                    return $submission->evaluations->first()->total_score; // 한 심사위원 점수
                 });
                 $avgScore = $totalScores->avg();
             }
@@ -601,7 +604,7 @@ class AdminController extends Controller
         ->sortByDesc('avg_score')
         ->values();
 
-        // 학생 순위 (두 심사위원 총합 점수 기준, 상위 20명)
+        // 학생 순위 (한 심사위원 점수 기준, 상위 20명)
         $studentRankings = VideoSubmission::select(
             'video_submissions.id',
             'video_submissions.student_name_korean as student_name',
@@ -614,18 +617,13 @@ class AdminController extends Controller
         ->whereHas('evaluations')
         ->get()
         ->map(function ($submission) {
-            // 두 심사위원의 평가 합계 계산
-            $totalPronunciation = $submission->evaluations->sum('pronunciation_score');
-            $totalVocabulary = $submission->evaluations->sum('vocabulary_score');
-            $totalFluency = $submission->evaluations->sum('fluency_score');
-            $totalConfidence = $submission->evaluations->sum('confidence_score');
-            $totalScore = $submission->evaluations->sum('total_score');
-            
-            // 평가가 2개 있는 경우만 포함 (완전히 평가된 영상)
+            // 평가가 1개 있는 경우만 포함 (완전히 평가된 영상)
             $evaluationCount = $submission->evaluations->count();
-            if ($evaluationCount < 2) {
-                return null; // 평가가 2개 미만인 경우 제외
+            if ($evaluationCount < 1) {
+                return null; // 평가가 없는 경우 제외
             }
+            
+            $evaluation = $submission->evaluations->first();
             
             return (object) [
                 'student_name' => $submission->student_name_korean,
@@ -633,11 +631,14 @@ class AdminController extends Controller
                 'class_name' => $submission->class_name,
                 'grade' => $submission->grade,
                 'grade_class' => $submission->grade . ' ' . $submission->class_name,
-                'pronunciation_score' => $totalPronunciation,
-                'vocabulary_score' => $totalVocabulary,
-                'fluency_score' => $totalFluency,
-                'confidence_score' => $totalConfidence,
-                'total_score' => $totalScore,
+                'pronunciation_score' => $evaluation->pronunciation_score,
+                'vocabulary_score' => $evaluation->vocabulary_score,
+                'fluency_score' => $evaluation->fluency_score,
+                'confidence_score' => $evaluation->confidence_score,
+                'topic_connection_score' => $evaluation->topic_connection_score,
+                'structure_flow_score' => $evaluation->structure_flow_score,
+                'creativity_score' => $evaluation->creativity_score,
+                'total_score' => $evaluation->total_score,
                 'evaluation_count' => $evaluationCount,
                 'created_at' => $submission->created_at
             ];
@@ -676,20 +677,13 @@ class AdminController extends Controller
                            ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
         }
 
-        // 배정된 영상들을 영상별로 그룹화하여 가져오기
+        // 배정된 영상들 (1명의 심사위원에게 배정된 영상)
         $assignedVideos = VideoSubmission::with(['assignments.admin', 'evaluation'])
                                         ->whereHas('assignment')
                                         ->orderBy('created_at', 'asc')
                                         ->paginate(10, ['*'], 'assigned');
 
-        // 미배정 영상들 (배정이 없거나 1명만 배정된 영상)
-        $partiallyAssignedVideos = VideoSubmission::with(['assignments.admin'])
-                                                 ->whereHas('assignment', function($query) {
-                                                     // 배정이 1개만 있는 영상
-                                                 }, '=', 1)
-                                                 ->orderBy('created_at', 'asc')
-                                                 ->get();
-        
+        // 미배정 영상들 (배정이 없는 영상)
         $unassignedVideos = VideoSubmission::whereDoesntHave('assignment')
                                           ->orderBy('created_at', 'asc')
                                           ->paginate(10, ['*'], 'unassigned');
@@ -698,11 +692,11 @@ class AdminController extends Controller
                       ->where('role', 'judge') // 심사위원만 표시
                       ->get();
 
-        return view('admin.assignment-list', compact('assignedVideos', 'partiallyAssignedVideos', 'unassignedVideos', 'admins'));
+        return view('admin.assignment-list', compact('assignedVideos', 'unassignedVideos', 'admins'));
     }
 
         /**
-     * 영상 배정 (한 영상당 최대 2명의 심사위원에게 배정 가능)
+     * 영상 배정 (한 영상당 1명의 심사위원에게 배정)
      */
 public function assignVideo(Request $request)
     {
@@ -722,18 +716,12 @@ public function assignVideo(Request $request)
             return back()->with('error', '잘못된 요청입니다.');
         }
 
-        // 해당 영상에 대한 기존 배정 확인 (최대 2명)
+        // 해당 영상에 대한 기존 배정 확인 (최대 1명)
         $existingAssignments = VideoAssignment::where('video_submission_id', $request->video_submission_id)->get();
         
-        // 이미 2명에게 배정되었는지 확인
-        if ($existingAssignments->count() >= 2) {
-            return back()->with('error', '이 영상은 이미 2명의 심사위원에게 배정되었습니다.');
-        }
-        
-        // 동일한 심사위원에게 중복 배정 방지
-        $duplicateAssignment = $existingAssignments->where('admin_id', $request->admin_id)->first();
-        if ($duplicateAssignment) {
-            return back()->with('error', '이 심사위원에게 이미 배정된 영상입니다.');
+        // 이미 1명에게 배정되었는지 확인
+        if ($existingAssignments->count() >= 1) {
+            return back()->with('error', '이 영상은 이미 심사위원에게 배정되었습니다.');
         }
 
         VideoAssignment::create([
@@ -742,10 +730,9 @@ public function assignVideo(Request $request)
             'status' => 'assigned'
         ]);
         
-        $assignedCount = $existingAssignments->count() + 1;
         $judge = Admin::find($request->admin_id);
 
-        return back()->with('success', "영상이 {$judge->name} 심사위원에게 성공적으로 배정되었습니다. (총 {$assignedCount}/2명 배정완료)");
+        return back()->with('success', "영상이 {$judge->name} 심사위원에게 성공적으로 배정되었습니다.");
     }
 
     /**
@@ -767,7 +754,7 @@ public function assignVideo(Request $request)
     }
 
     /**
-     * 자동 배정 (각 영상당 2명의 심사위원에게 균등하게 배정)
+     * 자동 배정 (각 영상당 1명의 심사위원에게 균등하게 배정)
      */
     public function autoAssign()
     {
@@ -782,15 +769,12 @@ public function assignVideo(Request $request)
                             ->where('role', 'judge')
                             ->get();
 
-        if ($activeAdmins->count() < 2) {
-            return back()->with('error', '자동 배정을 위해서는 최소 2명의 활성화된 심사위원이 필요합니다.');
+        if ($activeAdmins->count() < 1) {
+            return back()->with('error', '자동 배정을 위해서는 최소 1명의 활성화된 심사위원이 필요합니다.');
         }
 
-        // 미배정 또는 부분 배정된 영상들 찾기
+        // 미배정 영상들 찾기
         $videosNeedingAssignment = VideoSubmission::whereDoesntHave('assignment')
-                                                 ->orWhereHas('assignment', function($query) {
-                                                     // 배정이 1개만 있는 영상
-                                                 }, '=', 1)
                                                  ->orderBy('created_at', 'asc') // 업로드 순서대로 배정
                                                  ->get();
 
@@ -807,26 +791,13 @@ public function assignVideo(Request $request)
         $assignedCount = 0;
 
         foreach ($videosNeedingAssignment as $video) {
-            // 현재 배정된 심사위원 확인
-            $currentAssignments = VideoAssignment::where('video_submission_id', $video->id)
-                                                ->pluck('admin_id')
-                                                ->toArray();
-            
-            // 2명에게 배정될 때까지 배정
-            $neededAssignments = 2 - count($currentAssignments);
-            
-            // 사용 가능한 심사위원 필터링 (이미 배정된 심사위원 제외)
-            $availableAdmins = $activeAdmins->whereNotIn('id', $currentAssignments);
-            
-            // 배정 수가 적은 순서대로 정렬
-            $sortedAvailableAdmins = $availableAdmins->sortBy(function($adminUser) use ($adminAssignmentCounts) {
+            // 배정 수가 적은 순서대로 정렬하여 가장 적은 심사위원 선택
+            $sortedAdmins = $activeAdmins->sortBy(function($adminUser) use ($adminAssignmentCounts) {
                 return $adminAssignmentCounts[$adminUser->id];
             })->values();
             
-            $assignmentsToMake = min($neededAssignments, $sortedAvailableAdmins->count());
-            
-            for ($i = 0; $i < $assignmentsToMake; $i++) {
-                $selectedAdmin = $sortedAvailableAdmins->get($i);
+            if ($sortedAdmins->isNotEmpty()) {
+                $selectedAdmin = $sortedAdmins->first();
                 
                 VideoAssignment::create([
                     'video_submission_id' => $video->id,
@@ -890,7 +861,7 @@ public function assignVideo(Request $request)
             $assignedCount = 0;
             $adminCount = $activeAdmins->count();
 
-            // 5. 균등 배정 방식으로 모든 영상 재배정 (각 영상당 2명의 심사위원)
+            // 5. 균등 배정 방식으로 모든 영상 재배정 (각 영상당 1명의 심사위원)
             
             // 각 심사위원의 배정 카운트 초기화
             $adminAssignmentCounts = [];
@@ -899,33 +870,24 @@ public function assignVideo(Request $request)
             }
             
             foreach ($allVideos as $video) {
-                // 각 영상에 2명의 심사위원 배정
-                for ($judgeNum = 0; $judgeNum < 2 && $judgeNum < $adminCount; $judgeNum++) {
-                    // 배정 수가 가장 적은 심사위원 선택
-                    $sortedAdmins = $activeAdmins->sortBy(function($adminUser) use ($adminAssignmentCounts) {
-                        return $adminAssignmentCounts[$adminUser->id];
-                    });
+                // 각 영상에 1명의 심사위원 배정
+                // 배정 수가 가장 적은 심사위원 선택
+                $sortedAdmins = $activeAdmins->sortBy(function($adminUser) use ($adminAssignmentCounts) {
+                    return $adminAssignmentCounts[$adminUser->id];
+                });
+                
+                if ($sortedAdmins->isNotEmpty()) {
+                    $selectedAdmin = $sortedAdmins->first();
                     
-                    // 이미 이 영상에 배정된 심사위원 제외
-                    $currentVideoAssignments = VideoAssignment::where('video_submission_id', $video->id)
-                                                            ->pluck('admin_id')
-                                                            ->toArray();
+                    VideoAssignment::create([
+                        'video_submission_id' => $video->id,
+                        'admin_id' => $selectedAdmin->id,
+                        'status' => 'assigned'
+                    ]);
                     
-                    $availableAdmins = $sortedAdmins->whereNotIn('id', $currentVideoAssignments);
-                    
-                    if ($availableAdmins->isNotEmpty()) {
-                        $selectedAdmin = $availableAdmins->first();
-                        
-                        VideoAssignment::create([
-                            'video_submission_id' => $video->id,
-                            'admin_id' => $selectedAdmin->id,
-                            'status' => 'assigned'
-                        ]);
-                        
-                        // 배정 카운트 업데이트
-                        $adminAssignmentCounts[$selectedAdmin->id]++;
-                        $assignedCount++;
-                    }
+                    // 배정 카운트 업데이트
+                    $adminAssignmentCounts[$selectedAdmin->id]++;
+                    $assignedCount++;
                 }
             }
             
@@ -959,7 +921,7 @@ public function assignVideo(Request $request)
                           "전체 영상 재배정이 완료되었습니다.\n" .
                           "삭제된 기존 배정: {$deletedAssignments}개\n" .
                           "삭제된 기존 평가: {$deletedEvaluations}개\n" .
-                          "새로 배정된 영상: {$assignedCount}개\n" .
+                          "새로 배정된 영상: {$assignedCount}개 (각 영상당 1명씩)\n" .
                           "분배 현황: {$distributionInfo}");
     }
 
