@@ -188,6 +188,9 @@ class VideoSubmissionController extends Controller
             // SMS 알림 발송
             $this->sendSmsNotification($submission);
 
+            // 세션에 submission_id 저장 (성공 페이지에서 사용)
+            session(['submission_id' => $submission->id]);
+
             Log::info('S3 직접 업로드 완료', [
                 'submission_id' => $submission->id,
                 's3_key' => $request->s3_key,

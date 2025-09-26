@@ -589,6 +589,13 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('content_type', file.type);
             
             // 서버에 폼 데이터 제출
+            console.log('서버에 폼 데이터 제출 시작:', {
+                has_s3_key: formData.has('s3_key'),
+                has_s3_url: formData.has('s3_url'),
+                file_size: formData.get('file_size'),
+                content_type: formData.get('content_type')
+            });
+
             const response = await fetch('{{ route("upload.process") }}', {
                 method: 'POST',
                 body: formData,
@@ -597,23 +604,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
+            console.log('서버 응답 상태:', response.status, response.statusText);
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(() => ({ message: '서버 응답을 읽을 수 없습니다.' }));
+                console.error('서버 오류 응답:', errorData);
                 throw new Error(errorData.message || '서버 오류가 발생했습니다.');
             }
 
             const result = await response.json();
+            console.log('서버 응답 데이터:', result);
             
             // 성공 시 리다이렉트
             if (result.success) {
                 progressBar.style.width = '100%';
-                progressText.textContent = '100%';
+                progressText.textContent = '완료!';
                 submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> 업로드 완료!';
+                
+                console.log('성공! 리다이렉트 URL:', result.redirect_url);
                 
                 setTimeout(() => {
                     window.location.href = result.redirect_url || '{{ route("upload.success") }}';
-                }, 1000);
+                }, 1500);
             } else {
+                console.error('업로드 실패:', result);
                 throw new Error(result.message || '업로드에 실패했습니다.');
             }
 
