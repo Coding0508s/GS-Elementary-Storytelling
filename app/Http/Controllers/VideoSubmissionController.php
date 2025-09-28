@@ -90,7 +90,8 @@ class VideoSubmissionController extends Controller
      */
     private function handleS3DirectUpload(Request $request)
     {
-        // 로깅 최소화
+        $startTime = microtime(true);
+        Log::info('S3 Direct Upload - Process started.');
 
         $validator = Validator::make($request->all(), [
             'region' => ['required', 'string', function ($attribute, $value, $fail) {
@@ -139,6 +140,9 @@ class VideoSubmissionController extends Controller
             's3_url.required' => 'S3 파일 URL이 필요합니다.'
         ]);
 
+        $validationTime = microtime(true);
+        Log::info('S3 Direct Upload - Validation finished.', ['duration_ms' => ($validationTime - $startTime) * 1000]);
+
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
@@ -181,8 +185,14 @@ class VideoSubmissionController extends Controller
             ]);
             $submission->save();
 
+            $dbSaveTime = microtime(true);
+            Log::info('S3 Direct Upload - Database save finished.', ['duration_ms' => ($dbSaveTime - $validationTime) * 1000]);
+
             // 세션에 submission_id 저장
             session(['submission_id' => $submission->id]);
+
+            $sessionSaveTime = microtime(true);
+            Log::info('S3 Direct Upload - Session save finished.', ['duration_ms' => ($sessionSaveTime - $dbSaveTime) * 1000]);
 
             // ⚡ SMS 알림 비동기 처리 (응답 속도 향상)
             if (config('services.twilio.account_sid')) {
@@ -194,6 +204,9 @@ class VideoSubmissionController extends Controller
                     }
                 });
             }
+
+            $totalTime = microtime(true);
+            Log::info('S3 Direct Upload - Process finished before response.', ['total_duration_ms' => ($totalTime - $startTime) * 1000]);
 
             return response()->json([
                 'success' => true,
