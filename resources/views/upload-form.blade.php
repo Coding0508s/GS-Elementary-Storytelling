@@ -636,7 +636,8 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file_size', file.size);
             formData.append('content_type', file.type);
             
-            // 서버에 폼 데이터 제출 (로깅 최소화로 성능 향상)
+            // 서버에 폼 데이터 제출 (디버깅을 위한 로깅 추가)
+            console.log('서버 제출 시작...');
 
             const response = await fetch('{{ route("upload.process") }}', {
                 method: 'POST',
@@ -646,9 +647,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
+            console.log('서버 응답 상태:', response.status, response.statusText);
+
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: '서버 오류가 발생했습니다.' }));
-                throw new Error(errorData.message || `서버 오류 (${response.status})`);
+                const errorText = await response.text();
+                console.error('서버 오류 응답:', errorText);
+                
+                try {
+                    const errorData = JSON.parse(errorText);
+                    console.error('서버 오류 상세:', errorData);
+                    
+                    if (errorData.errors) {
+                        const errorMessages = Object.entries(errorData.errors)
+                            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+                            .join('\n');
+                        throw new Error(`입력 데이터 오류:\n${errorMessages}`);
+                    }
+                    
+                    throw new Error(errorData.message || '서버 오류가 발생했습니다.');
+                } catch (parseError) {
+                    console.error('JSON 파싱 오류:', parseError);
+                    throw new Error(`서버 오류 (${response.status}): ${errorText.substring(0, 200)}...`);
+                }
             }
 
             const result = await response.json();
