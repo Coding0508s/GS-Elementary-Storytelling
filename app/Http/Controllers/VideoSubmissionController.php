@@ -90,13 +90,7 @@ class VideoSubmissionController extends Controller
      */
     private function handleS3DirectUpload(Request $request)
     {
-        Log::info('S3 직접 업로드 요청 받음', [
-            'has_s3_key' => $request->has('s3_key'),
-            'has_s3_url' => $request->has('s3_url'),
-            'has_file_size' => $request->has('file_size'),
-            'has_content_type' => $request->has('content_type'),
-            'request_size' => strlen(serialize($request->all()))
-        ]);
+        // 로깅 최소화
 
         $validator = Validator::make($request->all(), [
             'region' => ['required', 'string', function ($attribute, $value, $fail) {
@@ -146,11 +140,6 @@ class VideoSubmissionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            Log::error('S3 직접 업로드 유효성 검사 실패', [
-                'errors' => $validator->errors()->toArray(),
-                'request_keys' => array_keys($request->all())
-            ]);
-            
             return response()->json([
                 'success' => false,
                 'message' => '입력 데이터가 유효하지 않습니다.',
@@ -192,24 +181,19 @@ class VideoSubmissionController extends Controller
             ]);
             $submission->save();
 
-            // 세션에 submission_id 저장 (성공 페이지에서 사용)
+            // 세션에 submission_id 저장
             session(['submission_id' => $submission->id]);
 
-            // SMS 알림 발송 (동기 처리로 복원 - register_shutdown_function 이슈 해결)
+            // ⚡ SMS 알림 비동기 처리 (응답 속도 향상)
             if (config('services.twilio.account_sid')) {
-                try {
-                    $this->sendSmsNotification($submission);
-                } catch (\Exception $e) {
-                    // SMS 실패가 업로드 성공을 방해하지 않도록 함
-                    Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
-                }
+                register_shutdown_function(function() use ($submission) {
+                    try {
+                        $this->sendSmsNotification($submission);
+                    } catch (\Exception $e) {
+                        Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
+                    }
+                });
             }
-
-            Log::info('S3 직접 업로드 성공', [
-                'submission_id' => $submission->id,
-                'student_name' => $submission->student_name_korean,
-                'file_size' => $fileSize
-            ]);
 
             return response()->json([
                 'success' => true,

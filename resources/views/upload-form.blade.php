@@ -585,14 +585,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const presignedData = await presignedResponse.json();
 
-            // S3에 직접 업로드
+            // ☁️ S3에 직접 업로드 (최적화됨)
             const xhr = new XMLHttpRequest();
             const uploadPromise = new Promise((resolve, reject) => {
+                let lastUpdate = 0;
+                
                 xhr.upload.addEventListener('progress', (e) => {
                     if (e.lengthComputable) {
                         const percent = (e.loaded / e.total) * 100;
+                        const now = Date.now();
+                        
+                        // UI 업데이트 (매번)
                         progressBar.style.width = percent + '%';
                         progressText.textContent = Math.round(percent) + '%';
+                        
+                        // 로깅 최소화 (1초마다 또는 25% 단위)
+                        if (now - lastUpdate > 1000 || Math.round(percent) % 25 === 0) {
+                            lastUpdate = now;
+                        }
                     }
                 });
 
@@ -603,20 +613,15 @@ document.addEventListener('DOMContentLoaded', function() {
                             url: presignedData.s3_url
                         });
                     } else {
-                        reject(new Error(`S3 업로드 실패: ${xhr.status} ${xhr.statusText}`));
+                        reject(new Error('S3 업로드 실패'));
                     }
                 });
 
-                xhr.addEventListener('error', () => {
-                    reject(new Error('S3 업로드 네트워크 오류'));
-                });
-
-                xhr.addEventListener('timeout', () => {
-                    reject(new Error('S3 업로드 타임아웃'));
-                });
+                xhr.addEventListener('error', () => reject(new Error('네트워크 오류')));
+                xhr.addEventListener('timeout', () => reject(new Error('업로드 타임아웃')));
 
                 xhr.open('PUT', presignedData.presigned_url);
-                xhr.timeout = 300000; // 5분 타임아웃
+                xhr.timeout = 300000; // 5분
                 xhr.setRequestHeader('Content-Type', file.type);
                 xhr.send(file);
             });
@@ -636,9 +641,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('file_size', file.size);
             formData.append('content_type', file.type);
             
-            // 서버에 폼 데이터 제출 (디버깅을 위한 로깅 추가)
-            console.log('서버 제출 시작...');
-
+            // ⚡ 서버에 폼 데이터 제출 (최적화됨)
             const response = await fetch('{{ route("upload.process") }}', {
                 method: 'POST',
                 body: formData,
@@ -647,37 +650,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            console.log('서버 응답 상태:', response.status, response.statusText);
-
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('서버 오류 응답:', errorText);
-                
                 try {
                     const errorData = JSON.parse(errorText);
-                    console.error('서버 오류 상세:', errorData);
-                    
                     if (errorData.errors) {
                         const errorMessages = Object.entries(errorData.errors)
                             .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
                             .join('\n');
                         throw new Error(`입력 데이터 오류:\n${errorMessages}`);
                     }
-                    
-                    throw new Error(errorData.message || '서버 오류가 발생했습니다.');
+                    throw new Error(errorData.message || '서버 오류');
                 } catch (parseError) {
-                    console.error('JSON 파싱 오류:', parseError);
-                    throw new Error(`서버 오류 (${response.status}): ${errorText.substring(0, 200)}...`);
+                    throw new Error(`서버 오류 (${response.status})`);
                 }
             }
 
             const result = await response.json();
             
-            // 성공 시 즉시 리다이렉트 (UI 업데이트 생략으로 속도 향상)
+            // ✅ 성공 시 즉시 리다이렉트
             if (result.success) {
                 window.location.href = result.redirect_url || '{{ route("upload.success") }}';
             } else {
-                throw new Error(result.message || '업로드에 실패했습니다.');
+                throw new Error(result.message || '업로드 실패');
             }
 
         } catch (error) {

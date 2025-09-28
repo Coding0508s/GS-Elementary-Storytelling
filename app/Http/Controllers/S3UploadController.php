@@ -144,19 +144,9 @@ class S3UploadController extends Controller
             // S3 키 보안 검증 (더 유연한 패턴)
             $s3Key = $request->input('s3_key');
             
-            Log::info('S3 키 검증', [
-                's3_key' => $s3Key,
-                'pattern_match' => preg_match('/^videos\/\d{4}\/\d{2}\/\d{2}\/[^\/]+\.(mp4|avi|mov|wmv|flv|webm|mkv)$/', $s3Key)
-            ]);
-            
+            // S3 키 형식 검증 (로깅 최소화)
             if (!preg_match('/^videos\/\d{4}\/\d{2}\/\d{2}\/[^\/]+\.(mp4|avi|mov|wmv|flv|webm|mkv)$/', $s3Key)) {
-                Log::error('S3 키 형식 오류', [
-                    's3_key' => $s3Key,
-                    'expected_pattern' => 'videos/YYYY/MM/DD/filename.extension'
-                ]);
-                return response()->json([
-                    'error' => '유효하지 않은 S3 키 형식입니다.'
-                ], 400);
+                return response()->json(['error' => '유효하지 않은 S3 키 형식'], 400);
             }
 
             $originalFilename = $request->input('original_filename');
