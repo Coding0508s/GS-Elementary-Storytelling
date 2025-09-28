@@ -162,6 +162,12 @@ class VideoSubmissionController extends Controller
             $fileSize = $request->input('file_size', 0);
             $contentType = $request->input('content_type', 'video/quicktime');
             
+            $dataExtractionTime = microtime(true);
+            Log::info('S3 Direct Upload - Data extraction finished.', [
+                'duration_ms' => ($dataExtractionTime - $validationTime) * 1000,
+                'file_size_mb' => round($fileSize / 1024 / 1024, 2)
+            ]);
+            
             // 데이터베이스에 정보 저장 (최적화된 필드만)
             $submission = new VideoSubmission();
             $submission->fill([
@@ -197,10 +203,26 @@ class VideoSubmissionController extends Controller
             Log::info('S3 Direct Upload - Session save finished.', ['duration_ms' => ($sessionSaveTime - $dbSaveTime) * 1000]);
 
             // ⚡ SMS 알림을 Queue에 추가 (즉시 응답)
+            $queueStartTime = microtime(true);
             SendSmsJob::dispatch($submission);
+            $queueEndTime = microtime(true);
+            
+            Log::info('S3 Direct Upload - Queue dispatch finished.', [
+                'duration_ms' => ($queueEndTime - $queueStartTime) * 1000
+            ]);
 
             $totalTime = microtime(true);
-            Log::info('S3 Direct Upload - Process finished before response.', ['total_duration_ms' => ($totalTime - $startTime) * 1000]);
+            Log::info('S3 Direct Upload - Process finished before response.', [
+                'total_duration_ms' => ($totalTime - $startTime) * 1000,
+                'file_size_mb' => round($fileSize / 1024 / 1024, 2),
+                'breakdown' => [
+                    'validation_ms' => ($validationTime - $startTime) * 1000,
+                    'data_extraction_ms' => ($dataExtractionTime - $validationTime) * 1000,
+                    'database_save_ms' => ($dbSaveTime - $dataExtractionTime) * 1000,
+                    'session_save_ms' => ($sessionSaveTime - $dbSaveTime) * 1000,
+                    'queue_dispatch_ms' => ($queueEndTime - $queueStartTime) * 1000
+                ]
+            ]);
 
             return response()->json([
                 'success' => true,
