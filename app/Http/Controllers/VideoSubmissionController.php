@@ -154,8 +154,9 @@ class VideoSubmissionController extends Controller
             $fileSize = $request->input('file_size', 0);
             $contentType = $request->input('content_type', 'video/quicktime');
             
-            // 데이터베이스에 정보 저장
-            $submission = VideoSubmission::create([
+            // 데이터베이스에 정보 저장 (최적화된 필드만)
+            $submission = new VideoSubmission();
+            $submission->fill([
                 'region' => $request->region,
                 'institution_name' => $request->institution_name,
                 'class_name' => $request->class_name,
@@ -166,31 +167,31 @@ class VideoSubmissionController extends Controller
                 'parent_name' => $request->parent_name,
                 'parent_phone' => $request->parent_phone,
                 'unit_topic' => $request->unit_topic,
-                'video_file_path' => $s3Key, // S3 키 저장
-                'video_file_name' => $fileName, // 파일명 저장
-                'video_file_type' => $contentType, // 실제 Content-Type 사용
-                'video_file_size' => $fileSize, // 실제 파일 크기 저장
-                'video_url' => $request->s3_url, // S3 URL 저장
-                'upload_method' => 's3_direct', // 업로드 방법 기록
+                'video_file_path' => $s3Key,
+                'video_file_name' => $fileName,
+                'video_file_type' => $contentType,
+                'video_file_size' => $fileSize,
+                'video_url' => $request->s3_url,
+                'upload_method' => 's3_direct',
                 'privacy_consent' => true,
                 'privacy_consent_at' => now(),
                 'status' => VideoSubmission::STATUS_UPLOADED
             ]);
-
-            // SMS 알림 발송 (성능을 위해 조건부 처리)
-            if (config('services.twilio.account_sid')) {
-                try {
-                    $this->sendSmsNotification($submission);
-                } catch (\Exception $e) {
-                    // SMS 실패가 업로드 성공을 방해하지 않도록 함
-                    Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
-                }
-            }
+            $submission->save();
 
             // 세션에 submission_id 저장 (성공 페이지에서 사용)
             session(['submission_id' => $submission->id]);
 
-            // 성공 로깅 간소화
+            // 응답 후 SMS 알림 발송 (성능 향상을 위해 응답 후 처리)
+            if (config('services.twilio.account_sid')) {
+                register_shutdown_function(function() use ($submission) {
+                    try {
+                        $this->sendSmsNotification($submission);
+                    } catch (\Exception $e) {
+                        Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
+                    }
+                });
+            }
 
             return response()->json([
                 'success' => true,

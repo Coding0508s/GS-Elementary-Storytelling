@@ -85,15 +85,7 @@ class S3UploadController extends Controller
             // 고유한 파일명 생성 (기관명_이름_학년_원본파일명_타임스탬프.확장자)
             $uniqueFilename = 'videos/' . date('Y/m/d') . '/' . $customFilename;
             
-            Log::info('S3 파일명 생성', [
-                'original_filename' => $originalFilename,
-                'sanitized_filename' => $filename,
-                'custom_filename' => $customFilename,
-                'unique_filename' => $uniqueFilename,
-                'institution_name' => $request->input('institution_name'),
-                'student_name' => $request->input('student_name_korean'),
-                'grade' => $request->input('grade')
-            ]);
+            // 로깅 최소화로 성능 향상
             
             // S3 클라이언트 생성
             $s3Client = new S3Client([
@@ -116,20 +108,12 @@ class S3UploadController extends Controller
 
             $presignedUrl = $s3Client->createPresignedRequest($command, '+15 minutes')->getUri();
 
-            Log::info('Presigned URL 생성됨', [
-                'filename' => $filename,
-                's3_key' => $uniqueFilename,
-                'file_size' => $fileSize,
-                'content_type' => $contentType,
-            ]);
+            // 성공 로깅 생략
 
             return response()->json([
                 'presigned_url' => (string) $presignedUrl,
                 's3_key' => $uniqueFilename,
                 's3_url' => 'https://' . config('filesystems.disks.s3.bucket') . '.s3.' . config('filesystems.disks.s3.region') . '.amazonaws.com/' . $uniqueFilename,
-                'expires_in' => 900, // 15분
-                'bucket' => config('filesystems.disks.s3.bucket'),
-                'region' => config('filesystems.disks.s3.region'),
             ]);
 
         } catch (\Exception $e) {
