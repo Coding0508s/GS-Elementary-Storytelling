@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use App\Models\Institution;
+use App\Jobs\SendSmsJob;
 
 class VideoSubmissionController extends Controller
 {
@@ -194,16 +196,8 @@ class VideoSubmissionController extends Controller
             $sessionSaveTime = microtime(true);
             Log::info('S3 Direct Upload - Session save finished.', ['duration_ms' => ($sessionSaveTime - $dbSaveTime) * 1000]);
 
-            // ⚡ SMS 알림 비동기 처리 (응답 속도 향상)
-            if (config('services.twilio.account_sid')) {
-                register_shutdown_function(function() use ($submission) {
-                    try {
-                        $this->sendSmsNotification($submission);
-                    } catch (\Exception $e) {
-                        Log::warning('SMS 발송 실패', ['error' => $e->getMessage()]);
-                    }
-                });
-            }
+            // ⚡ SMS 알림을 Queue에 추가 (즉시 응답)
+            SendSmsJob::dispatch($submission);
 
             $totalTime = microtime(true);
             Log::info('S3 Direct Upload - Process finished before response.', ['total_duration_ms' => ($totalTime - $startTime) * 1000]);
