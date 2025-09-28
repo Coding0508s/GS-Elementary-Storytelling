@@ -636,15 +636,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('S3 업로드 정보가 불완전합니다.');
             }
             
-            formData.append('s3_key', s3Key);
-            formData.append('s3_url', s3Url);
-            formData.append('file_size', file.size);
-            formData.append('content_type', file.type);
+            // ⚡ 새로운 FormData 생성 (파일 제외, 필수 정보만)
+            const serverFormData = new FormData();
             
-            // ⚡ 서버에 폼 데이터 제출 (최적화됨)
+            // 폼 필드만 추가 (파일 제외)
+            serverFormData.append('region', formData.get('region'));
+            serverFormData.append('institution_name', formData.get('institution_name'));
+            serverFormData.append('class_name', formData.get('class_name'));
+            serverFormData.append('student_name_korean', formData.get('student_name_korean'));
+            serverFormData.append('student_name_english', formData.get('student_name_english'));
+            serverFormData.append('grade', formData.get('grade'));
+            serverFormData.append('age', formData.get('age'));
+            serverFormData.append('parent_name', formData.get('parent_name'));
+            serverFormData.append('parent_phone', formData.get('parent_phone'));
+            serverFormData.append('unit_topic', formData.get('unit_topic') || '');
+            
+            // S3 업로드 정보 추가
+            serverFormData.append('s3_key', s3Key);
+            serverFormData.append('s3_url', s3Url);
+            serverFormData.append('file_size', file.size);
+            serverFormData.append('content_type', file.type);
+            
+            console.log('서버 제출 시작 (파일 제외, 메타데이터만)...');
+            
+            // ⚡ 서버에 최적화된 데이터만 제출
             const response = await fetch('{{ route("upload.process") }}', {
                 method: 'POST',
-                body: formData,
+                body: serverFormData,
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 }
