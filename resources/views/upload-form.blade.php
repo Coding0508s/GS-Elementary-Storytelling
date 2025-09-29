@@ -177,12 +177,12 @@
             <!-- 비디오 업로드 -->
             <div class="card mb-2">
                 <div class="card-header bg-light">
-                    <h5 class="mb-0"><i class="bi bi-camera-video"></i> 비디오 파일 업로드</h5>
+                    <h5 class="mb-0"><i class="bi bi-camera-video"></i> 영상 파일 업로드</h5>
                 </div>
                 <div class="card-body">
                     <div class="file-upload-area" onclick="document.getElementById('video_file').click()">
                         <i class="bi bi-cloud-upload fs-2 text-muted mb-2"></i>
-                        <h6>여기를 클릭하여 비디오 파일을 선택하거나 여기에 드래그하세요</h6>
+                        <h6>여기를 클릭하여 영상을 선택하거나 여기에 드래그하세요</h6>
                         <p class="text-muted">
                             지원 형식: MP4, MOV<br>
                             최대 크기: 1GB
