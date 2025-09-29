@@ -262,7 +262,7 @@ class VideoSubmissionController extends Controller
                     'data_extraction_ms' => ($dataExtractionTime - $validationTime) * 1000,
                     'database_save_ms' => ($dbSaveTime - $dataExtractionTime) * 1000,
                     'session_save_ms' => ($sessionSaveTime - $dbSaveTime) * 1000,
-                    'queue_dispatch_ms' => ($queueEndTime - $queueStartTime) * 1000
+                    'sms_dispatch_ms' => ($smsEndTime - $smsStartTime) * 1000
                 ]
             ]);
 
