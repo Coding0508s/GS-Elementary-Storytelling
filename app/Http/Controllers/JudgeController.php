@@ -126,6 +126,14 @@ class JudgeController extends Controller
     {
         $judge = Auth::guard('admin')->user();
         
+        // 전체 배정된 영상 개수 및 상태별 개수 계산
+        $allAssignments = VideoAssignment::where('admin_id', $judge->id)->get();
+        $totalAssigned = $allAssignments->count();
+        $pendingCount = $allAssignments->where('status', VideoAssignment::STATUS_ASSIGNED)->count();
+        $inProgressCount = $allAssignments->where('status', VideoAssignment::STATUS_IN_PROGRESS)->count();
+        $completedCount = $allAssignments->where('status', VideoAssignment::STATUS_COMPLETED)->count();
+        
+        // 페이지네이션을 위한 assignments
         $assignments = VideoAssignment::where('admin_id', $judge->id)
                                     ->with(['videoSubmission'])
                                     ->orderBy('created_at', 'asc')
@@ -140,7 +148,14 @@ class JudgeController extends Controller
             return $assignment;
         });
 
-        return view('judge.video-list', compact('assignments', 'judge'));
+        return view('judge.video-list', compact(
+            'assignments', 
+            'judge',
+            'totalAssigned',
+            'pendingCount',
+            'inProgressCount', 
+            'completedCount'
+        ));
     }
 
     /**

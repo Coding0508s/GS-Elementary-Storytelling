@@ -21,7 +21,7 @@
                 <div class="display-4 text-primary mb-2">
                     <i class="bi bi-camera-video"></i>
                 </div>
-                <h3 class="text-primary">{{ number_format($assignments->count()) }}</h3>
+                <h3 class="text-primary">{{ number_format($totalAssigned) }}</h3>
                 <p class="card-text text-muted">전체 배정</p>
             </div>
         </div>
@@ -33,7 +33,7 @@
                 <div class="display-4 text-warning mb-2">
                     <i class="bi bi-clock"></i>
                 </div>
-                <h3 class="text-warning">{{ number_format($assignments->where('status', 'assigned')->count()) }}</h3>
+                <h3 class="text-warning">{{ number_format($pendingCount) }}</h3>
                 <p class="card-text text-muted">심사 대기</p>
             </div>
         </div>
@@ -45,7 +45,7 @@
                 <div class="display-4 text-info mb-2">
                     <i class="bi bi-arrow-clockwise"></i>
                 </div>
-                <h3 class="text-info">{{ number_format($assignments->where('status', 'in_progress')->count()) }}</h3>
+                <h3 class="text-info">{{ number_format($inProgressCount) }}</h3>
                 <p class="card-text text-muted">심사 진행중</p>
             </div>
         </div>
@@ -57,7 +57,7 @@
                 <div class="display-4 text-success mb-2">
                     <i class="bi bi-check-circle"></i>
                 </div>
-                <h3 class="text-success">{{ number_format($assignments->where('status', 'completed')->count()) }}</h3>
+                <h3 class="text-success">{{ number_format($completedCount) }}</h3>
                 <p class="card-text text-muted">심사 완료</p>
             </div>
         </div>
