@@ -304,31 +304,53 @@ class AdminController extends Controller
      */
     public function downloadExcel(Request $request)
     {
-        // 관리자만 접근 가능하도록 체크
-        $admin = Auth::guard('admin')->user();
-        if (!$admin || !$admin->isAdmin()) {
-            return redirect()->route('judge.dashboard')
-                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
-        }
+        try {
+            Log::info('Excel 다운로드 시작', [
+                'admin_id' => Auth::guard('admin')->id(),
+                'memory_limit_before' => ini_get('memory_limit'),
+                'time_limit_before' => ini_get('max_execution_time')
+            ]);
 
-        // 메모리 및 타임아웃 설정
-        ini_set('memory_limit', '512M');
-        set_time_limit(300); // 5분
-        
-        // 출력 버퍼 정리
-        if (ob_get_level()) {
-            ob_end_clean();
-        }
+            // 관리자만 접근 가능하도록 체크
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                Log::warning('Excel 다운로드 권한 없음', ['user_id' => $admin->id ?? 'none']);
+                return redirect()->route('judge.dashboard')
+                               ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+            }
 
-        $submissions = VideoSubmission::with(['evaluations', 'assignments.admin'])
-                                    ->orderBy('created_at', 'asc')
-                                    ->get();
+            // 메모리 및 타임아웃 설정
+            ini_set('memory_limit', '512M');
+            set_time_limit(300); // 5분
+            
+            Log::info('PHP 설정 변경 완료', [
+                'memory_limit_after' => ini_get('memory_limit'),
+                'time_limit_after' => ini_get('max_execution_time')
+            ]);
+            
+            // 출력 버퍼 정리
+            if (ob_get_level()) {
+                ob_end_clean();
+                Log::info('출력 버퍼 정리 완료');
+            }
 
-        // PhpSpreadsheet 사용
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
+            Log::info('데이터베이스 조회 시작');
+            $submissions = VideoSubmission::with(['evaluations', 'assignments.admin'])
+                                        ->orderBy('created_at', 'asc')
+                                        ->get();
+            
+            Log::info('데이터베이스 조회 완료', [
+                'submissions_count' => $submissions->count(),
+                'memory_usage' => memory_get_usage(true) / 1024 / 1024 . 'MB'
+            ]);
 
-        // 헤더 설정
+            // PhpSpreadsheet 사용
+            Log::info('PhpSpreadsheet 객체 생성 시작');
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            Log::info('PhpSpreadsheet 객체 생성 완료');
+
+            // 헤더 설정
         $headers = [
             '접수번호', '학생명(한글)', '학생명(영어)', '거주지역', '기관명', '반명', '학년', '나이',
             '학부모명', '연락처', 'Unit주제', '업로드일시', '파일명', '파일크기',
@@ -473,24 +495,40 @@ class AdminController extends Controller
         // 파일명 생성
         $filename = 'storytelling_data_' . date('Y-m-d_H-i-s') . '.xlsx';
 
-        try {
             // Excel 파일 생성
+            Log::info('Excel Writer 생성 시작');
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            Log::info('Excel Writer 생성 완료');
             
             // 임시 파일에 저장
             $tempFile = storage_path('app/temp/' . $filename);
+            Log::info('임시 파일 경로 설정', ['temp_file' => $tempFile]);
+            
             if (!file_exists(dirname($tempFile))) {
                 mkdir(dirname($tempFile), 0755, true);
+                Log::info('임시 디렉토리 생성 완료');
             }
             
+            Log::info('Excel 파일 저장 시작');
             $writer->save($tempFile);
+            Log::info('Excel 파일 저장 완료');
 
             // 파일이 제대로 생성되었는지 확인
             if (!file_exists($tempFile) || filesize($tempFile) == 0) {
+                Log::error('Excel 파일 생성 실패', [
+                    'file_exists' => file_exists($tempFile),
+                    'file_size' => file_exists($tempFile) ? filesize($tempFile) : 0
+                ]);
                 throw new \Exception('Excel 파일 생성에 실패했습니다.');
             }
 
+            Log::info('Excel 파일 생성 성공', [
+                'file_size' => filesize($tempFile),
+                'memory_usage' => memory_get_usage(true) / 1024 / 1024 . 'MB'
+            ]);
+
             // 파일 다운로드
+            Log::info('파일 다운로드 응답 생성 시작');
             return response()->download($tempFile, $filename, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'Content-Disposition' => 'attachment; filename="' . $filename . '"',
@@ -500,7 +538,12 @@ class AdminController extends Controller
             ])->deleteFileAfterSend(true);
             
         } catch (\Exception $e) {
-            Log::error('Excel download error: ' . $e->getMessage());
+            Log::error('Excel 다운로드 오류', [
+                'error_message' => $e->getMessage(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return redirect()->back()->with('error', 'Excel 파일 다운로드 중 오류가 발생했습니다: ' . $e->getMessage());
         }
     }
