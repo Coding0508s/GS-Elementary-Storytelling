@@ -354,10 +354,9 @@ class AdminController extends Controller
         $headers = [
             '접수번호', '학생명(한글)', '학생명(영어)', '거주지역', '기관명', '반명', '학년', '나이',
             '학부모명', '연락처', 'Unit주제', '업로드일시', '파일명', '파일크기',
-            '배정된심사위원1', '배정된심사위원2', '심사상태', 
-            '심사1_발음', '심사1_어휘', '심사1_유창성', '심사1_자신감', '심사1_총점',
-            '심사2_발음', '심사2_어휘', '심사2_유창성', '심사2_자신감', '심사2_총점',
-            '두심사위원_총합점수', '순위', '심사코멘트1', '심사코멘트2', '심사완료일시'
+            '배정된심사위원', '심사상태', 
+            '발음점수', '어휘점수', '유창성점수', '자신감점수', '총점',
+            '순위', '심사코멘트', '심사완료일시'
         ];
 
         // 헤더 스타일 설정
@@ -383,18 +382,19 @@ class AdminController extends Controller
             $sheet->getStyle($column . '1')->applyFromArray($headerStyle);
         }
 
-        // 먼저 완전히 평가된 영상들의 순위를 계산
+        // 평가가 완료된 영상들의 순위를 계산 (1명의 심사위원)
         $rankedSubmissions = $submissions->filter(function ($submission) {
-            return $submission->evaluations->count() >= 2;
+            return $submission->evaluations->count() >= 1;
         })->map(function ($submission) {
-            $totalScore = $submission->evaluations->sum('total_score');
+            $evaluation = $submission->evaluations->first();
+            $totalScore = $evaluation ? $evaluation->total_score : 0;
             return (object) [
                 'submission' => $submission,
                 'total_score' => $totalScore,
                 'created_at' => $submission->created_at
             ];
         })->sort(function ($a, $b) {
-            // 1차 정렬: 총합 점수 내림차순
+            // 1차 정렬: 총점 내림차순
             if ($a->total_score !== $b->total_score) {
                 return $b->total_score <=> $a->total_score;
             }
@@ -414,29 +414,25 @@ class AdminController extends Controller
             $evaluations = $submission->evaluations;
             $assignments = $submission->assignments;
             
-            // 심사위원 정보
-            $judge1 = $assignments->count() > 0 ? $assignments[0]->admin->name : '미배정';
-            $judge2 = $assignments->count() > 1 ? $assignments[1]->admin->name : '미배정';
+            // 심사위원 정보 (1명만)
+            $judge = $assignments->count() > 0 ? $assignments[0]->admin->name : '미배정';
             
-            // 평가 정보
-            $eval1 = $evaluations->count() > 0 ? $evaluations[0] : null;
-            $eval2 = $evaluations->count() > 1 ? $evaluations[1] : null;
+            // 평가 정보 (1개만)
+            $evaluation = $evaluations->count() > 0 ? $evaluations[0] : null;
             
             // 심사 상태
             $status = '';
-            if ($evaluations->count() == 2) {
+            if ($evaluations->count() >= 1) {
                 $status = '완료';
-            } elseif ($evaluations->count() == 1) {
-                $status = '진행중';
             } else {
                 $status = '미시작';
             }
             
-            // 총합 점수 계산
-            $totalCombinedScore = $evaluations->sum('total_score');
+            // 총점수 및 순위
+            $totalScore = $evaluation ? $evaluation->total_score : '';
             $rank = isset($rankMap[$submission->id]) ? $rankMap[$submission->id] : '';
             
-            // 접수번호
+            // 기본 정보
             $sheet->setCellValue('A' . $rowIndex, $submission->receipt_number);
             $sheet->setCellValue('B' . $rowIndex, $submission->student_name_korean);
             $sheet->setCellValue('C' . $rowIndex, $submission->student_name_english);
@@ -451,47 +447,31 @@ class AdminController extends Controller
             $sheet->setCellValue('L' . $rowIndex, $submission->created_at->format('Y-m-d H:i:s'));
             $sheet->setCellValue('M' . $rowIndex, $submission->video_file_name);
             $sheet->setCellValue('N' . $rowIndex, $submission->getFormattedFileSizeAttribute());
-            $sheet->setCellValue('O' . $rowIndex, $judge1);
-            $sheet->setCellValue('P' . $rowIndex, $judge2);
-            $sheet->setCellValue('Q' . $rowIndex, $status);
             
-            // 심사1 점수
-            $sheet->setCellValue('R' . $rowIndex, $eval1 ? $eval1->pronunciation_score : '');
-            $sheet->setCellValue('S' . $rowIndex, $eval1 ? $eval1->vocabulary_score : '');
-            $sheet->setCellValue('T' . $rowIndex, $eval1 ? $eval1->fluency_score : '');
-            $sheet->setCellValue('U' . $rowIndex, $eval1 ? $eval1->confidence_score : '');
-            $sheet->setCellValue('V' . $rowIndex, $eval1 ? $eval1->total_score : '');
+            // 심사 정보 (1명의 심사위원)
+            $sheet->setCellValue('O' . $rowIndex, $judge);
+            $sheet->setCellValue('P' . $rowIndex, $status);
             
-            // 심사2 점수
-            $sheet->setCellValue('W' . $rowIndex, $eval2 ? $eval2->pronunciation_score : '');
-            $sheet->setCellValue('X' . $rowIndex, $eval2 ? $eval2->vocabulary_score : '');
-            $sheet->setCellValue('Y' . $rowIndex, $eval2 ? $eval2->fluency_score : '');
-            $sheet->setCellValue('Z' . $rowIndex, $eval2 ? $eval2->confidence_score : '');
-            $sheet->setCellValue('AA' . $rowIndex, $eval2 ? $eval2->total_score : '');
+            // 점수 정보
+            $sheet->setCellValue('Q' . $rowIndex, $evaluation ? $evaluation->pronunciation_score : '');
+            $sheet->setCellValue('R' . $rowIndex, $evaluation ? $evaluation->vocabulary_score : '');
+            $sheet->setCellValue('S' . $rowIndex, $evaluation ? $evaluation->fluency_score : '');
+            $sheet->setCellValue('T' . $rowIndex, $evaluation ? $evaluation->confidence_score : '');
+            $sheet->setCellValue('U' . $rowIndex, $evaluation ? $evaluation->total_score : '');
             
-            // 총합 점수와 순위
-            $sheet->setCellValue('AB' . $rowIndex, $evaluations->count() >= 2 ? $totalCombinedScore : '');
-            $sheet->setCellValue('AC' . $rowIndex, $rank ? $rank . '위' : '');
+            // 순위 및 코멘트
+            $sheet->setCellValue('V' . $rowIndex, $rank ? $rank . '위' : '');
+            $sheet->setCellValue('W' . $rowIndex, $evaluation ? $evaluation->comments : '');
             
-            // 코멘트
-            $sheet->setCellValue('AD' . $rowIndex, $eval1 ? $eval1->comments : '');
-            $sheet->setCellValue('AE' . $rowIndex, $eval2 ? $eval2->comments : '');
-            
-            // 완료 일시 (마지막 평가 완료 시간)
-            $lastEvaluatedAt = $evaluations->max('evaluated_at');
-            $sheet->setCellValue('AF' . $rowIndex, $lastEvaluatedAt ? $lastEvaluatedAt->format('Y-m-d H:i:s') : '');
+            // 완료 일시
+            $lastEvaluatedAt = $evaluation ? $evaluation->evaluated_at : null;
+            $sheet->setCellValue('X' . $rowIndex, $lastEvaluatedAt ? $lastEvaluatedAt->format('Y-m-d H:i:s') : '');
             
             $rowIndex++;
         }
 
-        // 열 너비 자동 조정 (AF열까지)
-        foreach (range('A', 'Z') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
-        
-        // AA부터 AF까지의 열 (다중 문자 열은 배열로 직접 지정)
-        $extendedColumns = ['AA', 'AB', 'AC', 'AD', 'AE', 'AF'];
-        foreach ($extendedColumns as $column) {
+        // 열 너비 자동 조정 (X열까지)
+        foreach (range('A', 'X') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
