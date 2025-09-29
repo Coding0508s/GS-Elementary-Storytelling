@@ -488,7 +488,10 @@ class AdminController extends Controller
         foreach (range('A', 'Z') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
-        foreach (range('AA', 'AF') as $column) {
+        
+        // AA부터 AF까지의 열 (다중 문자 열은 배열로 직접 지정)
+        $extendedColumns = ['AA', 'AB', 'AC', 'AD', 'AE', 'AF'];
+        foreach ($extendedColumns as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
