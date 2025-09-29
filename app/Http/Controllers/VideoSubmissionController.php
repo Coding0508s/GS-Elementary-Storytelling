@@ -202,13 +202,34 @@ class VideoSubmissionController extends Controller
             $sessionSaveTime = microtime(true);
             Log::info('S3 Direct Upload - Session save finished.', ['duration_ms' => ($sessionSaveTime - $dbSaveTime) * 1000]);
 
-            // ⚡ SMS 알림을 Queue에 추가 (즉시 응답)
-            $queueStartTime = microtime(true);
-            SendSmsJob::dispatch($submission);
-            $queueEndTime = microtime(true);
+            // ⚡ SMS 알림을 즉시 발송 (동기식)
+            $smsStartTime = microtime(true);
+            try {
+                $twilioService = new \App\Services\TwilioSmsService();
+                $smsResult = $twilioService->sendUploadCompletionNotification($submission);
+                
+                if ($smsResult['success']) {
+                    Log::info('SMS 즉시 발송 성공', [
+                        'submission_id' => $submission->id,
+                        'phone' => $submission->parent_phone,
+                        'message_sid' => $smsResult['message_sid']
+                    ]);
+                } else {
+                    Log::error('SMS 즉시 발송 실패', [
+                        'submission_id' => $submission->id,
+                        'error' => $smsResult['error'] ?? 'Unknown error'
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('SMS 발송 예외 발생', [
+                    'submission_id' => $submission->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+            $smsEndTime = microtime(true);
             
-            Log::info('S3 Direct Upload - Queue dispatch finished.', [
-                'duration_ms' => ($queueEndTime - $queueStartTime) * 1000
+            Log::info('S3 Direct Upload - SMS 발송 완료', [
+                'duration_ms' => ($smsEndTime - $smsStartTime) * 1000
             ]);
 
             $totalTime = microtime(true);
