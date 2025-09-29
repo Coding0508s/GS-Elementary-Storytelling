@@ -202,29 +202,50 @@ class VideoSubmissionController extends Controller
             $sessionSaveTime = microtime(true);
             Log::info('S3 Direct Upload - Session save finished.', ['duration_ms' => ($sessionSaveTime - $dbSaveTime) * 1000]);
 
-            // ⚡ SMS 알림을 즉시 발송 (동기식)
+            // ⚡ SMS 알림 발송 (설정에 따라 동기식 또는 Queue)
             $smsStartTime = microtime(true);
             try {
-                $twilioService = new \App\Services\TwilioSmsService();
-                $smsResult = $twilioService->sendUploadCompletionNotification($submission);
-                
-                if ($smsResult['success']) {
-                    Log::info('SMS 즉시 발송 성공', [
-                        'submission_id' => $submission->id,
-                        'phone' => $submission->parent_phone,
-                        'message_sid' => $smsResult['message_sid']
-                    ]);
+                // Twilio 설정이 있는지 확인
+                if (config('services.twilio.account_sid')) {
+                    // 환경변수로 SMS 발송 방식 제어 (기본값: 동기식)
+                    $useSyncSms = env('SMS_SYNC_MODE', true);
+                    
+                    if ($useSyncSms) {
+                        // 동기식 즉시 발송
+                        $twilioService = app(\App\Services\TwilioSmsService::class);
+                        $smsResult = $twilioService->sendUploadCompletionNotification($submission);
+                        
+                        if ($smsResult['success']) {
+                            Log::info('SMS 즉시 발송 성공', [
+                                'submission_id' => $submission->id,
+                                'phone' => $submission->parent_phone,
+                                'message_sid' => $smsResult['message_sid']
+                            ]);
+                        } else {
+                            Log::error('SMS 즉시 발송 실패', [
+                                'submission_id' => $submission->id,
+                                'error' => $smsResult['error'] ?? 'Unknown error'
+                            ]);
+                        }
+                    } else {
+                        // Queue 방식 (fallback)
+                        \App\Jobs\SendSmsJob::dispatch($submission);
+                        Log::info('SMS Queue에 추가됨', [
+                            'submission_id' => $submission->id
+                        ]);
+                    }
                 } else {
-                    Log::error('SMS 즉시 발송 실패', [
-                        'submission_id' => $submission->id,
-                        'error' => $smsResult['error'] ?? 'Unknown error'
+                    Log::info('Twilio 설정이 없어 SMS 발송 건너뜀', [
+                        'submission_id' => $submission->id
                     ]);
                 }
             } catch (\Exception $e) {
                 Log::error('SMS 발송 예외 발생', [
                     'submission_id' => $submission->id,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
                 ]);
+                // SMS 발송 실패해도 업로드는 계속 진행
             }
             $smsEndTime = microtime(true);
             
