@@ -116,16 +116,14 @@
                     
                     <div class="row">
                         <div class="col-md-6 mb-2">
-                            <label for="age" class="form-label">나이 <span class="text-danger">*</span></label>
-                            <input type="number" 
-                                   class="form-control" 
-                                   id="age" 
-                                   name="age" 
-                                   value="{{ old('age') }}" 
-                                   min="6" 
-                                   max="7"
-                                   placeholder="한국 나이를 입력해주세요."
-                                   required>
+                            <label for="age" class="form-label">나이 (아래의 나이를 선택해주세요.) <span class="text-danger">*</span></label>
+                            <select class="form-control" id="age" name="age" required>
+                                <option value="">나이를 선택하세요</option>
+                                <option value="5" {{ old('age') == '5' ? 'selected' : '' }}>5세</option>
+                                <option value="6" {{ old('age') == '6' ? 'selected' : '' }}>6세</option>
+                                <option value="7" {{ old('age') == '7' ? 'selected' : '' }}>7세</option>
+                                <option value="8" {{ old('age') == '8' ? 'selected' : '' }}>8세</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-2">
                             <label for="unit_topic" class="form-label">스토리의 제목을 입력해주세요. <span class="text-danger">*</span></label>
@@ -148,7 +146,7 @@
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-6 mb-2">
+                        <div class="col-md-5 mb-2">
                             <label for="parent_name" class="form-label">학부모 성함 <span class="text-danger">*</span></label>
                             <input type="text" 
                                    class="form-control" 
@@ -158,8 +156,9 @@
                                    placeholder="예: 김철수"
                                    required>
                         </div>
-                        <div class="col-md-6 mb-2">
+                        <div class="col-md-7 mb-2">
                             <label for="parent_phone" class="form-label">학부모 전화번호 <span class="text-danger">*</span></label>
+                            <div class="input-group">
                             <input type="tel" 
                                    class="form-control" 
                                    id="parent_phone" 
@@ -168,16 +167,17 @@
                                    placeholder="010-1234-5678"
                                    pattern="[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}"
                                    required>
+                                <button class="btn btn-primary rounded-end" type="button" id="btn-send-otp" style="border-top-left-radius: 0; border-bottom-left-radius: 0;">
+                                    인증번호 발송
+                                </button>
+                            </div>
                             <div class="form-text">업로드 완료 알림 및 본인 인증에 사용됩니다.</div>
                         </div>
                         <div class="col-md-6 mb-2">
-                            <label class="form-label">휴대폰 인증 <span class="text-danger">*</span></label>
+                            <label for="otp_code" class="form-label">인증번호 입력 <span class="text-danger">*</span></label>
                             <div class="input-group">
                                 <input type="text" id="otp_code" class="form-control" placeholder="인증번호 6자리" maxlength="6" pattern="[0-9]{6}" required>
-                                <button class="btn btn-outline-primary" type="button" id="btn-send-otp">
-                                    인증번호 발송
-                                </button>
-                                <button class="btn btn-primary" type="button" id="btn-verify-otp" disabled>
+                                <button class="btn btn-success rounded-end" type="button" id="btn-verify-otp" disabled style="border-top-left-radius: 0; border-bottom-left-radius: 0;">
                                     인증 확인
                                 </button>
                             </div>
@@ -270,6 +270,43 @@
 <script type="application/json" id="regions-data">@json(\App\Models\VideoSubmission::REGIONS)</script>
 
 <script>
+// 동시 접속 최적화: 재시도 로직이 포함된 fetch 함수
+async function fetchWithRetry(url, options, maxRetries = 3, delay = 1000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(url, options);
+            
+            if (response.ok) {
+                return await response.json();
+            }
+            
+            // 서버 과부하 상태인 경우 더 긴 대기
+            if (response.status === 503 || response.status === 429) {
+                const retryAfter = response.headers.get('Retry-After') || 3;
+                const waitTime = Math.max(delay * attempt, retryAfter * 1000);
+                
+                if (attempt < maxRetries) {
+                    console.log(`서버 과부하 감지. ${waitTime/1000}초 후 재시도... (${attempt}/${maxRetries})`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    continue;
+                }
+            }
+            
+            // 기타 오류의 경우 JSON 파싱 시도
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}`);
+            
+        } catch (error) {
+            if (attempt === maxRetries) {
+                throw error;
+            }
+            
+            console.log(`요청 실패 (${attempt}/${maxRetries}): ${error.message}. ${delay}ms 후 재시도...`);
+            await new Promise(resolve => setTimeout(resolve, delay * attempt));
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // 페이지 로드 시 페이드인 효과
     document.body.style.opacity = '0';
@@ -587,8 +624,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // S3에 파일 업로드 (로깅 최소화로 성능 향상)
             
-            // Presigned URL 요청
-            const presignedResponse = await fetch('/api/s3/presigned-url', {
+            // Presigned URL 요청 (재시도 로직 포함)
+            const presignedData = await fetchWithRetry('/api/s3/presigned-url', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -602,13 +639,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     student_name_korean: userInfo.student_name_korean,
                     grade: userInfo.grade
                 })
-            });
-
-            if (!presignedResponse.ok) {
-                throw new Error('Presigned URL 생성에 실패했습니다.');
-            }
-
-            const presignedData = await presignedResponse.json();
+            }, 3, 1000); // 최대 3회 재시도, 1초 간격
 
             // ☁️ S3에 직접 업로드 (최적화됨)
             const xhr = new XMLHttpRequest();

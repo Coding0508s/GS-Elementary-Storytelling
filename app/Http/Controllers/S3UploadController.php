@@ -34,15 +34,29 @@ class S3UploadController extends Controller
                 ], 403);
             }
 
-            // Rate limiting 체크 (IP당 분당 10회 제한)
-            $key = 's3_presigned_url:' . $request->ip();
-            $attempts = cache()->get($key, 0);
-            if ($attempts >= 10) {
+            // 개선된 Rate limiting (동시 접속자 고려)
+            $ipKey = 's3_presigned_url:' . $request->ip();
+            $globalKey = 's3_presigned_url:global';
+            
+            // IP별 제한 (분당 15회로 증가)
+            $ipAttempts = cache()->get($ipKey, 0);
+            if ($ipAttempts >= 15) {
                 return response()->json([
                     'error' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'
                 ], 429);
             }
-            cache()->put($key, $attempts + 1, 60); // 1분간 유지
+            
+            // 전역 동시 요청 제한 (초당 100개)
+            $globalAttempts = cache()->get($globalKey, 0);
+            if ($globalAttempts >= 100) {
+                return response()->json([
+                    'error' => '서버가 바쁩니다. 잠시 후 다시 시도해주세요.'
+                ], 503);
+            }
+            
+            // 카운터 증가
+            cache()->put($ipKey, $ipAttempts + 1, 60); // 1분간 유지
+            cache()->put($globalKey, $globalAttempts + 1, 1); // 1초간 유지
 
             $originalFilename = $request->input('filename');
             $contentType = $request->input('content_type');
@@ -94,15 +108,8 @@ class S3UploadController extends Controller
             
             // 로깅 최소화로 성능 향상
             
-            // S3 클라이언트 생성
-            $s3Client = new S3Client([
-                'version' => 'latest',
-                'region' => config('filesystems.disks.s3.region'),
-                'credentials' => [
-                    'key' => config('filesystems.disks.s3.key'),
-                    'secret' => config('filesystems.disks.s3.secret'),
-                ],
-            ]);
+            // 최적화된 S3 클라이언트 생성 (연결 풀링 및 재사용)
+            $s3Client = $this->getOptimizedS3Client();
 
             // Presigned URL 생성 (15분 유효)
             $command = $s3Client->getCommand('PutObject', [
@@ -123,14 +130,35 @@ class S3UploadController extends Controller
                 's3_url' => 'https://' . config('filesystems.disks.s3.bucket') . '.s3.' . config('filesystems.disks.s3.region') . '.amazonaws.com/' . $uniqueFilename,
             ]);
 
+        } catch (\Aws\Exception\AwsException $e) {
+            // AWS 특정 오류 처리
+            Log::error('AWS Presigned URL 생성 실패', [
+                'aws_error_code' => $e->getAwsErrorCode(),
+                'aws_error_message' => $e->getAwsErrorMessage(),
+                'status_code' => $e->getStatusCode(),
+                'request_id' => $e->getAwsRequestId(),
+            ]);
+
+            // 동시 접속으로 인한 일시적 오류인 경우 재시도 안내
+            if (in_array($e->getAwsErrorCode(), ['Throttling', 'RequestLimitExceeded', 'ServiceUnavailable'])) {
+                return response()->json([
+                    'error' => '서버가 바쁩니다. 3초 후 다시 시도해주세요.',
+                    'retry_after' => 3
+                ], 503);
+            }
+
+            return response()->json([
+                'error' => 'AWS 서비스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+            ], 500);
+            
         } catch (\Exception $e) {
             Log::error('Presigned URL 생성 실패', [
                 'error' => $e->getMessage(),
-                'request_data' => $request->all(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
-                'error' => 'Presigned URL 생성에 실패했습니다.'
+                'error' => 'Presigned URL 생성에 실패했습니다. 잠시 후 다시 시도해주세요.'
             ], 500);
         }
     }
@@ -357,6 +385,41 @@ class S3UploadController extends Controller
         }
         
         return $customFilename;
+    }
+
+    /**
+     * 최적화된 S3 클라이언트 생성 (동시 접속 최적화)
+     */
+    private function getOptimizedS3Client()
+    {
+        static $s3Client = null;
+        
+        // 싱글톤 패턴으로 클라이언트 재사용
+        if ($s3Client === null) {
+            $s3Client = new S3Client([
+                'version' => 'latest',
+                'region' => config('filesystems.disks.s3.region'),
+                'credentials' => [
+                    'key' => config('filesystems.disks.s3.key'),
+                    'secret' => config('filesystems.disks.s3.secret'),
+                ],
+                'http' => [
+                    // 동시 접속 최적화 설정
+                    'timeout' => 30,
+                    'connect_timeout' => 10,
+                    'pool_size' => 50, // 연결 풀 크기 증가
+                    'verify' => true,
+                ],
+                'retries' => [
+                    'mode' => 'adaptive', // 적응형 재시도
+                    'max_attempts' => 3,
+                ],
+                'use_accelerate_endpoint' => false,
+                'use_dual_stack_endpoint' => false,
+            ]);
+        }
+        
+        return $s3Client;
     }
 
     /**
