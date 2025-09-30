@@ -48,7 +48,7 @@
                     </div>
                     
                     <div class="row mt-4">
-                        <div class="col-md-6">
+                        <div class="col-md-14">
                             <div class="card bg-light">
                                 <div class="card-body">
                                     <h6><i class="bi bi-clock"></i> 업로드 시간</h6>
@@ -105,7 +105,7 @@
                         </div>
                     </div> -->
                     
-                    <div class="mt-4">
+                    <!-- <div class="mt-4">
                         <div class="alert alert-warning">
                             <i class="bi bi-exclamation-triangle"></i>
                             <strong>중요 안내</strong><br>
@@ -113,10 +113,10 @@
                             • 문의사항은 각 교육기관을 통해 연락해주세요.<br>
                             • 개인정보는 대회 종료 후 안전하게 폐기됩니다.
                         </div>
-                    </div>
+                    </div> -->
                     
                     <!-- 자동 리다이렉트 안내 -->
-                    <div class="mt-4 mb-3">
+                    <!-- <div class="mt-4 mb-3">
                         <div class="alert alert-success">
                             <i class="bi bi-clock"></i>
                             <span id="redirect-message">10초 후 자동으로 GrapeSEED 스토리텔링 콘테스트 페이지로 이동합니다...</span>
@@ -124,15 +124,15 @@
                                 <div id="redirect-progress" class="progress-bar bg-success" style="width: 0%;"></div>
                             </div>
                         </div>
-                    </div>
+                    </div> -->
                     
                     <div class="mt-4">
                         <a href="{{ route('privacy.consent') }}" class="btn btn-primary me-3">
-                            <i class="bi bi-plus-circle"></i> 다른 학생 추가 업로드
+                            <i class="bi bi-plus-circle"></i> 다른 자녀 추가 업로드
                         </a>
-                        <button onclick="window.print()" class="btn btn-outline-secondary">
+                      <!--   <button onclick="window.print()" class="btn btn-outline-secondary">
                             <i class="bi bi-printer"></i> 확인증 인쇄
-                        </button>
+                        </button> -->
                     </div>
                 </div>
             </div>
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
     
     // 자동 리다이렉트 기능
-    let redirectTimer;
+    /* let redirectTimer;
     let countdownSeconds = 10;
     
     const redirectMessage = document.getElementById('redirect-message');
@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.history.pushState(null, null, window.location.href);
     };
 });
-
+ */
 // CSS 애니메이션 추가
 const style = document.createElement('style');
 style.textContent = `
