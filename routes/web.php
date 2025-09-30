@@ -28,6 +28,13 @@ Route::get('/upload', [VideoSubmissionController::class, 'showUploadForm'])
 Route::post('/upload', [VideoSubmissionController::class, 'uploadVideo'])
     ->name('upload.process');
 
+// 휴대폰 OTP 인증 (발송/검증)
+Route::post('/api/otp/send', [VideoSubmissionController::class, 'sendOtp'])
+    ->name('api.otp.send');
+
+Route::post('/api/otp/verify', [VideoSubmissionController::class, 'verifyOtp'])
+    ->name('api.otp.verify');
+
 // 업로드 성공 페이지
 Route::get('/upload-success', [VideoSubmissionController::class, 'showUploadSuccess'])
     ->name('upload.success');

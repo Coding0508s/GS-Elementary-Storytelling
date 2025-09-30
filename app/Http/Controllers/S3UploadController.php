@@ -27,6 +27,13 @@ class S3UploadController extends Controller
                 'grade' => 'nullable|string|max:50',
             ]);
 
+            // 업로드 전 OTP 검증 여부 확인 (세션)
+            if (!session('otp_verified') || session('otp_verified') !== true) {
+                return response()->json([
+                    'error' => '휴대폰 인증이 필요합니다. 인증 후 다시 시도해주세요.'
+                ], 403);
+            }
+
             // Rate limiting 체크 (IP당 분당 10회 제한)
             $key = 's3_presigned_url:' . $request->ip();
             $attempts = cache()->get($key, 0);
@@ -51,7 +58,7 @@ class S3UploadController extends Controller
             
             if (!in_array($extension, $allowedExtensions)) {
                 return response()->json([
-                    'error' => '지원하지 않는 파일 형식입니다. (mp4, avi, mov, wmv, flv, webm, mkv만 허용)'
+                    'error' => '지원하지 않는 파일 형식입니다. (mp4,mov만 허용)'
                 ], 400);
             }
 
@@ -274,7 +281,9 @@ class S3UploadController extends Controller
     private function getS3Url($s3Key)
     {
         try {
-            return Storage::disk('s3')->url($s3Key);
+            $bucket = config('filesystems.disks.s3.bucket');
+            $region = config('filesystems.disks.s3.region');
+            return 'https://' . $bucket . '.s3.' . $region . '.amazonaws.com/' . ltrim($s3Key, '/');
         } catch (\Exception $e) {
             Log::warning('S3 URL 생성 실패', ['s3_key' => $s3Key, 'error' => $e->getMessage()]);
             return '';
@@ -287,7 +296,20 @@ class S3UploadController extends Controller
     private function getS3TemporaryUrl($s3Key)
     {
         try {
-            return Storage::disk('s3')->temporaryUrl($s3Key, now()->addHour());
+            $s3Client = new S3Client([
+                'version' => 'latest',
+                'region' => config('filesystems.disks.s3.region'),
+                'credentials' => [
+                    'key' => config('filesystems.disks.s3.key'),
+                    'secret' => config('filesystems.disks.s3.secret'),
+                ],
+            ]);
+            $command = $s3Client->getCommand('GetObject', [
+                'Bucket' => config('filesystems.disks.s3.bucket'),
+                'Key' => $s3Key,
+            ]);
+            $request = $s3Client->createPresignedRequest($command, '+60 minutes');
+            return (string) $request->getUri();
         } catch (\Exception $e) {
             Log::warning('S3 임시 URL 생성 실패, 일반 URL 사용', ['s3_key' => $s3Key, 'error' => $e->getMessage()]);
             return $this->getS3Url($s3Key);

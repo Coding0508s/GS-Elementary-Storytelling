@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Models\Institution;
 use App\Jobs\SendSmsJob;
+use Illuminate\Support\Facades\Session;
 
 class VideoSubmissionController extends Controller
 {
@@ -44,6 +45,92 @@ class VideoSubmissionController extends Controller
         }
 
         return view('upload-form');
+    }
+
+    /**
+     * 업로드 전 휴대폰 인증번호(OTP) 전송
+     */
+    public function sendOtp(Request $request)
+    {
+        $request->validate([
+            'parent_phone' => 'required|string|min:10|max:20',
+        ]);
+
+        // 너무 잦은 요청 방지 (IP 기준 1분 3회)
+        $rateKey = 'otp_rate:' . $request->ip();
+        $rateAttempts = cache()->get($rateKey, 0);
+        if ($rateAttempts >= 3) {
+            return response()->json(['success' => false, 'message' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'], 429);
+        }
+        cache()->put($rateKey, $rateAttempts + 1, 60);
+
+        $phone = $request->input('parent_phone');
+        $code = (string) random_int(100000, 999999);
+
+        // 세션에 저장 (5분 유효)
+        $request->session()->put('otp_phone', $phone);
+        $request->session()->put('otp_code', $code);
+        $request->session()->put('otp_expires_at', now()->addMinutes(5));
+        $request->session()->put('otp_attempts', 0);
+
+        $message = "[GrapeSEED 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
+
+        try {
+            $twilio = new TwilioSmsService();
+            $result = $twilio->sendSms($phone, $message);
+            if (!$result['success']) {
+                return response()->json(['success' => false, 'message' => '인증번호 전송 실패: ' . ($result['error'] ?? 'Unknown')], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => '인증번호 전송 오류: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json(['success' => true, 'message' => '인증번호가 전송되었습니다.']);
+    }
+
+    /**
+     * 업로드 전 휴대폰 인증번호(OTP) 검증
+     */
+    public function verifyOtp(Request $request)
+    {
+        $request->validate([
+            'parent_phone' => 'required|string|min:10|max:20',
+            'code' => 'required|string|min:4|max:8',
+        ]);
+
+        $phone = $request->input('parent_phone');
+        $code = $request->input('code');
+
+        $storedPhone = $request->session()->get('otp_phone');
+        $storedCode = $request->session()->get('otp_code');
+        $expiresAt = $request->session()->get('otp_expires_at');
+        $attempts = (int) $request->session()->get('otp_attempts', 0);
+
+        if (!$storedPhone || !$storedCode || !$expiresAt) {
+            return response()->json(['success' => false, 'message' => '인증번호를 먼저 요청해주세요.'], 400);
+        }
+        if ($attempts >= 5) {
+            return response()->json(['success' => false, 'message' => '시도 횟수가 초과되었습니다. 인증번호를 다시 요청해주세요.'], 429);
+        }
+        if (now()->greaterThan($expiresAt)) {
+            return response()->json(['success' => false, 'message' => '인증번호가 만료되었습니다. 다시 요청해주세요.'], 400);
+        }
+        if ($storedPhone !== $phone) {
+            return response()->json(['success' => false, 'message' => '전화번호가 일치하지 않습니다.'], 400);
+        }
+
+        if (hash_equals($storedCode, $code)) {
+            // 검증 성공
+            $request->session()->put('otp_verified', true);
+            $request->session()->put('otp_verified_phone', $phone);
+            // 사용 후 코드 제거
+            $request->session()->forget(['otp_code']);
+            return response()->json(['success' => true, 'message' => '인증이 완료되었습니다.']);
+        }
+
+        // 실패 카운트 증가
+        $request->session()->put('otp_attempts', $attempts + 1);
+        return response()->json(['success' => false, 'message' => '인증번호가 올바르지 않습니다.'], 400);
     }
 
     /**
@@ -154,6 +241,13 @@ class VideoSubmissionController extends Controller
         }
 
         try {
+            // 서버 제출 시에도 OTP 검증 보장
+            if (!$request->session()->get('otp_verified')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '휴대폰 인증이 필요합니다.'
+                ], 403);
+            }
             // S3 키에서 파일명 추출 (파일 존재 확인 생략으로 성능 최적화)
             $s3Key = $request->s3_key;
             $fileName = basename($s3Key);
@@ -265,6 +359,9 @@ class VideoSubmissionController extends Controller
                     'sms_dispatch_ms' => ($smsEndTime - $smsStartTime) * 1000
                 ]
             ]);
+
+            // 업로드 성공 시 OTP 세션 정리
+            $request->session()->forget(['otp_verified', 'otp_verified_phone', 'otp_phone', 'otp_expires_at', 'otp_attempts']);
 
             return response()->json([
                 'success' => true,
@@ -552,7 +649,9 @@ class VideoSubmissionController extends Controller
     private function getS3Url($s3Key)
     {
         try {
-            return Storage::disk('s3')->url($s3Key);
+            $bucket = config('filesystems.disks.s3.bucket');
+            $region = config('filesystems.disks.s3.region');
+            return 'https://' . $bucket . '.s3.' . $region . '.amazonaws.com/' . ltrim($s3Key, '/');
         } catch (\Exception $e) {
             Log::warning('S3 URL 생성 실패', ['s3_key' => $s3Key, 'error' => $e->getMessage()]);
             return '';
