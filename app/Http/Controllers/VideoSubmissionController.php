@@ -73,7 +73,7 @@ class VideoSubmissionController extends Controller
         $request->session()->put('otp_expires_at', now()->addMinutes(5));
         $request->session()->put('otp_attempts', 0);
 
-        $message = "[GrapeSEED 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
+        $message = "[Storytelling 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
 
         try {
             $twilio = new TwilioSmsService();

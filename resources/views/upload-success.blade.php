@@ -141,7 +141,7 @@
             <div class="mt-4">
                 <p class="text-muted">
                     <i class="bi bi-heart-fill text-danger"></i>
-                    GS Elementary Speech Contest에 참여해주셔서 감사합니다!
+                   참여해주셔서 감사합니다!
                 </p>
             </div>
         </div>
