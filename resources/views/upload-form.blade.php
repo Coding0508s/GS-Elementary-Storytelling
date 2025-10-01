@@ -915,8 +915,11 @@ document.addEventListener('DOMContentLoaded', function() {
             otpVerifyBtn.dataset.verified = 'true';
             verificationToken.value = 'verified';
             
-            // 전화번호 입력 필드 비활성화
-            document.getElementById('parent_phone').disabled = true;
+            // 전화번호 입력 필드 읽기 전용으로 변경 (disabled는 폼 제출 시 값이 전송되지 않음)
+            const parentPhoneInput = document.getElementById('parent_phone');
+            parentPhoneInput.readOnly = true;
+            parentPhoneInput.style.backgroundColor = '#e9ecef';
+            parentPhoneInput.style.cursor = 'not-allowed';
             
         } catch (err) {
             alert('인증 실패: ' + err.message);
