@@ -37,7 +37,7 @@
                     @endif
                     
                     <p class="lead mb-4">
-                        Storytelling Contest 영상이 성공적으로 업로드되었습니다.
+                        Storytelling 영상이 성공적으로 업로드되었습니다.
                     </p>
                     
                     <div class="alert alert-success">
