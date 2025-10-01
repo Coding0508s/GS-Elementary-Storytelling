@@ -116,13 +116,13 @@
                     
                     <div class="row">
                         <div class="col-md-6 mb-2">
-                            <label for="age" class="form-label">나이 (아래의 나이를 선택해주세요.) <span class="text-danger">*</span></label>
+                            <label for="age" class="form-label">나이 (2019년생만 참여가능합니다.) <span class="text-danger">*</span></label>
                             <select class="form-control" id="age" name="age" required>
                                 <option value="">나이를 선택하세요</option>
-                                <option value="5" {{ old('age') == '5' ? 'selected' : '' }}>5세</option>
-                                <option value="6" {{ old('age') == '6' ? 'selected' : '' }}>6세</option>
+                                <!-- <option value="5" {{ old('age') == '5' ? 'selected' : '' }}>5세</option> -->
+                                <!-- <option value="6" {{ old('age') == '6' ? 'selected' : '' }}>6세</option> -->
                                 <option value="7" {{ old('age') == '7' ? 'selected' : '' }}>7세</option>
-                                <option value="8" {{ old('age') == '8' ? 'selected' : '' }}>8세</option>
+                                <!-- <option value="8" {{ old('age') == '8' ? 'selected' : '' }}>8세</option> -->
                             </select>
                         </div>
                         <div class="col-md-6 mb-2">
@@ -159,30 +159,69 @@
                         <div class="col-md-7 mb-2">
                             <label for="parent_phone" class="form-label">학부모 전화번호 <span class="text-danger">*</span></label>
                             <div class="input-group">
-                            <input type="tel" 
-                                   class="form-control" 
-                                   id="parent_phone" 
-                                   name="parent_phone" 
-                                   value="{{ old('parent_phone') }}" 
-                                   placeholder="010-1234-5678"
-                                   pattern="[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}"
-                                   required>
-                                <button class="btn btn-primary rounded-end" type="button" id="btn-send-otp" style="border-top-left-radius: 0; border-bottom-left-radius: 0;">
-                                    인증번호 발송
+                                <input type="tel" 
+                                       class="form-control" 
+                                       id="parent_phone" 
+                                       name="parent_phone" 
+                                       value="{{ old('parent_phone') }}" 
+                                       placeholder="010-1234-5678"
+                                       pattern="[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}"
+                                       required>
+                                <button type="button" 
+                                        class="btn btn-outline-primary" 
+                                        id="send-otp-btn">
+                                    인증번호 전송
                                 </button>
                             </div>
-                            <div class="form-text">업로드 완료 알림 및 본인 인증에 사용됩니다.</div>
+                            <div class="form-text">업로드 완료 알림을 받을 연락처입니다.</div>
                         </div>
-                        <div class="col-md-6 mb-2">
-                            <label for="otp_code" class="form-label">인증번호 입력 <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input type="text" id="otp_code" class="form-control" placeholder="인증번호 6자리" maxlength="6" pattern="[0-9]{6}" required>
-                                <button class="btn btn-success rounded-end" type="button" id="btn-verify-otp" disabled style="border-top-left-radius: 0; border-bottom-left-radius: 0;">
-                                    인증 확인
-                                </button>
+                    </div>
+                    
+                    <!-- OTP 인증 영역 -->
+                    <div class="row" id="otp-verification-area" style="display: none;">
+                        <div class="col-12 mb-3">
+                            <div class="alert alert-info">
+                                <h6 class="fw-bold mb-2">📱 휴대폰 인증</h6>
+                                <p class="mb-2">입력하신 휴대폰 번호로 인증번호를 전송했습니다.</p>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="otp_code" class="form-label">인증번호 <span class="text-danger">*</span></label>
+                                        <div class="input-group">
+                                            <input type="text" 
+                                                   class="form-control" 
+                                                   id="otp_code" 
+                                                   name="otp_code" 
+                                                   placeholder="6자리 인증번호"
+                                                   maxlength="6"
+                                                   pattern="[0-9]{6}">
+                                            <button type="button" 
+                                                    class="btn btn-success" 
+                                                    id="verify-otp-btn">
+                                                인증확인
+                                            </button>
+                                        </div>
+                                        <div class="form-text">
+                                            <span id="otp-timer" class="text-warning"></span>
+                                            <button type="button" 
+                                                    class="btn btn-link btn-sm p-0 ms-2" 
+                                                    id="resend-otp-btn" 
+                                                    style="display: none;">
+                                                재전송
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="small mt-1">
-                                <span id="otp_status" class="text-muted">인증번호를 발송해 주세요.</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 인증 완료 표시 -->
+                    <div class="row" id="otp-success-area" style="display: none;">
+                        <div class="col-12 mb-3">
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <strong>휴대폰 인증이 완료되었습니다!</strong>
+                                <input type="hidden" id="verification_token" name="verification_token" value="">
                             </div>
                         </div>
                     </div>
@@ -326,9 +365,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.querySelector('.progress-bar');
     const progressText = document.getElementById('progress-text');
     const otpCodeInput = document.getElementById('otp_code');
-    const otpSendBtn = document.getElementById('btn-send-otp');
-    const otpVerifyBtn = document.getElementById('btn-verify-otp');
-    const otpStatus = document.getElementById('otp_status');
+    const otpSendBtn = document.getElementById('send-otp-btn');
+    const otpVerifyBtn = document.getElementById('verify-otp-btn');
+    const otpVerificationArea = document.getElementById('otp-verification-area');
+    const otpSuccessArea = document.getElementById('otp-success-area');
+    const otpTimer = document.getElementById('otp-timer');
+    const resendOtpBtn = document.getElementById('resend-otp-btn');
+    const verificationToken = document.getElementById('verification_token');
+    
+    let otpCountdown = null;
     
     // 지역 데이터 (PHP에서 JavaScript로 전달)
     const regionsDataElement = document.getElementById('regions-data');
@@ -762,16 +807,38 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // OTP 타이머 시작 함수
+    function startOtpTimer(duration) {
+        if (otpCountdown) {
+            clearInterval(otpCountdown);
+        }
+        
+        let timeLeft = duration;
+        otpTimer.textContent = `남은 시간: ${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`;
+        
+        otpCountdown = setInterval(() => {
+            timeLeft--;
+            otpTimer.textContent = `남은 시간: ${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`;
+            
+            if (timeLeft <= 0) {
+                clearInterval(otpCountdown);
+                otpTimer.textContent = '인증 시간이 만료되었습니다.';
+                resendOtpBtn.style.display = 'inline';
+            }
+        }, 1000);
+    }
+    
     // OTP: 인증번호 발송
-    otpSendBtn.addEventListener('click', async function() {
+    async function sendOtp() {
         const phone = document.getElementById('parent_phone').value.trim();
         if (!phone) {
             alert('전화번호를 입력해 주세요.');
             return;
         }
+        
         otpSendBtn.disabled = true;
         otpSendBtn.textContent = '발송 중...';
-        otpStatus.textContent = '인증번호 발송 중...';
+        
         try {
             const resp = await fetch('{{ route("api.otp.send") }}', {
                 method: 'POST',
@@ -782,28 +849,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ parent_phone: phone })
             });
             const data = await resp.json();
-            if (!resp.ok || !data.success) throw new Error(data.message || '발송 실패');
-            otpStatus.textContent = '인증번호가 발송되었습니다. 5분 내에 입력해 주세요.';
-            otpVerifyBtn.disabled = false;
+            
+            if (!resp.ok || !data.success) {
+                throw new Error(data.message || '발송 실패');
+            }
+            
+            // OTP 인증 영역 표시
+            otpVerificationArea.style.display = 'block';
+            otpCodeInput.value = '';
+            otpCodeInput.disabled = false;
+            resendOtpBtn.style.display = 'none';
+            
+            // 5분 타이머 시작
+            startOtpTimer(300); // 5분 = 300초
+            
+            alert('인증번호가 발송되었습니다. 5분 내에 입력해주세요.');
+            
         } catch (err) {
             alert('인증번호 발송 오류: ' + err.message);
-            otpStatus.textContent = '발송 실패. 잠시 후 다시 시도해 주세요.';
         } finally {
             otpSendBtn.disabled = false;
-            otpSendBtn.textContent = '인증번호 발송';
+            otpSendBtn.textContent = '인증번호 전송';
         }
-    });
+    }
+    
+    otpSendBtn.addEventListener('click', sendOtp);
+    resendOtpBtn.addEventListener('click', sendOtp);
 
     // OTP: 인증 확인
     otpVerifyBtn.addEventListener('click', async function() {
         const phone = document.getElementById('parent_phone').value.trim();
         const code = otpCodeInput.value.trim();
-        if (!code || code.length < 4) {
-            alert('올바른 인증번호를 입력해 주세요.');
+        
+        if (!code || code.length !== 6) {
+            alert('6자리 인증번호를 입력해 주세요.');
             return;
         }
+        
         otpVerifyBtn.disabled = true;
         otpVerifyBtn.textContent = '확인 중...';
+        
         try {
             const resp = await fetch('{{ route("api.otp.verify") }}', {
                 method: 'POST',
@@ -814,22 +899,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ parent_phone: phone, code })
             });
             const data = await resp.json();
-            if (!resp.ok || !data.success) throw new Error(data.message || '인증 실패');
-            otpStatus.textContent = '인증이 완료되었습니다.';
+            
+            if (!resp.ok || !data.success) {
+                throw new Error(data.message || '인증 실패');
+            }
+            
+            // 인증 성공 처리
+            if (otpCountdown) {
+                clearInterval(otpCountdown);
+            }
+            
+            // UI 업데이트
+            otpVerificationArea.style.display = 'none';
+            otpSuccessArea.style.display = 'block';
             otpVerifyBtn.dataset.verified = 'true';
-            otpVerifyBtn.classList.remove('btn-primary');
-            otpVerifyBtn.classList.add('btn-success');
-            otpVerifyBtn.textContent = '인증 완료';
-            otpCodeInput.disabled = true;
-            otpSendBtn.disabled = true;
+            verificationToken.value = 'verified';
+            
+            // 전화번호 입력 필드 비활성화
+            document.getElementById('parent_phone').disabled = true;
+            
         } catch (err) {
             alert('인증 실패: ' + err.message);
-            otpStatus.textContent = '인증 실패. 다시 시도해 주세요.';
         } finally {
-            if (!otpVerifyBtn.dataset.verified) {
-                otpVerifyBtn.disabled = false;
-                otpVerifyBtn.textContent = '인증 확인';
-            }
+            otpVerifyBtn.disabled = false;
+            otpVerifyBtn.textContent = '인증확인';
         }
     });
     
