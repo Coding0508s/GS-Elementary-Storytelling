@@ -28,8 +28,42 @@ class VideoSubmissionController extends Controller
     /**
      * 개인정보 수집 동의 페이지 표시
      */
-    public function showPrivacyConsent()
+    public function showPrivacyConsent(Request $request)
     {
+        // 세션 락 메커니즘으로 동시 접속 충돌 방지
+        $sessionLockKey = 'session_lock:' . $request->ip();
+        $lockAcquired = cache()->add($sessionLockKey, true, 5); // 5초 락
+        
+        if (!$lockAcquired) {
+            // 락 획득 실패 시 잠시 대기 후 재시도
+            usleep(100000); // 0.1초 대기
+            $lockAcquired = cache()->add($sessionLockKey, true, 5);
+        }
+        
+        if ($lockAcquired) {
+            try {
+                // 사이트 진입 시 세션 완전 초기화
+                $request->session()->flush();
+                
+                // 새로운 세션 ID 생성 (보안 강화)
+                $request->session()->regenerate();
+                
+                Log::info('세션 완전 초기화 완료', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'timestamp' => now()
+                ]);
+            } finally {
+                // 락 해제
+                cache()->forget($sessionLockKey);
+            }
+        } else {
+            Log::warning('세션 락 획득 실패', [
+                'ip' => $request->ip(),
+                'timestamp' => now()
+            ]);
+        }
+        
         return view('privacy-consent');
     }
 
@@ -44,6 +78,21 @@ class VideoSubmissionController extends Controller
                            ->with('error', '개인정보 수집 및 이용에 동의해야 업로드가 가능합니다.');
         }
 
+        // 업로드 폼 진입 시 이전 OTP 세션 정리
+        $request->session()->forget([
+            'otp_phone', 
+            'otp_code', 
+            'otp_expires_at', 
+            'otp_attempts',
+            'otp_verified',
+            'otp_verified_phone'
+        ]);
+
+        Log::info('업로드 폼 진입 - OTP 세션 정리 완료', [
+            'ip' => $request->ip(),
+            'timestamp' => now()
+        ]);
+
         return view('upload-form');
     }
 
@@ -56,10 +105,10 @@ class VideoSubmissionController extends Controller
             'parent_phone' => 'required|string|min:10|max:20',
         ]);
 
-        // 너무 잦은 요청 방지 (IP 기준 1분 3회)
-        $rateKey = 'otp_rate:' . $request->ip();
+        // 너무 잦은 요청 방지 (IP 기준 1분 15회)
+        $rateKey = 'storytelling:otp_rate:ip:' . $request->ip();
         $rateAttempts = cache()->get($rateKey, 0);
-        if ($rateAttempts >= 3) {
+        if ($rateAttempts >= 15) {
             return response()->json(['success' => false, 'message' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'], 429);
         }
         cache()->put($rateKey, $rateAttempts + 1, 60);
@@ -394,7 +443,7 @@ class VideoSubmissionController extends Controller
         ini_set('max_execution_time', '0');
         set_time_limit(0);
         ini_set('max_input_time', '3600');
-        ini_set('memory_limit', '1024M');
+        ini_set('memory_limit', '3G'); // 1GB → 3GB로 증가 (2GB 파일 처리 대응)
         
         $validator = Validator::make($request->all(), [
             'region' => ['required', 'string', function ($attribute, $value, $fail) {
@@ -678,8 +727,8 @@ class VideoSubmissionController extends Controller
         $safeGrade = $this->sanitizeFilename($grade ?? 'Unknown');
         $safeOriginalName = $this->sanitizeFilename($baseOriginalFilename ?? 'video');
 
-        // 타임스탬프 추가 (중복 방지)
-        $timestamp = date('Ymd_His');
+        // 타임스탬프 추가 (중복 방지 - 마이크로초 포함)
+        $timestamp = date('Ymd_His') . '_' . substr(microtime(), 2, 6);
 
         // 확장자가 없으면 기본값으로 mp4 설정
         if (empty($extension)) {
@@ -728,5 +777,77 @@ class VideoSubmissionController extends Controller
         }
         
         return $filename;
+    }
+
+    /**
+     * 세션 완전 초기화
+     */
+    private function clearAllSessions(Request $request)
+    {
+        // 세션 락 메커니즘으로 동시 접속 충돌 방지
+        $sessionLockKey = 'session_lock:' . $request->ip();
+        $lockAcquired = cache()->add($sessionLockKey, true, 5); // 5초 락
+        
+        if (!$lockAcquired) {
+            // 락 획득 실패 시 잠시 대기 후 재시도
+            usleep(100000); // 0.1초 대기
+            $lockAcquired = cache()->add($sessionLockKey, true, 5);
+        }
+        
+        if ($lockAcquired) {
+            try {
+                // 모든 세션 데이터 삭제
+                $request->session()->flush();
+                
+                // 세션 ID 재생성 (보안 강화)
+                $request->session()->regenerate();
+                
+                Log::info('세션 완전 초기화 완료', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'timestamp' => now()
+                ]);
+            } finally {
+                // 락 해제
+                cache()->forget($sessionLockKey);
+            }
+        } else {
+            Log::warning('세션 락 획득 실패', [
+                'ip' => $request->ip(),
+                'timestamp' => now()
+            ]);
+        }
+    }
+
+    /**
+     * OTP 관련 세션만 초기화
+     */
+    private function clearOtpSessions(Request $request)
+    {
+        $request->session()->forget([
+            'otp_phone', 
+            'otp_code', 
+            'otp_expires_at', 
+            'otp_attempts',
+            'otp_verified',
+            'otp_verified_phone'
+        ]);
+        
+        Log::info('OTP 세션 정리 완료', [
+            'ip' => $request->ip(),
+            'timestamp' => now()
+        ]);
+    }
+
+    /**
+     * 세션 초기화 전용 라우트
+     */
+    public function resetSession(Request $request)
+    {
+        // 세션 완전 초기화
+        $this->clearAllSessions($request);
+        
+        return redirect()->route('privacy.consent')
+                       ->with('success', '세션이 초기화되었습니다. 다시 시작해주세요.');
     }
 }

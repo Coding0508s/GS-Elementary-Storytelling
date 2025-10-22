@@ -35,28 +35,28 @@ class S3UploadController extends Controller
             }
 
             // 개선된 Rate limiting (동시 접속자 고려)
-            $ipKey = 's3_presigned_url:' . $request->ip();
-            $globalKey = 's3_presigned_url:global';
+            $ipKey = 'storytelling:s3_presigned_url:ip:' . $request->ip();
+            $globalKey = 'storytelling:s3_presigned_url:global';
             
-            // IP별 제한 (분당 15회로 증가)
+            // IP별 제한 (분당 30회로 증가 - 200-300명 사용자 대응)
             $ipAttempts = cache()->get($ipKey, 0);
-            if ($ipAttempts >= 15) {
+            if ($ipAttempts >= 30) {
                 return response()->json([
                     'error' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'
                 ], 429);
             }
             
-            // 전역 동시 요청 제한 (초당 100개)
+            // 전역 동시 요청 제한 (초당 300개로 증가 - 대용량 동시 접속 대응)
             $globalAttempts = cache()->get($globalKey, 0);
-            if ($globalAttempts >= 100) {
+            if ($globalAttempts >= 300) {
                 return response()->json([
                     'error' => '서버가 바쁩니다. 잠시 후 다시 시도해주세요.'
                 ], 503);
             }
             
-            // 카운터 증가
+            // 카운터 증가 (일관된 시간 단위 사용)
             cache()->put($ipKey, $ipAttempts + 1, 60); // 1분간 유지
-            cache()->put($globalKey, $globalAttempts + 1, 1); // 1초간 유지
+            cache()->put($globalKey, $globalAttempts + 1, 60); // 1분간 유지 (1초 → 1분으로 수정)
 
             $originalFilename = $request->input('filename');
             $contentType = $request->input('content_type');
@@ -360,8 +360,8 @@ class S3UploadController extends Controller
         $safeGrade = $this->sanitizeFilename($grade ?? 'Unknown');
         $safeOriginalName = $this->sanitizeFilename($baseOriginalFilename ?? 'video');
 
-        // 타임스탬프 추가 (중복 방지)
-        $timestamp = date('Ymd_His');
+        // 타임스탬프 추가 (중복 방지 - 마이크로초 포함)
+        $timestamp = date('Ymd_His') . '_' . substr(microtime(), 2, 6);
 
         // 확장자가 없으면 기본값으로 mp4 설정
         if (empty($extension)) {
@@ -405,9 +405,9 @@ class S3UploadController extends Controller
                 ],
                 'http' => [
                     // 동시 접속 최적화 설정
-                    'timeout' => 30,
-                    'connect_timeout' => 10,
-                    'pool_size' => 50, // 연결 풀 크기 증가
+                    'timeout' => 600,        // 30초 → 10분 (600초)
+                    'connect_timeout' => 30, // 10초 → 30초
+                    'pool_size' => 500,      // 300 → 500 (200-300명 동시 접속 대응 강화)
                     'verify' => true,
                 ],
                 'retries' => [
