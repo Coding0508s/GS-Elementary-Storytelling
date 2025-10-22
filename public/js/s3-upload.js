@@ -159,6 +159,7 @@ class S3DirectUpload {
 
             // PUT 요청으로 S3에 업로드
             xhr.open('PUT', presignedData.presigned_url);
+            xhr.timeout = 900000; // 15분 타임아웃 설정
             xhr.setRequestHeader('Content-Type', file.type);
             xhr.send(file);
         });

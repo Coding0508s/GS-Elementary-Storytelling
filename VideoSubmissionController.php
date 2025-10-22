@@ -132,7 +132,7 @@ class VideoSubmissionController extends Controller
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
             'video_file.required' => '영상 파일을 선택해주세요.',
             'video_file.mimes' => 'MP4 또는 MOV 형식의 파일만 업로드 가능합니다.',
-            'video_file.max' => '파일 크기는 2GB를 초과할 수 없습니다.'
+            'video_file.max' => '파일 크기는 1GB를 초과할 수 없습니다.'
         ]);
 
         if ($validator->fails()) {

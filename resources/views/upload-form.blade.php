@@ -116,7 +116,7 @@
                     
                     <div class="row">
                         <div class="col-md-6 mb-2">
-                            <label for="age" class="form-label">나이 (2019년생만 참여가능합니다.) <span class="text-danger">*</span></label>
+                            <label for="age" class="form-label">나이 (2019년생 대상) <span class="text-danger">*</span></label>
                             <select class="form-control" id="age" name="age" required>
                                 <option value="">나이를 선택하세요</option>
                                 <!-- <option value="5" {{ old('age') == '5' ? 'selected' : '' }}>5세</option> -->
@@ -722,7 +722,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 xhr.addEventListener('timeout', () => reject(new Error('업로드 타임아웃')));
 
                 xhr.open('PUT', presignedData.presigned_url);
-                xhr.timeout = 300000; // 5분
+                xhr.timeout = 900000; // 5분 → 15분 (900,000ms)
                 xhr.setRequestHeader('Content-Type', file.type);
                 xhr.send(file);
             });

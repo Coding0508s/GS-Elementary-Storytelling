@@ -192,33 +192,34 @@ document.addEventListener('DOMContentLoaded', function() {
     window.onpopstate = function() {
         window.history.pushState(null, null, window.location.href);
     };
-});
- */
-// CSS 애니메이션 추가
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes bounce {
-        0%, 20%, 60%, 100% {
-            transform: translateY(0);
-        }
-        40% {
-            transform: translateY(-10px);
-        }
-        80% {
-            transform: translateY(-5px);
-        }
-    }
+    */
     
-    @media print {
-        .btn, .alert-warning, .progress-indicator {
-            display: none !important;
+    // CSS 애니메이션 추가
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes bounce {
+            0%, 20%, 60%, 100% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(-10px);
+            }
+            80% {
+                transform: translateY(-5px);
+            }
         }
-        .card {
-            border: 1px solid #000 !important;
-            box-shadow: none !important;
+        
+        @media print {
+            .btn, .alert-warning, .progress-indicator {
+                display: none !important;
+            }
+            .card {
+                border: 1px solid #000 !important;
+                box-shadow: none !important;
+            }
         }
-    }
-`;
-document.head.appendChild(style);
+    `;
+    document.head.appendChild(style);
+});
 </script>
 @endsection 

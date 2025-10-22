@@ -43,6 +43,10 @@ Route::get('/upload-success', [VideoSubmissionController::class, 'showUploadSucc
 Route::get('/api/institutions', [VideoSubmissionController::class, 'getInstitutions'])
     ->name('api.institutions');
 
+// 세션 초기화 전용 라우트
+Route::get('/reset-session', [VideoSubmissionController::class, 'resetSession'])
+    ->name('session.reset');
+
 // S3 직접 업로드 관련 API
 Route::post('/api/s3/presigned-url', [S3UploadController::class, 'generatePresignedUrl'])
     ->name('api.s3.presigned-url');
