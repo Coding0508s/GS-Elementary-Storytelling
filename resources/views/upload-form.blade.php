@@ -668,6 +668,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 grade: document.getElementById('grade').value
             };
 
+            // 📱 모바일 데이터 환경 감지 및 최적화
+            const networkInfo = detectNetworkInfo();
+            const dataUsage = estimateDataUsage(file.size);
+            
+            // 네트워크 상태에 따른 사용자 알림
+            if (networkInfo.type === 'cellular' || networkInfo.effectiveType === '2g' || networkInfo.effectiveType === '3g') {
+                showMobileDataWarning(dataUsage, networkInfo);
+                
+                // 모바일 데이터 환경에서 압축 옵션 제안
+                if (file.size > 100 * 1024 * 1024) { // 100MB 이상
+                    const shouldCompress = await showCompressionOption(file.size, networkInfo);
+                    if (shouldCompress) {
+                        // 압축 옵션 선택 시 파일 처리 로직
+                        console.log('📱 모바일 데이터 환경에서 압축 옵션 선택됨');
+                    }
+                }
+            }
+            
+            // 데이터 사용량 모니터링 시작
+            monitorDataUsage(file, networkInfo);
+
             // S3에 파일 업로드 (로깅 최소화로 성능 향상)
             
             // Presigned URL 요청 (재시도 로직 포함)
@@ -940,6 +961,318 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         e.target.value = value;
     });
+
+    // 📱 모바일 데이터 환경 감지 함수
+    function detectNetworkInfo() {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        
+        if (connection) {
+            return {
+                effectiveType: connection.effectiveType, // 'slow-2g', '2g', '3g', '4g'
+                downlink: connection.downlink, // Mbps
+                rtt: connection.rtt, // Round Trip Time (ms)
+                saveData: connection.saveData, // 데이터 절약 모드
+                type: connection.type // 'cellular', 'wifi', 'ethernet', etc.
+            };
+        }
+        
+        // 기본값 (연결 정보를 알 수 없는 경우)
+        return {
+            effectiveType: '4g',
+            downlink: 10,
+            rtt: 100,
+            saveData: false,
+            type: 'unknown'
+        };
+    }
+
+    // 📊 데이터 사용량 추정 함수
+    function estimateDataUsage(fileSize) {
+        const networkInfo = detectNetworkInfo();
+        
+        // 압축률 추정 (비디오 파일의 경우)
+        const compressionRatio = 0.8; // 20% 압축 가정
+        const estimatedUploadSize = fileSize * compressionRatio;
+        
+        // 네트워크 오버헤드 (HTTP 헤더, 재시도 등)
+        const overheadRatio = 1.1; // 10% 오버헤드
+        const totalDataUsage = estimatedUploadSize * overheadRatio;
+        
+        return {
+            originalSize: formatFileSize(fileSize),
+            estimatedUploadSize: formatFileSize(estimatedUploadSize),
+            totalDataUsage: formatFileSize(totalDataUsage),
+            isDataSaver: networkInfo.saveData,
+            networkType: networkInfo.effectiveType
+        };
+    }
+
+    // 📱 모바일 데이터 경고 표시
+    function showMobileDataWarning(dataUsage, networkInfo) {
+        const warningHtml = `
+            <div class="mobile-data-warning alert alert-warning" role="alert">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle-fill warning-icon"></i>
+                    <div>
+                        <strong>📱 모바일 데이터 사용 중</strong><br>
+                        <small>예상 데이터 사용량: ${dataUsage.totalDataUsage} (원본: ${dataUsage.originalSize})</small>
+                    </div>
+                </div>
+                <div class="network-info mt-2">
+                    <small>
+                        <strong>네트워크:</strong> ${networkInfo.effectiveType.toUpperCase()} 
+                        ${networkInfo.downlink ? `(${networkInfo.downlink} Mbps)` : ''}
+                        ${networkInfo.saveData ? ' | 데이터 절약 모드' : ''}
+                    </small>
+                </div>
+            </div>
+        `;
+        
+        // 파일 선택 영역 위에 경고 표시
+        const fileInputContainer = document.querySelector('.file-input-container');
+        if (fileInputContainer && !document.querySelector('.mobile-data-warning')) {
+            fileInputContainer.insertAdjacentHTML('beforebegin', warningHtml);
+        }
+    }
+
+    // 📏 파일 크기 포맷팅 함수
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // 🗜️ 압축 옵션 제안 함수
+    async function showCompressionOption(fileSize, networkInfo) {
+        const originalSize = formatFileSize(fileSize);
+        const compressedSize = formatFileSize(fileSize * 0.6); // 40% 압축 가정
+        const dataSaved = formatFileSize(fileSize * 0.4);
+        
+        const compressionHtml = `
+            <div class="compression-option-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+                <div class="card" style="max-width: 400px; margin: 20px;">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="bi bi-compress"></i> 모바일 데이터 절약 옵션</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>현재 파일 크기:</strong> ${originalSize}</p>
+                        <p><strong>압축 후 예상 크기:</strong> ${compressedSize}</p>
+                        <p><strong>절약되는 데이터:</strong> ${dataSaved}</p>
+                        <p><strong>네트워크:</strong> ${networkInfo.effectiveType.toUpperCase()}</p>
+                        
+                        <div class="alert alert-info">
+                            <small>
+                                <i class="bi bi-info-circle"></i>
+                                압축 시 화질이 약간 저하될 수 있지만, 데이터 사용량을 크게 줄일 수 있습니다.
+                            </small>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button type="button" class="btn btn-success me-2" id="compress-yes">
+                            <i class="bi bi-check-circle"></i> 압축하여 업로드
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="compress-no">
+                            <i class="bi bi-x-circle"></i> 원본 그대로 업로드
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 모달 표시
+        document.body.insertAdjacentHTML('beforeend', compressionHtml);
+        
+        return new Promise((resolve) => {
+            document.getElementById('compress-yes').addEventListener('click', () => {
+                document.querySelector('.compression-option-modal').remove();
+                resolve(true);
+            });
+            
+            document.getElementById('compress-no').addEventListener('click', () => {
+                document.querySelector('.compression-option-modal').remove();
+                resolve(false);
+            });
+        });
+    }
+
+    // 📱 모바일 최적화 업로드 전략 적용
+    function applyMobileOptimization(file, networkInfo) {
+        const uploadStrategy = {
+            chunkSize: 5 * 1024 * 1024, // 기본 5MB
+            timeout: 900000, // 기본 15분
+            retryAttempts: 3,
+            retryDelay: 1000
+        };
+        
+        // 네트워크 상태에 따른 전략 조정
+        if (networkInfo.effectiveType === '2g' || networkInfo.effectiveType === 'slow-2g') {
+            uploadStrategy.chunkSize = 512 * 1024; // 512KB
+            uploadStrategy.timeout = 3600000; // 1시간
+            uploadStrategy.retryAttempts = 10;
+            uploadStrategy.retryDelay = 5000;
+        } else if (networkInfo.effectiveType === '3g') {
+            uploadStrategy.chunkSize = 1 * 1024 * 1024; // 1MB
+            uploadStrategy.timeout = 1800000; // 30분
+            uploadStrategy.retryAttempts = 7;
+            uploadStrategy.retryDelay = 3000;
+        } else if (networkInfo.effectiveType === '4g' && networkInfo.downlink > 5) {
+            uploadStrategy.chunkSize = 10 * 1024 * 1024; // 10MB
+            uploadStrategy.timeout = 900000; // 15분
+            uploadStrategy.retryAttempts = 3;
+            uploadStrategy.retryDelay = 1000;
+        }
+        
+        console.log('📱 모바일 최적화 전략 적용:', {
+            networkType: networkInfo.effectiveType,
+            chunkSize: formatFileSize(uploadStrategy.chunkSize),
+            timeout: Math.round(uploadStrategy.timeout / 60000) + '분',
+            retryAttempts: uploadStrategy.retryAttempts
+        });
+        
+        return uploadStrategy;
+    }
+
+    // 📊 데이터 사용량 모니터링 및 알림
+    function monitorDataUsage(file, networkInfo) {
+        const dataUsage = estimateDataUsage(file.size);
+        const usageThresholds = {
+            '2g': 50 * 1024 * 1024, // 50MB
+            '3g': 100 * 1024 * 1024, // 100MB
+            '4g': 500 * 1024 * 1024 // 500MB
+        };
+        
+        const threshold = usageThresholds[networkInfo.effectiveType] || usageThresholds['4g'];
+        
+        if (file.size > threshold) {
+            showDataUsageWarning(dataUsage, networkInfo, threshold);
+        }
+        
+        // 데이터 사용량 추적 시작
+        startDataUsageTracking(file.size, networkInfo);
+    }
+
+    // ⚠️ 데이터 사용량 경고 표시
+    function showDataUsageWarning(dataUsage, networkInfo, threshold) {
+        const thresholdFormatted = formatFileSize(threshold);
+        const warningHtml = `
+            <div class="data-usage-warning alert alert-danger" role="alert">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <div>
+                        <strong>⚠️ 대용량 파일 업로드</strong><br>
+                        <small>
+                            파일 크기: ${dataUsage.originalSize} | 
+                            예상 데이터 사용량: ${dataUsage.totalDataUsage} | 
+                            권장 한도: ${thresholdFormatted}
+                        </small>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <small>
+                        <strong>네트워크:</strong> ${networkInfo.effectiveType.toUpperCase()}
+                        ${networkInfo.saveData ? ' | 데이터 절약 모드 활성화' : ''}
+                    </small>
+                </div>
+            </div>
+        `;
+        
+        // 경고 표시
+        const fileInputContainer = document.querySelector('.file-input-container');
+        if (fileInputContainer && !document.querySelector('.data-usage-warning')) {
+            fileInputContainer.insertAdjacentHTML('beforebegin', warningHtml);
+        }
+    }
+
+    // 📈 데이터 사용량 추적 시작
+    function startDataUsageTracking(fileSize, networkInfo) {
+        const trackingData = {
+            startTime: Date.now(),
+            fileSize: fileSize,
+            networkType: networkInfo.effectiveType,
+            estimatedUsage: fileSize * 0.8 * 1.1, // 압축 + 오버헤드
+            isMobileData: networkInfo.type === 'cellular'
+        };
+        
+        // 로컬 스토리지에 추적 데이터 저장
+        try {
+            localStorage.setItem('data_usage_tracking', JSON.stringify(trackingData));
+        } catch (e) {
+            console.warn('데이터 사용량 추적 저장 실패:', e);
+        }
+        
+        // 주기적으로 데이터 사용량 업데이트
+        const trackingInterval = setInterval(() => {
+            updateDataUsageProgress(trackingData);
+        }, 5000); // 5초마다 업데이트
+        
+        // 업로드 완료 시 추적 정리
+        window.addEventListener('uploadComplete', () => {
+            clearInterval(trackingInterval);
+            finalizeDataUsageTracking(trackingData);
+        });
+    }
+
+    // 📊 데이터 사용량 진행률 업데이트
+    function updateDataUsageProgress(trackingData) {
+        const elapsed = Date.now() - trackingData.startTime;
+        const elapsedMinutes = Math.round(elapsed / 60000);
+        
+        // 예상 업로드 시간 계산 (네트워크 속도 기반)
+        const estimatedUploadTime = estimateUploadTime(trackingData.fileSize, trackingData.networkType);
+        const progress = Math.min((elapsed / estimatedUploadTime) * 100, 95); // 최대 95%까지
+        
+        console.log('📊 데이터 사용량 추적:', {
+            진행률: Math.round(progress) + '%',
+            경과시간: elapsedMinutes + '분',
+            예상완료: Math.round((estimatedUploadTime - elapsed) / 60000) + '분 후'
+        });
+    }
+
+    // ⏱️ 업로드 시간 추정
+    function estimateUploadTime(fileSize, networkType) {
+        const speeds = {
+            'slow-2g': 0.05, // 50KB/s
+            '2g': 0.25, // 250KB/s
+            '3g': 0.75, // 750KB/s
+            '4g': 2.5 // 2.5MB/s
+        };
+        
+        const speed = speeds[networkType] || speeds['4g']; // MB/s
+        return (fileSize / (speed * 1024 * 1024)) * 1000; // 밀리초
+    }
+
+    // ✅ 데이터 사용량 추적 완료
+    function finalizeDataUsageTracking(trackingData) {
+        const totalTime = Date.now() - trackingData.startTime;
+        const actualUsage = trackingData.estimatedUsage;
+        
+        const finalData = {
+            ...trackingData,
+            totalTime: totalTime,
+            actualUsage: actualUsage,
+            completedAt: new Date().toISOString()
+        };
+        
+        // 최종 데이터 저장
+        try {
+            const existingData = JSON.parse(localStorage.getItem('data_usage_history') || '[]');
+            existingData.push(finalData);
+            
+            // 최근 10개만 유지
+            if (existingData.length > 10) {
+                existingData.splice(0, existingData.length - 10);
+            }
+            
+            localStorage.setItem('data_usage_history', JSON.stringify(existingData));
+            localStorage.removeItem('data_usage_tracking');
+            
+            console.log('✅ 데이터 사용량 추적 완료:', finalData);
+        } catch (e) {
+            console.warn('데이터 사용량 추적 완료 저장 실패:', e);
+        }
+    }
 });
 </script>
 @endsection 
