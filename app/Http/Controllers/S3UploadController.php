@@ -50,7 +50,7 @@ class S3UploadController extends Controller
             $globalAttempts = cache()->get($globalKey, 0);
             if ($globalAttempts >= 300) {
                 return response()->json([
-                    'error' => '서버가 바쁩니다. 잠시 후 다시 시도해주세요.'
+                    'error' => '잠시 후 다시 시도해주세요.'
                 ], 503);
             }
             
@@ -91,7 +91,7 @@ class S3UploadController extends Controller
             // 파일 크기 검증 (2GB 제한)
             if ($fileSize > 2147483648) {
                 return response()->json([
-                    'error' => '파일 크기가 너무 큽니다. 최대 2GB까지 허용됩니다.'
+                    'error' => '파일 크기가 너무 큽니다. 최대 1GB까지 허용됩니다.'
                 ], 400);
             }
 
@@ -142,13 +142,13 @@ class S3UploadController extends Controller
             // 동시 접속으로 인한 일시적 오류인 경우 재시도 안내
             if (in_array($e->getAwsErrorCode(), ['Throttling', 'RequestLimitExceeded', 'ServiceUnavailable'])) {
                 return response()->json([
-                    'error' => '서버가 바쁩니다. 3초 후 다시 시도해주세요.',
+                    'error' => '3초 후 다시 시도해주세요.',
                     'retry_after' => 3
                 ], 503);
             }
-
+             //AWS 서비스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
             return response()->json([
-                'error' => 'AWS 서비스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+                'error' => '잠시 후 다시 시도해주세요.'
             ], 500);
             
         } catch (\Exception $e) {
@@ -158,7 +158,7 @@ class S3UploadController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'Presigned URL 생성에 실패했습니다. 잠시 후 다시 시도해주세요.'
+                'error' => ' 브라우저 새로 고침 후 다시 시도해주세요.'
             ], 500);
         }
     }
