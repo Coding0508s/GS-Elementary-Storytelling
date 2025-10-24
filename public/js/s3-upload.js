@@ -11,7 +11,9 @@ class S3DirectUpload {
             deleteFileEndpoint: '/api/s3/delete-file',
             maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
             allowedTypes: ['video/mp4', 'video/quicktime', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/mkv'],
-            chunkSize: 5 * 1024 * 1024, // 5MB 청크 크기 (기본값)
+            chunkSize: 10 * 1024 * 1024, // 10MB 청크 크기 (속도 최적화)
+            maxConcurrentUploads: 3, // 동시 업로드 수
+            retryAttempts: 3, // 재시도 횟수
             ...options
         };
         
@@ -118,9 +120,14 @@ class S3DirectUpload {
     }
 
     /**
-     * S3에 직접 업로드 (배경 업로드 및 재개 기능 포함)
+     * S3에 직접 업로드 (청크 업로드 및 병렬 처리 최적화)
      */
     async uploadToS3(file, presignedData, onProgress = null) {
+        // 대용량 파일의 경우 청크 업로드 사용
+        if (file.size > 50 * 1024 * 1024) { // 50MB 이상
+            return this.uploadFileInChunks(file, presignedData, onProgress);
+        }
+        
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             const uploadId = this.generateUploadId();
@@ -196,10 +203,14 @@ class S3DirectUpload {
                 reject(error);
             });
 
-            // PUT 요청으로 S3에 업로드
+            // PUT 요청으로 S3에 업로드 (속도 최적화)
             xhr.open('PUT', presignedData.presigned_url);
-            xhr.timeout = this.options.timeout || 900000; // 동적 타임아웃
+            xhr.timeout = this.options.timeout || 1800000; // 30분 타임아웃 (대용량 파일 대응)
             xhr.setRequestHeader('Content-Type', file.type);
+            
+            // 업로드 속도 최적화 헤더
+            xhr.setRequestHeader('Cache-Control', 'no-cache');
+            xhr.setRequestHeader('Connection', 'keep-alive');
             
             // 배경 업로드 지원
             if (this.options.backgroundUpload !== false) {
@@ -271,6 +282,81 @@ class S3DirectUpload {
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * 청크 업로드 구현 (대용량 파일 최적화)
+     */
+    async uploadFileInChunks(file, presignedData, onProgress = null) {
+        const chunkSize = this.options.chunkSize;
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        let uploadedBytes = 0;
+        
+        console.log(`청크 업로드 시작: ${totalChunks}개 청크, 각 ${this.formatFileSize(chunkSize)}`);
+        
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
+            
+            try {
+                await this.uploadChunk(chunk, i, presignedData);
+                uploadedBytes += chunk.size;
+                
+                if (onProgress) {
+                    const percent = (uploadedBytes / file.size) * 100;
+                    onProgress({
+                        loaded: uploadedBytes,
+                        total: file.size,
+                        percent: percent,
+                        chunk: i + 1,
+                        totalChunks: totalChunks
+                    });
+                }
+                
+                // 청크 간 짧은 지연 (서버 부하 방지)
+                if (i < totalChunks - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+            } catch (error) {
+                console.error(`청크 ${i + 1} 업로드 실패:`, error);
+                throw new Error(`청크 ${i + 1}/${totalChunks} 업로드 실패: ${error.message}`);
+            }
+        }
+        
+        return {
+            success: true,
+            totalChunks: totalChunks,
+            uploadedBytes: uploadedBytes
+        };
+    }
+    
+    /**
+     * 개별 청크 업로드
+     */
+    async uploadChunk(chunk, chunkIndex, presignedData) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve();
+                } else {
+                    reject(new Error(`청크 업로드 실패: HTTP ${xhr.status}`));
+                }
+            });
+            
+            xhr.addEventListener('error', () => {
+                reject(new Error('청크 업로드 네트워크 오류'));
+            });
+            
+            xhr.open('PUT', presignedData.presigned_url);
+            xhr.timeout = 300000; // 5분 타임아웃
+            xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+            xhr.setRequestHeader('X-Chunk-Index', chunkIndex);
+            xhr.send(chunk);
+        });
     }
 
     /**

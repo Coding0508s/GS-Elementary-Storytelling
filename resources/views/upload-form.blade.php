@@ -744,8 +744,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 xhr.addEventListener('timeout', () => reject(new Error('업로드 타임아웃')));
 
                 xhr.open('PUT', presignedData.presigned_url);
-                xhr.timeout = 900000; // 5분 → 15분 (900,000ms)
+                xhr.timeout = 1800000; // 30분 타임아웃 (대용량 파일 대응)
                 xhr.setRequestHeader('Content-Type', file.type);
+                
+                // 업로드 속도 최적화 헤더
+                xhr.setRequestHeader('Cache-Control', 'no-cache');
+                xhr.setRequestHeader('Connection', 'keep-alive');
                 xhr.send(file);
             });
 

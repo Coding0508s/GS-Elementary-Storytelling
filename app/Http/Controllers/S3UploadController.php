@@ -404,18 +404,20 @@ class S3UploadController extends Controller
                     'secret' => config('filesystems.disks.s3.secret'),
                 ],
                 'http' => [
-                    // 동시 접속 최적화 설정
-                    'timeout' => 600,        // 30초 → 10분 (600초)
-                    'connect_timeout' => 30, // 10초 → 30초
-                    'pool_size' => 500,      // 300 → 500 (200-300명 동시 접속 대응 강화)
+                    // 업로드 속도 최적화 설정
+                    'timeout' => 1200,       // 20분 (대용량 파일 대응)
+                    'connect_timeout' => 60, // 60초 (연결 안정성)
+                    'pool_size' => 1000,     // 1000 (동시 연결 풀 확대)
                     'verify' => true,
+                    'stream' => true,        // 스트리밍 업로드 활성화
                 ],
                 'retries' => [
-                    'mode' => 'adaptive', // 적응형 재시도
-                    'max_attempts' => 3,
+                    'mode' => 'adaptive',   // 적응형 재시도
+                    'max_attempts' => 5,     // 재시도 횟수 증가
                 ],
-                'use_accelerate_endpoint' => false,
-                'use_dual_stack_endpoint' => false,
+                'use_accelerate_endpoint' => true,  // S3 Transfer Acceleration 활성화
+                'use_dual_stack_endpoint' => true,  // IPv6 지원
+                'use_path_style_endpoint' => false, // 가상 호스팅 스타일
             ]);
         }
         
