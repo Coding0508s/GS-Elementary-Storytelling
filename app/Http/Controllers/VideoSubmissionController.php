@@ -112,6 +112,8 @@ class VideoSubmissionController extends Controller
             return response()->json(['success' => false, 'message' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'], 429);
         }
         cache()->put($rateKey, $rateAttempts + 1, 60);
+
+        $phone = $request->input('parent_phone');
         
         // OTP 발송 모니터링 로깅
         Log::info('OTP 발송 요청', [
@@ -120,8 +122,6 @@ class VideoSubmissionController extends Controller
             'attempts' => $rateAttempts + 1,
             'timestamp' => now()
         ]);
-
-        $phone = $request->input('parent_phone');
         $code = (string) random_int(100000, 999999);
 
         // 세션에 저장 (5분 유효)
