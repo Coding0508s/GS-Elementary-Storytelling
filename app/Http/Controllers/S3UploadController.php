@@ -38,19 +38,27 @@ class S3UploadController extends Controller
             $ipKey = 'storytelling:s3_presigned_url:ip:' . $request->ip();
             $globalKey = 'storytelling:s3_presigned_url:global';
             
-            // IP별 제한 (분당 50회로 증가 - 300-500명 사용자 대응)
+            // 적응형 Rate Limiting (서버 부하에 따른 동적 조절)
+            $serverLoad = $this->getServerLoad();
+            $adaptiveLimits = $this->getAdaptiveLimits($serverLoad);
+            
+            // IP별 제한 (적응형)
             $ipAttempts = cache()->get($ipKey, 0);
-            if ($ipAttempts >= 50) {
+            if ($ipAttempts >= $adaptiveLimits['ip']) {
                 return response()->json([
-                    'error' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'
+                    'error' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
+                    'retry_after' => 60,
+                    'limit_type' => 'ip'
                 ], 429);
             }
             
-            // 전역 동시 요청 제한 (분당 500개로 증가 - 대용량 동시 접속 대응)
+            // 전역 동시 요청 제한 (적응형)
             $globalAttempts = cache()->get($globalKey, 0);
-            if ($globalAttempts >= 500) {
+            if ($globalAttempts >= $adaptiveLimits['global']) {
                 return response()->json([
-                    'error' => '서버가 바쁩니다. 잠시 후 다시 시도해주세요.'
+                    'error' => '서버가 바쁩니다. 잠시 후 다시 시도해주세요.',
+                    'retry_after' => 60,
+                    'limit_type' => 'global'
                 ], 503);
             }
             
@@ -455,5 +463,112 @@ class S3UploadController extends Controller
         }
         
         return $filename;
+    }
+    
+    /**
+     * 서버 부하 상태 확인
+     */
+    private function getServerLoad()
+    {
+        // CPU 사용률 확인
+        $cpuUsage = sys_getloadavg()[0] ?? 0;
+        
+        // 메모리 사용률 확인
+        $memoryUsage = memory_get_usage(true);
+        $memoryLimit = ini_get('memory_limit');
+        $memoryLimitBytes = $this->parseMemoryLimit($memoryLimit);
+        $memoryPercent = ($memoryUsage / $memoryLimitBytes) * 100;
+        
+        // 활성 연결 수 확인
+        $activeConnections = $this->getActiveConnections();
+        
+        return [
+            'cpu' => $cpuUsage,
+            'memory_percent' => $memoryPercent,
+            'active_connections' => $activeConnections,
+            'load_level' => $this->determineLoadLevel($cpuUsage, $memoryPercent, $activeConnections)
+        ];
+    }
+    
+    /**
+     * 적응형 제한값 계산
+     */
+    private function getAdaptiveLimits($serverLoad)
+    {
+        $loadLevel = $serverLoad['load_level'];
+        
+        switch ($loadLevel) {
+            case 'low':
+                return [
+                    'ip' => 100,      // IP당 100회/분
+                    'global' => 1000   // 전역 1000회/분
+                ];
+            case 'medium':
+                return [
+                    'ip' => 50,       // IP당 50회/분
+                    'global' => 500    // 전역 500회/분
+                ];
+            case 'high':
+                return [
+                    'ip' => 30,       // IP당 30회/분
+                    'global' => 300    // 전역 300회/분
+                ];
+            case 'critical':
+                return [
+                    'ip' => 15,       // IP당 15회/분
+                    'global' => 150    // 전역 150회/분
+                ];
+            default:
+                return [
+                    'ip' => 50,       // 기본값
+                    'global' => 500
+                ];
+        }
+    }
+    
+    /**
+     * 부하 수준 결정
+     */
+    private function determineLoadLevel($cpuUsage, $memoryPercent, $activeConnections)
+    {
+        if ($cpuUsage > 4 || $memoryPercent > 90 || $activeConnections > 200) {
+            return 'critical';
+        } elseif ($cpuUsage > 2 || $memoryPercent > 75 || $activeConnections > 100) {
+            return 'high';
+        } elseif ($cpuUsage > 1 || $memoryPercent > 50 || $activeConnections > 50) {
+            return 'medium';
+        } else {
+            return 'low';
+        }
+    }
+    
+    /**
+     * 활성 연결 수 확인
+     */
+    private function getActiveConnections()
+    {
+        // 캐시에서 활성 연결 수 확인
+        $cacheKey = 'storytelling:active_connections';
+        return cache()->get($cacheKey, 0);
+    }
+    
+    /**
+     * 메모리 제한 파싱
+     */
+    private function parseMemoryLimit($memoryLimit)
+    {
+        $unit = strtoupper(substr($memoryLimit, -1));
+        $value = (int) $memoryLimit;
+        
+        switch ($unit) {
+            case 'G':
+                return $value * 1024 * 1024 * 1024;
+            case 'M':
+                return $value * 1024 * 1024;
+            case 'K':
+                return $value * 1024;
+            default:
+                return $value;
+        }
     }
 }

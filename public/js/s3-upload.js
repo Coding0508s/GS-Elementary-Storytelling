@@ -12,8 +12,13 @@ class S3DirectUpload {
             maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
             allowedTypes: ['video/mp4', 'video/quicktime', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/mkv'],
             chunkSize: 10 * 1024 * 1024, // 10MB 청크 크기 (속도 최적화)
+            adaptiveChunkSize: true, // 동적 청크 크기 활성화
             maxConcurrentUploads: 5, // 동시 업로드 수 (3 → 5로 증가)
+            parallelChunkUpload: true, // 병렬 청크 업로드 활성화
+            maxParallelChunks: 3, // 최대 동시 청크 수
             retryAttempts: 5, // 재시도 횟수 (3 → 5로 증가)
+            adaptiveRetry: true, // 적응형 재시도 활성화
+            networkQuality: 'unknown', // 네트워크 품질 감지
             ...options
         };
         
@@ -21,6 +26,7 @@ class S3DirectUpload {
         this.activeUploads = new Map();
         this.networkInfo = this.detectNetworkInfo();
         this.optimizeForMobile();
+        this.initializeAdaptiveRetry();
     }
 
     /**
@@ -287,21 +293,68 @@ class S3DirectUpload {
      * 청크 업로드 구현 (대용량 파일 최적화)
      */
     async uploadFileInChunks(file, presignedData, onProgress = null) {
-        const chunkSize = this.options.chunkSize;
+        // 동적 청크 크기 계산
+        const chunkSize = this.getAdaptiveChunkSize(file.size);
         const totalChunks = Math.ceil(file.size / chunkSize);
         let uploadedBytes = 0;
         
         console.log(`청크 업로드 시작: ${totalChunks}개 청크, 각 ${this.formatFileSize(chunkSize)}`);
+        
+        // 병렬 청크 업로드 사용 여부 결정
+        if (this.options.parallelChunkUpload && totalChunks > 1) {
+            return this.uploadChunksInParallel(file, presignedData, onProgress, chunkSize, totalChunks);
+        } else {
+            return this.uploadChunksSequentially(file, presignedData, onProgress, chunkSize, totalChunks);
+        }
+    }
+    
+    /**
+     * 순차적 청크 업로드 (기존 방식)
+     */
+    async uploadChunksSequentially(file, presignedData, onProgress, chunkSize, totalChunks) {
+        let uploadedBytes = 0;
         
         for (let i = 0; i < totalChunks; i++) {
             const start = i * chunkSize;
             const end = Math.min(start + chunkSize, file.size);
             const chunk = file.slice(start, end);
             
-            try {
-                await this.uploadChunk(chunk, i, presignedData);
-                uploadedBytes += chunk.size;
-                
+            // 적응형 재시도 로직 적용
+            const maxRetries = this.getAdaptiveRetryCount();
+            let chunkUploaded = false;
+            
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    await this.uploadChunk(chunk, i, presignedData);
+                    uploadedBytes += chunk.size;
+                    chunkUploaded = true;
+                    
+                    // 성공 시 통계 업데이트
+                    this.retryStats.success++;
+                    this.updateNetworkQuality('success');
+                    
+                    break; // 성공 시 재시도 루프 종료
+                    
+                } catch (error) {
+                    console.warn(`청크 ${i + 1} 업로드 시도 ${attempt}/${maxRetries} 실패:`, error.message);
+                    
+                    // 실패 시 통계 업데이트
+                    this.retryStats.failure++;
+                    this.updateNetworkQuality('failure');
+                    
+                    if (attempt === maxRetries) {
+                        console.error(`청크 ${i + 1} 업로드 최종 실패:`, error);
+                        throw new Error(`청크 ${i + 1}/${totalChunks} 업로드 실패: ${error.message}`);
+                    }
+                    
+                    // 적응형 재시도 지연
+                    const delay = this.getAdaptiveRetryDelay(attempt);
+                    console.log(`청크 ${i + 1} 재시도 ${delay}ms 후 실행...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            
+            if (chunkUploaded) {
                 if (onProgress) {
                     const percent = (uploadedBytes / file.size) * 100;
                     onProgress({
@@ -313,14 +366,11 @@ class S3DirectUpload {
                     });
                 }
                 
-                // 청크 간 짧은 지연 (서버 부하 방지)
+                // 네트워크 품질에 따른 동적 지연
+                const networkDelay = this.getNetworkBasedDelay();
                 if (i < totalChunks - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise(resolve => setTimeout(resolve, networkDelay));
                 }
-                
-            } catch (error) {
-                console.error(`청크 ${i + 1} 업로드 실패:`, error);
-                throw new Error(`청크 ${i + 1}/${totalChunks} 업로드 실패: ${error.message}`);
             }
         }
         
@@ -356,6 +406,291 @@ class S3DirectUpload {
             xhr.setRequestHeader('X-Chunk-Index', chunkIndex);
             xhr.send(chunk);
         });
+    }
+
+    /**
+     * 적응형 재시도 시스템 초기화
+     */
+    initializeAdaptiveRetry() {
+        this.retryStats = {
+            success: 0,
+            failure: 0,
+            avgResponseTime: 0,
+            networkQuality: 'unknown'
+        };
+        
+        // 네트워크 품질 감지
+        this.detectNetworkQuality();
+    }
+    
+    /**
+     * 네트워크 품질 감지
+     */
+    detectNetworkQuality() {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        
+        if (connection) {
+            const effectiveType = connection.effectiveType;
+            const downlink = connection.downlink;
+            
+            if (effectiveType === '4g' && downlink > 10) {
+                this.options.networkQuality = 'excellent';
+            } else if (effectiveType === '4g' && downlink > 5) {
+                this.options.networkQuality = 'good';
+            } else if (effectiveType === '3g' || downlink > 1) {
+                this.options.networkQuality = 'fair';
+            } else {
+                this.options.networkQuality = 'poor';
+            }
+        } else {
+            // 네트워크 정보가 없는 경우 기본값
+            this.options.networkQuality = 'unknown';
+        }
+        
+        console.log('네트워크 품질 감지:', this.options.networkQuality);
+    }
+    
+    /**
+     * 적응형 재시도 횟수 계산
+     */
+    getAdaptiveRetryCount() {
+        const baseRetries = this.options.retryAttempts;
+        const networkQuality = this.options.networkQuality;
+        
+        switch (networkQuality) {
+            case 'excellent':
+                return Math.max(2, Math.floor(baseRetries * 0.4)); // 2회
+            case 'good':
+                return Math.max(3, Math.floor(baseRetries * 0.6)); // 3회
+            case 'fair':
+                return Math.max(4, Math.floor(baseRetries * 0.8)); // 4회
+            case 'poor':
+                return baseRetries; // 5회
+            default:
+                return Math.max(3, Math.floor(baseRetries * 0.6)); // 3회
+        }
+    }
+    
+    /**
+     * 적응형 재시도 지연 시간 계산
+     */
+    getAdaptiveRetryDelay(attempt) {
+        const baseDelay = 1000; // 1초
+        const networkQuality = this.options.networkQuality;
+        
+        let multiplier = 1;
+        switch (networkQuality) {
+            case 'excellent':
+                multiplier = 0.5; // 0.5초
+                break;
+            case 'good':
+                multiplier = 1; // 1초
+                break;
+            case 'fair':
+                multiplier = 2; // 2초
+                break;
+            case 'poor':
+                multiplier = 3; // 3초
+                break;
+            default:
+                multiplier = 1.5; // 1.5초
+        }
+        
+        // 지수 백오프 적용
+        return baseDelay * multiplier * Math.pow(2, attempt - 1);
+    }
+    
+    /**
+     * 네트워크 품질 업데이트
+     */
+    updateNetworkQuality(result) {
+        if (result === 'success') {
+            this.retryStats.avgResponseTime = (this.retryStats.avgResponseTime + Date.now()) / 2;
+        }
+        
+        // 네트워크 품질 재평가
+        const successRate = this.retryStats.success / (this.retryStats.success + this.retryStats.failure);
+        
+        if (successRate > 0.9) {
+            this.options.networkQuality = 'excellent';
+        } else if (successRate > 0.7) {
+            this.options.networkQuality = 'good';
+        } else if (successRate > 0.5) {
+            this.options.networkQuality = 'fair';
+        } else {
+            this.options.networkQuality = 'poor';
+        }
+        
+        console.log(`네트워크 품질 업데이트: ${this.options.networkQuality} (성공률: ${(successRate * 100).toFixed(1)}%)`);
+    }
+    
+    /**
+     * 네트워크 품질 기반 지연 시간 계산
+     */
+    getNetworkBasedDelay() {
+        const baseDelay = 100; // 기본 100ms
+        
+        switch (this.options.networkQuality) {
+            case 'excellent':
+                return 50; // 50ms
+            case 'good':
+                return 100; // 100ms
+            case 'fair':
+                return 200; // 200ms
+            case 'poor':
+                return 500; // 500ms
+            default:
+                return 150; // 150ms
+        }
+    }
+    
+    /**
+     * 동적 청크 크기 계산
+     */
+    getAdaptiveChunkSize(fileSize) {
+        if (!this.options.adaptiveChunkSize) {
+            return this.options.chunkSize;
+        }
+        
+        const networkQuality = this.options.networkQuality;
+        const baseChunkSize = this.options.chunkSize;
+        
+        // 네트워크 품질에 따른 청크 크기 조절
+        let multiplier = 1;
+        switch (networkQuality) {
+            case 'excellent':
+                multiplier = 2.0; // 20MB
+                break;
+            case 'good':
+                multiplier = 1.5; // 15MB
+                break;
+            case 'fair':
+                multiplier = 1.0; // 10MB
+                break;
+            case 'poor':
+                multiplier = 0.5; // 5MB
+                break;
+            default:
+                multiplier = 1.0; // 10MB
+        }
+        
+        // 파일 크기에 따른 청크 크기 조절
+        let sizeMultiplier = 1;
+        if (fileSize > 1024 * 1024 * 1024) { // 1GB 이상
+            sizeMultiplier = 1.5; // 대용량 파일은 큰 청크
+        } else if (fileSize < 100 * 1024 * 1024) { // 100MB 미만
+            sizeMultiplier = 0.8; // 소용량 파일은 작은 청크
+        }
+        
+        const adaptiveChunkSize = Math.floor(baseChunkSize * multiplier * sizeMultiplier);
+        
+        // 최소/최대 청크 크기 제한
+        const minChunkSize = 1024 * 1024; // 1MB
+        const maxChunkSize = 50 * 1024 * 1024; // 50MB
+        
+        const finalChunkSize = Math.max(minChunkSize, Math.min(maxChunkSize, adaptiveChunkSize));
+        
+        console.log(`동적 청크 크기 계산: ${this.formatFileSize(finalChunkSize)} (네트워크: ${networkQuality}, 파일: ${this.formatFileSize(fileSize)})`);
+        
+        return finalChunkSize;
+    }
+    
+    /**
+     * 병렬 청크 업로드 구현
+     */
+    async uploadChunksInParallel(file, presignedData, onProgress, chunkSize, totalChunks) {
+        const maxParallel = this.options.maxParallelChunks;
+        const chunks = [];
+        let uploadedBytes = 0;
+        
+        // 청크 생성
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
+            chunks.push({ index: i, chunk, start, end });
+        }
+        
+        console.log(`병렬 청크 업로드 시작: ${totalChunks}개 청크, 최대 ${maxParallel}개 동시 처리`);
+        
+        // 병렬 업로드 실행
+        const uploadPromises = [];
+        const completedChunks = new Set();
+        
+        for (let i = 0; i < totalChunks; i += maxParallel) {
+            const batch = chunks.slice(i, i + maxParallel);
+            const batchPromises = batch.map(async (chunkData) => {
+                const { index, chunk } = chunkData;
+                
+                try {
+                    await this.uploadChunkWithRetry(chunk, index, presignedData);
+                    completedChunks.add(index);
+                    uploadedBytes += chunk.size;
+                    
+                    if (onProgress) {
+                        const percent = (uploadedBytes / file.size) * 100;
+                        onProgress({
+                            loaded: uploadedBytes,
+                            total: file.size,
+                            percent: percent,
+                            chunk: index + 1,
+                            totalChunks: totalChunks,
+                            completed: completedChunks.size
+                        });
+                    }
+                    
+                    return { success: true, index };
+                } catch (error) {
+                    console.error(`청크 ${index + 1} 병렬 업로드 실패:`, error);
+                    return { success: false, index, error };
+                }
+            });
+            
+            // 배치 완료 대기
+            const batchResults = await Promise.allSettled(batchPromises);
+            
+            // 실패한 청크 확인
+            const failedChunks = batchResults
+                .filter(result => result.status === 'fulfilled' && !result.value.success)
+                .map(result => result.value.index);
+            
+            if (failedChunks.length > 0) {
+                console.warn(`배치 ${Math.floor(i / maxParallel) + 1}에서 ${failedChunks.length}개 청크 실패`);
+            }
+        }
+        
+        return {
+            success: completedChunks.size === totalChunks,
+            totalChunks: totalChunks,
+            completedChunks: completedChunks.size,
+            uploadedBytes: uploadedBytes
+        };
+    }
+    
+    /**
+     * 청크 업로드 (재시도 포함)
+     */
+    async uploadChunkWithRetry(chunk, index, presignedData) {
+        const maxRetries = this.getAdaptiveRetryCount();
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                await this.uploadChunk(chunk, index, presignedData);
+                this.retryStats.success++;
+                this.updateNetworkQuality('success');
+                return;
+            } catch (error) {
+                this.retryStats.failure++;
+                this.updateNetworkQuality('failure');
+                
+                if (attempt === maxRetries) {
+                    throw error;
+                }
+                
+                const delay = this.getAdaptiveRetryDelay(attempt);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
     }
 
     /**
@@ -421,12 +756,25 @@ class S3DirectUpload {
             this.options.timeout = 1800000; // 30분으로 연장
             this.options.retryAttempts = 5; // 재시도 횟수 증가
             this.options.retryDelay = 2000; // 재시도 간격 증가
+            this.options.maxConcurrentUploads = 1; // 동시 업로드 1개로 제한
+            
+            // 배터리 상태 감지 및 추가 최적화
+            if ('getBattery' in navigator) {
+                navigator.getBattery().then(battery => {
+                    if (battery.level < 0.2) { // 배터리 20% 미만
+                        this.options.chunkSize = 512 * 1024; // 512KB로 더 축소
+                        this.options.retryDelay = 3000; // 재시도 간격 더 증가
+                        console.log('🔋 저배터리 모드 감지: 초소형 청크 적용');
+                    }
+                });
+            }
             
             console.log('📱 모바일 데이터 환경 감지 - 업로드 최적화 적용', {
                 effectiveType,
                 downlink: downlink + ' Mbps',
                 saveData,
-                chunkSize: this.formatFileSize(this.options.chunkSize)
+                chunkSize: this.formatFileSize(this.options.chunkSize),
+                maxConcurrent: this.options.maxConcurrentUploads
             });
         } else if (effectiveType === '4g' && downlink > 5) {
             // 고속 연결 환경 최적화
