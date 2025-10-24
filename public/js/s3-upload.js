@@ -11,11 +11,11 @@ class S3DirectUpload {
             deleteFileEndpoint: '/api/s3/delete-file',
             maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
             allowedTypes: ['video/mp4', 'video/quicktime', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/mkv'],
-            chunkSize: 10 * 1024 * 1024, // 10MB 청크 크기 (속도 최적화)
+            chunkSize: 20 * 1024 * 1024, // 20MB 청크 크기 (속도 최적화 강화)
             adaptiveChunkSize: true, // 동적 청크 크기 활성화
-            maxConcurrentUploads: 8, // 동시 업로드 수 (5 → 8로 증가)
+            maxConcurrentUploads: 12, // 동시 업로드 수 (8 → 12로 증가)
             parallelChunkUpload: true, // 병렬 청크 업로드 활성화
-            maxParallelChunks: 5, // 최대 동시 청크 수 (3 → 5로 증가)
+            maxParallelChunks: 8, // 최대 동시 청크 수 (5 → 8로 증가)
             retryAttempts: 5, // 재시도 횟수 (3 → 5로 증가)
             adaptiveRetry: true, // 적응형 재시도 활성화
             networkQuality: 'unknown', // 네트워크 품질 감지
@@ -545,22 +545,22 @@ class S3DirectUpload {
     }
     
     /**
-     * 최적화된 네트워크 지연 (속도 우선)
+     * 최적화된 네트워크 지연 (속도 우선 강화)
      */
     getOptimizedNetworkDelay() {
-        // 고속 연결에서는 지연 최소화
+        // 모든 연결에서 지연 최소화 (속도 우선)
         if (this.options.networkQuality === 'excellent' || this.options.networkQuality === 'good') {
             return 0; // 지연 없음
         }
         
-        // 느린 연결에서만 최소 지연 적용
+        // 느린 연결에서도 최소 지연만 적용
         switch (this.options.networkQuality) {
             case 'fair':
-                return 50; // 50ms로 축소
+                return 10; // 10ms로 대폭 축소 (기존 50ms)
             case 'poor':
-                return 100; // 100ms로 축소
+                return 25; // 25ms로 대폭 축소 (기존 100ms)
             default:
-                return 25; // 25ms로 축소
+                return 5; // 5ms로 대폭 축소 (기존 25ms)
         }
     }
     
@@ -575,23 +575,23 @@ class S3DirectUpload {
         const networkQuality = this.options.networkQuality;
         const baseChunkSize = this.options.chunkSize;
         
-        // 네트워크 품질에 따른 청크 크기 조절
+        // 네트워크 품질에 따른 청크 크기 조절 (속도 우선)
         let multiplier = 1;
         switch (networkQuality) {
             case 'excellent':
-                multiplier = 2.0; // 20MB
+                multiplier = 3.0; // 60MB (기존 20MB)
                 break;
             case 'good':
-                multiplier = 1.5; // 15MB
+                multiplier = 2.5; // 50MB (기존 15MB)
                 break;
             case 'fair':
-                multiplier = 1.0; // 10MB
+                multiplier = 1.5; // 30MB (기존 10MB)
                 break;
             case 'poor':
-                multiplier = 0.5; // 5MB
+                multiplier = 1.0; // 20MB (기존 5MB)
                 break;
             default:
-                multiplier = 1.0; // 10MB
+                multiplier = 2.0; // 40MB (기존 10MB)
         }
         
         // 파일 크기에 따른 청크 크기 조절
@@ -604,9 +604,9 @@ class S3DirectUpload {
         
         const adaptiveChunkSize = Math.floor(baseChunkSize * multiplier * sizeMultiplier);
         
-        // 최소/최대 청크 크기 제한
-        const minChunkSize = 1024 * 1024; // 1MB
-        const maxChunkSize = 50 * 1024 * 1024; // 50MB
+        // 최소/최대 청크 크기 제한 (속도 우선)
+        const minChunkSize = 5 * 1024 * 1024; // 5MB (기존 1MB)
+        const maxChunkSize = 100 * 1024 * 1024; // 100MB (기존 50MB)
         
         const finalChunkSize = Math.max(minChunkSize, Math.min(maxChunkSize, adaptiveChunkSize));
         
@@ -870,13 +870,13 @@ class S3DirectUpload {
                 maxConcurrent: this.options.maxConcurrentUploads
             });
         } else if (effectiveType === '4g' && downlink > 5) {
-            // 고속 연결 환경 최적화 (속도 우선)
-            this.options.chunkSize = 15 * 1024 * 1024; // 15MB로 증가
+            // 고속 연결 환경 최적화 (속도 우선 강화)
+            this.options.chunkSize = 30 * 1024 * 1024; // 30MB로 대폭 증가
             this.options.timeout = 900000; // 15분
             this.options.retryAttempts = 3;
-            this.options.retryDelay = 500; // 500ms로 단축
-            this.options.maxConcurrentUploads = 10; // 동시 업로드 증가
-            this.options.maxParallelChunks = 8; // 병렬 청크 증가
+            this.options.retryDelay = 200; // 200ms로 대폭 단축
+            this.options.maxConcurrentUploads = 15; // 동시 업로드 대폭 증가
+            this.options.maxParallelChunks = 12; // 병렬 청크 대폭 증가
             
             console.log('🚀 고속 연결 환경 감지 - 업로드 최적화 적용', {
                 effectiveType,

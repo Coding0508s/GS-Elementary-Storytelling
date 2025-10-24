@@ -420,12 +420,13 @@ class S3UploadController extends Controller
                     'secret' => config('filesystems.disks.s3.secret'),
                 ],
                 'http' => [
-                    // 업로드 속도 최적화 설정
-                    'timeout' => 1200,       // 20분 (대용량 파일 대응)
-                    'connect_timeout' => 60, // 60초 (연결 안정성)
-                    'pool_size' => 1000,     // 1000 (동시 연결 풀 확대)
+                    // 업로드 속도 최적화 설정 (강화)
+                    'timeout' => 1800,       // 30분 (대용량 파일 대응 강화)
+                    'connect_timeout' => 30, // 30초 (연결 속도 최적화)
+                    'pool_size' => 2000,     // 2000 (동시 연결 풀 대폭 확대)
                     'verify' => true,
                     'stream' => true,        // 스트리밍 업로드 활성화
+                    'decode_content' => false, // 디코딩 비활성화로 속도 향상
                 ],
                 'retries' => [
                     'mode' => 'adaptive',   // 적응형 재시도
