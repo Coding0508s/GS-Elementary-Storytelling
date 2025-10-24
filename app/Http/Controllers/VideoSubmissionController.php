@@ -72,13 +72,25 @@ class VideoSubmissionController extends Controller
      */
     public function showUploadForm(Request $request)
     {
+        // 세션 보안 검증
+        $securityCheck = $this->validateSessionSecurity($request);
+        if ($securityCheck) {
+            return $securityCheck;
+        }
+        
+        // 세션 만료 확인
+        $expiryCheck = $this->checkSessionExpiry($request);
+        if ($expiryCheck) {
+            return $expiryCheck;
+        }
+        
         // 개인정보 동의 확인
         if (!$request->session()->has('privacy_consent') || !$request->session()->get('privacy_consent')) {
             return redirect()->route('privacy.consent')
                            ->with('error', '개인정보 수집 및 이용에 동의해야 업로드가 가능합니다.');
         }
 
-        // 업로드 폼 진입 시 이전 OTP 세션 정리
+        // 업로드 폼 진입 시 이전 OTP 세션 정리 및 보안 강화
         $request->session()->forget([
             'otp_phone', 
             'otp_code', 
@@ -87,8 +99,11 @@ class VideoSubmissionController extends Controller
             'otp_verified',
             'otp_verified_phone'
         ]);
-
-        Log::info('업로드 폼 진입 - OTP 세션 정리 완료', [
+        
+        // 세션 ID 재생성 (보안 강화)
+        $request->session()->regenerate();
+        
+        Log::info('업로드 폼 진입 - OTP 세션 정리 및 세션 ID 재생성 완료', [
             'ip' => $request->ip(),
             'timestamp' => now()
         ]);
@@ -129,6 +144,7 @@ class VideoSubmissionController extends Controller
         $request->session()->put('otp_code', $code);
         $request->session()->put('otp_expires_at', now()->addMinutes(5));
         $request->session()->put('otp_attempts', 0);
+        $request->session()->put('otp_sent_at', now()); // OTP 발송 시간 기록
 
         $message = "[Storytelling 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
 
@@ -150,6 +166,18 @@ class VideoSubmissionController extends Controller
      */
     public function verifyOtp(Request $request)
     {
+        // 세션 보안 검증
+        $securityCheck = $this->validateSessionSecurity($request);
+        if ($securityCheck) {
+            return $securityCheck;
+        }
+        
+        // 세션 만료 확인
+        $expiryCheck = $this->checkSessionExpiry($request);
+        if ($expiryCheck) {
+            return $expiryCheck;
+        }
+        
         $request->validate([
             'parent_phone' => 'required|string|min:10|max:20',
             'code' => 'required|string|min:4|max:8',
@@ -182,6 +210,16 @@ class VideoSubmissionController extends Controller
             $request->session()->put('otp_verified_phone', $phone);
             // 사용 후 코드 제거
             $request->session()->forget(['otp_code']);
+            
+            // 세션 ID 재생성 (보안 강화)
+            $request->session()->regenerate();
+            
+            Log::info('OTP 검증 성공 - 세션 ID 재생성 완료', [
+                'ip' => $request->ip(),
+                'phone' => substr($phone, 0, 3) . '****' . substr($phone, -4),
+                'timestamp' => now()
+            ]);
+            
             return response()->json(['success' => true, 'message' => '인증이 완료되었습니다.']);
         }
 
@@ -419,8 +457,8 @@ class VideoSubmissionController extends Controller
                 ]
             ]);
 
-            // 업로드 성공 시 OTP 세션 정리
-            $request->session()->forget(['otp_verified', 'otp_verified_phone', 'otp_phone', 'otp_expires_at', 'otp_attempts']);
+            // 업로드 성공 시 OTP 세션 완전 정리
+            $this->clearAllOtpSessions($request);
 
             return response()->json([
                 'success' => true,
@@ -828,25 +866,148 @@ class VideoSubmissionController extends Controller
     }
 
     /**
-     * OTP 관련 세션만 초기화
+     * OTP 관련 세션만 초기화 (개선된 버전)
      */
     private function clearOtpSessions(Request $request)
     {
-        $request->session()->forget([
+        // 모든 OTP 관련 세션 키 정리
+        $otpKeys = [
             'otp_phone', 
             'otp_code', 
             'otp_expires_at', 
             'otp_attempts',
             'otp_verified',
             'otp_verified_phone'
-        ]);
+        ];
         
-        Log::info('OTP 세션 정리 완료', [
+        $request->session()->forget($otpKeys);
+        
+        // 세션 ID 재생성 (보안 강화)
+        $request->session()->regenerate();
+        
+        Log::info('OTP 세션 완전 정리 및 세션 ID 재생성 완료', [
             'ip' => $request->ip(),
+            'cleared_keys' => $otpKeys,
+            'timestamp' => now()
+        ]);
+    }
+    
+    /**
+     * 완전한 OTP 세션 정리 (업로드 완료 시 사용)
+     */
+    private function clearAllOtpSessions(Request $request)
+    {
+        // 모든 OTP 관련 세션 데이터 완전 삭제
+        $allOtpKeys = [
+            'otp_phone', 
+            'otp_code', 
+            'otp_expires_at', 
+            'otp_attempts',
+            'otp_verified',
+            'otp_verified_phone',
+            'otp_sent_at',
+            'otp_last_attempt'
+        ];
+        
+        $request->session()->forget($allOtpKeys);
+        
+        // 세션 ID 재생성 (보안 강화)
+        $request->session()->regenerate();
+        
+        Log::info('모든 OTP 세션 완전 정리 및 세션 ID 재생성 완료', [
+            'ip' => $request->ip(),
+            'cleared_keys' => $allOtpKeys,
             'timestamp' => now()
         ]);
     }
 
+    /**
+     * 세션 만료 확인 및 자동 정리
+     */
+    private function checkSessionExpiry(Request $request)
+    {
+        $consentTime = $request->session()->get('privacy_consent_time');
+        $otpSentTime = $request->session()->get('otp_sent_at');
+        
+        // 개인정보 동의 만료 확인 (30분)
+        if ($consentTime && now()->diffInMinutes($consentTime) > 30) {
+            Log::info('개인정보 동의 세션 만료 - 자동 정리', [
+                'ip' => $request->ip(),
+                'consent_time' => $consentTime,
+                'expired_minutes' => now()->diffInMinutes($consentTime)
+            ]);
+            
+            $this->clearAllSessions($request);
+            return redirect()->route('privacy.consent')
+                           ->with('error', '세션이 만료되었습니다. 다시 시작해주세요.');
+        }
+        
+        // OTP 만료 확인 (5분)
+        if ($otpSentTime && now()->diffInMinutes($otpSentTime) > 5) {
+            Log::info('OTP 세션 만료 - 자동 정리', [
+                'ip' => $request->ip(),
+                'otp_sent_time' => $otpSentTime,
+                'expired_minutes' => now()->diffInMinutes($otpSentTime)
+            ]);
+            
+            $this->clearOtpSessions($request);
+            return redirect()->route('upload.form')
+                           ->with('error', '인증 시간이 만료되었습니다. 다시 인증해주세요.');
+        }
+        
+        return null; // 만료되지 않음
+    }
+    
+    /**
+     * 세션 상태 검증
+     */
+    private function validateSessionState(Request $request, $requiredKeys = [])
+    {
+        foreach ($requiredKeys as $key) {
+            if (!$request->session()->has($key)) {
+                Log::warning('세션 상태 검증 실패', [
+                    'ip' => $request->ip(),
+                    'missing_key' => $key,
+                    'session_keys' => array_keys($request->session()->all())
+                ]);
+                
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * 세션 보안 검증
+     */
+    private function validateSessionSecurity(Request $request)
+    {
+        // 세션 하이재킹 방지 - User-Agent 검증
+        $storedUserAgent = $request->session()->get('user_agent');
+        $currentUserAgent = $request->userAgent();
+        
+        if ($storedUserAgent && $storedUserAgent !== $currentUserAgent) {
+            Log::warning('세션 하이재킹 의심 - User-Agent 불일치', [
+                'ip' => $request->ip(),
+                'stored_ua' => $storedUserAgent,
+                'current_ua' => $currentUserAgent,
+                'timestamp' => now()
+            ]);
+            
+            $this->clearAllSessions($request);
+            return redirect()->route('privacy.consent')
+                           ->with('error', '보안상의 이유로 세션이 초기화되었습니다. 다시 시작해주세요.');
+        }
+        
+        // User-Agent 저장 (첫 방문 시)
+        if (!$storedUserAgent) {
+            $request->session()->put('user_agent', $currentUserAgent);
+        }
+        
+        return null; // 보안 검증 통과
+    }
+    
     /**
      * 세션 초기화 전용 라우트
      */
