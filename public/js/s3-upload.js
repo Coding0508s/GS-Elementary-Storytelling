@@ -208,9 +208,8 @@ class S3DirectUpload {
             xhr.timeout = this.options.timeout || 1800000; // 30분 타임아웃 (대용량 파일 대응)
             xhr.setRequestHeader('Content-Type', file.type);
             
-            // 업로드 속도 최적화 헤더
+            // 업로드 속도 최적화 헤더 (안전한 헤더만 사용)
             xhr.setRequestHeader('Cache-Control', 'no-cache');
-            xhr.setRequestHeader('Connection', 'keep-alive');
             
             // 배경 업로드 지원
             if (this.options.backgroundUpload !== false) {

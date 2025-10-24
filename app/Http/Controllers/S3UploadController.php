@@ -415,8 +415,8 @@ class S3UploadController extends Controller
                     'mode' => 'adaptive',   // 적응형 재시도
                     'max_attempts' => 5,     // 재시도 횟수 증가
                 ],
-                'use_accelerate_endpoint' => true,  // S3 Transfer Acceleration 활성화
-                'use_dual_stack_endpoint' => true,  // IPv6 지원
+                'use_accelerate_endpoint' => false, // S3 Transfer Acceleration 비활성화 (CORS 문제 해결)
+                'use_dual_stack_endpoint' => false, // IPv6 비활성화 (CORS 문제 해결)
                 'use_path_style_endpoint' => false, // 가상 호스팅 스타일
             ]);
         }
