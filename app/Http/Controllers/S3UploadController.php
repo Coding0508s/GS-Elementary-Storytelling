@@ -38,25 +38,33 @@ class S3UploadController extends Controller
             $ipKey = 'storytelling:s3_presigned_url:ip:' . $request->ip();
             $globalKey = 'storytelling:s3_presigned_url:global';
             
-            // IP별 제한 (분당 30회로 증가 - 200-300명 사용자 대응)
+            // IP별 제한 (분당 50회로 증가 - 300-500명 사용자 대응)
             $ipAttempts = cache()->get($ipKey, 0);
-            if ($ipAttempts >= 30) {
+            if ($ipAttempts >= 50) {
                 return response()->json([
                     'error' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'
                 ], 429);
             }
             
-            // 전역 동시 요청 제한 (초당 300개로 증가 - 대용량 동시 접속 대응)
+            // 전역 동시 요청 제한 (분당 500개로 증가 - 대용량 동시 접속 대응)
             $globalAttempts = cache()->get($globalKey, 0);
-            if ($globalAttempts >= 300) {
+            if ($globalAttempts >= 500) {
                 return response()->json([
-                    'error' => '잠시 후 다시 시도해주세요.'
+                    'error' => '서버가 바쁩니다. 잠시 후 다시 시도해주세요.'
                 ], 503);
             }
             
             // 카운터 증가 (일관된 시간 단위 사용)
             cache()->put($ipKey, $ipAttempts + 1, 60); // 1분간 유지
-            cache()->put($globalKey, $globalAttempts + 1, 60); // 1분간 유지 (1초 → 1분으로 수정)
+            cache()->put($globalKey, $globalAttempts + 1, 60); // 1분간 유지
+            
+            // 동시 접속 모니터링 로깅
+            Log::info('S3 Presigned URL 요청', [
+                'ip' => $request->ip(),
+                'ip_attempts' => $ipAttempts + 1,
+                'global_attempts' => $globalAttempts + 1,
+                'timestamp' => now()
+            ]);
 
             $originalFilename = $request->input('filename');
             $contentType = $request->input('content_type');

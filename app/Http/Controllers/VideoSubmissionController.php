@@ -30,14 +30,14 @@ class VideoSubmissionController extends Controller
      */
     public function showPrivacyConsent(Request $request)
     {
-        // 세션 락 메커니즘으로 동시 접속 충돌 방지
+        // 개선된 세션 락 메커니즘으로 동시 접속 충돌 방지 (300-500명 대응)
         $sessionLockKey = 'session_lock:' . $request->ip();
-        $lockAcquired = cache()->add($sessionLockKey, true, 5); // 5초 락
+        $lockAcquired = cache()->add($sessionLockKey, true, 10); // 10초 락 (5초 → 10초)
         
         if (!$lockAcquired) {
             // 락 획득 실패 시 잠시 대기 후 재시도
-            usleep(100000); // 0.1초 대기
-            $lockAcquired = cache()->add($sessionLockKey, true, 5);
+            usleep(200000); // 0.2초 대기 (0.1초 → 0.2초)
+            $lockAcquired = cache()->add($sessionLockKey, true, 10);
         }
         
         if ($lockAcquired) {
@@ -105,13 +105,21 @@ class VideoSubmissionController extends Controller
             'parent_phone' => 'required|string|min:10|max:20',
         ]);
 
-        // 너무 잦은 요청 방지 (IP 기준 1분 15회)
+        // 개선된 OTP 발송 제한 (IP 기준 1분 30회 - 200-300명 동시 접속 대응)
         $rateKey = 'storytelling:otp_rate:ip:' . $request->ip();
         $rateAttempts = cache()->get($rateKey, 0);
-        if ($rateAttempts >= 15) {
+        if ($rateAttempts >= 30) {
             return response()->json(['success' => false, 'message' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'], 429);
         }
         cache()->put($rateKey, $rateAttempts + 1, 60);
+        
+        // OTP 발송 모니터링 로깅
+        Log::info('OTP 발송 요청', [
+            'ip' => $request->ip(),
+            'phone' => substr($phone, 0, 3) . '****' . substr($phone, -4), // 개인정보 보호
+            'attempts' => $rateAttempts + 1,
+            'timestamp' => now()
+        ]);
 
         $phone = $request->input('parent_phone');
         $code = (string) random_int(100000, 999999);
@@ -784,14 +792,14 @@ class VideoSubmissionController extends Controller
      */
     private function clearAllSessions(Request $request)
     {
-        // 세션 락 메커니즘으로 동시 접속 충돌 방지
+        // 개선된 세션 락 메커니즘으로 동시 접속 충돌 방지 (300-500명 대응)
         $sessionLockKey = 'session_lock:' . $request->ip();
-        $lockAcquired = cache()->add($sessionLockKey, true, 5); // 5초 락
+        $lockAcquired = cache()->add($sessionLockKey, true, 10); // 10초 락 (5초 → 10초)
         
         if (!$lockAcquired) {
             // 락 획득 실패 시 잠시 대기 후 재시도
-            usleep(100000); // 0.1초 대기
-            $lockAcquired = cache()->add($sessionLockKey, true, 5);
+            usleep(200000); // 0.2초 대기 (0.1초 → 0.2초)
+            $lockAcquired = cache()->add($sessionLockKey, true, 10);
         }
         
         if ($lockAcquired) {

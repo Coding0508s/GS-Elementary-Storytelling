@@ -12,8 +12,8 @@ class S3DirectUpload {
             maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
             allowedTypes: ['video/mp4', 'video/quicktime', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/mkv'],
             chunkSize: 10 * 1024 * 1024, // 10MB 청크 크기 (속도 최적화)
-            maxConcurrentUploads: 3, // 동시 업로드 수
-            retryAttempts: 3, // 재시도 횟수
+            maxConcurrentUploads: 5, // 동시 업로드 수 (3 → 5로 증가)
+            retryAttempts: 5, // 재시도 횟수 (3 → 5로 증가)
             ...options
         };
         
