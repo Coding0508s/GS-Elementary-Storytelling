@@ -269,3 +269,29 @@ Route::prefix('judge')->name('judge.')->group(function () {
             ->name('ai.result.show');
     });
 });
+
+// ============================================
+// 모니터링 시스템 라우트
+// ============================================
+
+// 모니터링 라우트 (관리자 인증 필요)
+Route::prefix('admin/monitoring')->name('admin.monitoring.')->group(function () {
+    Route::middleware('auth:admin')->group(function () {
+        // 모니터링 대시보드
+        Route::get('/dashboard', [App\Http\Controllers\MonitoringController::class, 'dashboard'])
+            ->name('dashboard');
+        
+        // API 엔드포인트들
+        Route::get('/server-status', [App\Http\Controllers\MonitoringController::class, 'getServerStatus'])
+            ->name('server-status');
+        
+        Route::get('/concurrent-users', [App\Http\Controllers\MonitoringController::class, 'getConcurrentUsers'])
+            ->name('concurrent-users');
+        
+        Route::get('/error-metrics', [App\Http\Controllers\MonitoringController::class, 'getErrorMetrics'])
+            ->name('error-metrics');
+        
+        Route::get('/alerts', [App\Http\Controllers\MonitoringController::class, 'getAlerts'])
+            ->name('alerts');
+    });
+});
