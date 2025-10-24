@@ -47,6 +47,10 @@ Route::get('/api/institutions', [VideoSubmissionController::class, 'getInstituti
 Route::get('/reset-session', [VideoSubmissionController::class, 'resetSession'])
     ->name('session.reset');
 
+// CSRF 토큰 갱신 API
+Route::get('/api/csrf-token', [VideoSubmissionController::class, 'refreshCsrfToken'])
+    ->name('api.csrf-token');
+
 // S3 직접 업로드 관련 API
 Route::post('/api/s3/presigned-url', [S3UploadController::class, 'generatePresignedUrl'])
     ->name('api.s3.presigned-url');

@@ -108,7 +108,7 @@ class S3DirectUpload {
             requestData.grade = userInfo.grade;
         }
 
-        const response = await fetch(this.options.presignedUrlEndpoint, {
+        const response = await this.fetchWithRetry(this.options.presignedUrlEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -593,6 +593,79 @@ class S3DirectUpload {
         console.log(`동적 청크 크기 계산: ${this.formatFileSize(finalChunkSize)} (네트워크: ${networkQuality}, 파일: ${this.formatFileSize(fileSize)})`);
         
         return finalChunkSize;
+    }
+    
+    /**
+     * CSRF 토큰 갱신
+     */
+    async refreshCsrfToken() {
+        try {
+            const response = await fetch('/api/csrf-token', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.csrf_token) {
+                    // 메타 태그 업데이트
+                    const metaTag = document.querySelector('meta[name="csrf-token"]');
+                    if (metaTag) {
+                        metaTag.setAttribute('content', data.csrf_token);
+                    }
+                    console.log('CSRF 토큰 갱신 완료');
+                    return data.csrf_token;
+                }
+            }
+            throw new Error('CSRF 토큰 갱신 실패');
+        } catch (error) {
+            console.error('CSRF 토큰 갱신 오류:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * CSRF 토큰 재시도 로직이 포함된 fetch
+     */
+    async fetchWithRetry(url, options, maxRetries = 3) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch(url, options);
+                
+                // 419 오류 (CSRF 토큰 만료) 처리
+                if (response.status === 419) {
+                    console.warn(`요청 실패 (${attempt}/${maxRetries}): HTTP 419. 1000ms 후 재시도...`);
+                    
+                    if (attempt < maxRetries) {
+                        // CSRF 토큰 갱신
+                        await this.refreshCsrfToken();
+                        
+                        // 헤더 업데이트
+                        if (options.headers && options.headers['X-CSRF-TOKEN']) {
+                            options.headers['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                        }
+                        
+                        // 1초 대기 후 재시도
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        continue;
+                    }
+                }
+                
+                return response;
+            } catch (error) {
+                console.error(`요청 실패 (${attempt}/${maxRetries}):`, error);
+                
+                if (attempt === maxRetries) {
+                    throw new Error(`업로드 실패: Error: ${error.message}`);
+                }
+                
+                // 재시도 전 대기
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+        }
     }
     
     /**

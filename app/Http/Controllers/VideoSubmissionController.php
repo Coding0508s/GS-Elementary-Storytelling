@@ -90,7 +90,7 @@ class VideoSubmissionController extends Controller
                            ->with('error', '개인정보 수집 및 이용에 동의해야 업로드가 가능합니다.');
         }
 
-        // 업로드 폼 진입 시 이전 OTP 세션 정리 및 보안 강화
+        // 업로드 폼 진입 시 이전 OTP 세션 정리 (CSRF 토큰 보존)
         $request->session()->forget([
             'otp_phone', 
             'otp_code', 
@@ -100,8 +100,8 @@ class VideoSubmissionController extends Controller
             'otp_verified_phone'
         ]);
         
-        // 세션 ID 재생성 (보안 강화)
-        $request->session()->regenerate();
+        // CSRF 토큰 보존을 위해 세션 ID 재생성 제거
+        // $request->session()->regenerate(); // CSRF 토큰 무효화 방지
         
         Log::info('업로드 폼 진입 - OTP 세션 정리 및 세션 ID 재생성 완료', [
             'ip' => $request->ip(),
@@ -211,8 +211,8 @@ class VideoSubmissionController extends Controller
             // 사용 후 코드 제거
             $request->session()->forget(['otp_code']);
             
-            // 세션 ID 재생성 (보안 강화)
-            $request->session()->regenerate();
+            // CSRF 토큰 보존을 위해 세션 ID 재생성 제거
+            // $request->session()->regenerate(); // CSRF 토큰 무효화 방지
             
             Log::info('OTP 검증 성공 - 세션 ID 재생성 완료', [
                 'ip' => $request->ip(),
@@ -1008,6 +1008,31 @@ class VideoSubmissionController extends Controller
         return null; // 보안 검증 통과
     }
     
+    /**
+     * CSRF 토큰 갱신 API
+     */
+    public function refreshCsrfToken(Request $request)
+    {
+        // 세션 보안 검증
+        $securityCheck = $this->validateSessionSecurity($request);
+        if ($securityCheck) {
+            return response()->json(['error' => '보안 검증 실패'], 403);
+        }
+        
+        // 새로운 CSRF 토큰 생성
+        $newToken = csrf_token();
+        
+        Log::info('CSRF 토큰 갱신', [
+            'ip' => $request->ip(),
+            'timestamp' => now()
+        ]);
+        
+        return response()->json([
+            'csrf_token' => $newToken,
+            'success' => true
+        ]);
+    }
+
     /**
      * 세션 초기화 전용 라우트
      */
