@@ -13,9 +13,9 @@ class S3DirectUpload {
             allowedTypes: ['video/mp4', 'video/quicktime', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/mkv'],
             chunkSize: 10 * 1024 * 1024, // 10MB 청크 크기 (속도 최적화)
             adaptiveChunkSize: true, // 동적 청크 크기 활성화
-            maxConcurrentUploads: 5, // 동시 업로드 수 (3 → 5로 증가)
+            maxConcurrentUploads: 8, // 동시 업로드 수 (5 → 8로 증가)
             parallelChunkUpload: true, // 병렬 청크 업로드 활성화
-            maxParallelChunks: 3, // 최대 동시 청크 수
+            maxParallelChunks: 5, // 최대 동시 청크 수 (3 → 5로 증가)
             retryAttempts: 5, // 재시도 횟수 (3 → 5로 증가)
             adaptiveRetry: true, // 적응형 재시도 활성화
             networkQuality: 'unknown', // 네트워크 품질 감지
@@ -366,9 +366,9 @@ class S3DirectUpload {
                     });
                 }
                 
-                // 네트워크 품질에 따른 동적 지연
-                const networkDelay = this.getNetworkBasedDelay();
-                if (i < totalChunks - 1) {
+                // 네트워크 품질에 따른 최소 지연 (속도 최적화)
+                const networkDelay = this.getOptimizedNetworkDelay();
+                if (i < totalChunks - 1 && networkDelay > 0) {
                     await new Promise(resolve => setTimeout(resolve, networkDelay));
                 }
             }
@@ -525,7 +525,7 @@ class S3DirectUpload {
     }
     
     /**
-     * 네트워크 품질 기반 지연 시간 계산
+     * 네트워크 품질 기반 지연 시간 계산 (최적화된 버전)
      */
     getNetworkBasedDelay() {
         const baseDelay = 100; // 기본 100ms
@@ -541,6 +541,26 @@ class S3DirectUpload {
                 return 500; // 500ms
             default:
                 return 150; // 150ms
+        }
+    }
+    
+    /**
+     * 최적화된 네트워크 지연 (속도 우선)
+     */
+    getOptimizedNetworkDelay() {
+        // 고속 연결에서는 지연 최소화
+        if (this.options.networkQuality === 'excellent' || this.options.networkQuality === 'good') {
+            return 0; // 지연 없음
+        }
+        
+        // 느린 연결에서만 최소 지연 적용
+        switch (this.options.networkQuality) {
+            case 'fair':
+                return 50; // 50ms로 축소
+            case 'poor':
+                return 100; // 100ms로 축소
+            default:
+                return 25; // 25ms로 축소
         }
     }
     
@@ -850,11 +870,13 @@ class S3DirectUpload {
                 maxConcurrent: this.options.maxConcurrentUploads
             });
         } else if (effectiveType === '4g' && downlink > 5) {
-            // 고속 연결 환경 최적화
-            this.options.chunkSize = 10 * 1024 * 1024; // 10MB로 증가
+            // 고속 연결 환경 최적화 (속도 우선)
+            this.options.chunkSize = 15 * 1024 * 1024; // 15MB로 증가
             this.options.timeout = 900000; // 15분
             this.options.retryAttempts = 3;
-            this.options.retryDelay = 1000;
+            this.options.retryDelay = 500; // 500ms로 단축
+            this.options.maxConcurrentUploads = 10; // 동시 업로드 증가
+            this.options.maxParallelChunks = 8; // 병렬 청크 증가
             
             console.log('🚀 고속 연결 환경 감지 - 업로드 최적화 적용', {
                 effectiveType,
