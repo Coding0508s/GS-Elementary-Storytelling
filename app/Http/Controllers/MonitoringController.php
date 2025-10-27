@@ -676,23 +676,6 @@ class MonitoringController extends Controller
         ];
     }
 
-    /**
-     * 디스크 사용률 조회
-     */
-    private function getDiskUsage()
-    {
-        $diskTotal = disk_total_space('/');
-        $diskFree = disk_free_space('/');
-        $diskUsed = $diskTotal - $diskFree;
-        $diskPercent = ($diskUsed / $diskTotal) * 100;
-        
-        return [
-            'total' => $this->formatBytes($diskTotal),
-            'used' => $this->formatBytes($diskUsed),
-            'free' => $this->formatBytes($diskFree),
-            'usage' => round($diskPercent, 2)
-        ];
-    }
 
     /**
      * 활성 연결 수 조회
@@ -804,33 +787,7 @@ class MonitoringController extends Controller
         }
     }
 
-    /**
-     * 최근 1시간 접속자 수
-     */
-    private function getHourlyUsers()
-    {
-        try {
-            return DB::table('sessions')
-                ->where('last_activity', '>', now()->subHour()->timestamp)
-                ->count();
-        } catch (\Exception $e) {
-            return 0;
-        }
-    }
 
-    /**
-     * 최근 24시간 접속자 수
-     */
-    private function getDailyUsers()
-    {
-        try {
-            return DB::table('sessions')
-                ->where('last_activity', '>', now()->subDay()->timestamp)
-                ->count();
-        } catch (\Exception $e) {
-            return 0;
-        }
-    }
 
     /**
      * 피크 시간대 분석
@@ -967,28 +924,6 @@ class MonitoringController extends Controller
         }
     }
 
-    /**
-     * S3 업로드 성공률
-     */
-    private function getUploadSuccessRate()
-    {
-        try {
-            $totalUploads = Cache::get('storytelling:total_uploads', 0);
-            $successfulUploads = Cache::get('storytelling:successful_uploads', 0);
-            
-            return [
-                'total' => $totalUploads,
-                'successful' => $successfulUploads,
-                'rate' => $totalUploads > 0 ? round(($successfulUploads / $totalUploads) * 100, 2) : 0
-            ];
-        } catch (\Exception $e) {
-            return [
-                'total' => 0,
-                'successful' => 0,
-                'rate' => 0
-            ];
-        }
-    }
 
     /**
      * CPU 코어 수 조회
@@ -1022,20 +957,6 @@ class MonitoringController extends Controller
             default:
                 return $value;
         }
-    }
-
-    /**
-     * 바이트를 읽기 쉬운 형태로 변환
-     */
-    private function formatBytes($bytes, $precision = 2)
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
-            $bytes /= 1024;
-        }
-        
-        return round($bytes, $precision) . ' ' . $units[$i];
     }
 
     /**
