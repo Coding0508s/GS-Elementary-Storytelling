@@ -229,6 +229,241 @@ class MonitoringController extends Controller
     }
 
     /**
+     * 엑셀 리포트 다운로드
+     */
+    public function exportExcel(Request $request)
+    {
+        try {
+            $request->validate([
+                'serverResources' => 'required|array',
+                'concurrentUsers' => 'required|array',
+                'errorRate' => 'required|array',
+                'responseTime' => 'required|array'
+            ]);
+
+            $data = $request->all();
+            
+            // PhpSpreadsheet를 사용하여 엑셀 파일 생성
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            
+            // 서버 리소스 시트
+            $this->createServerResourcesSheet($spreadsheet, $data['serverResources']);
+            
+            // 동시 접속자 시트
+            $this->createConcurrentUsersSheet($spreadsheet, $data['concurrentUsers']);
+            
+            // 오류율 시트
+            $this->createErrorRateSheet($spreadsheet, $data['errorRate']);
+            
+            // 응답 시간 시트
+            $this->createResponseTimeSheet($spreadsheet, $data['responseTime']);
+            
+            // 요약 시트
+            $this->createSummarySheet($spreadsheet, $data);
+            
+            // 엑셀 파일 생성
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            
+            // 임시 파일에 저장
+            $tempFile = tempnam(sys_get_temp_dir(), 'monitoring_report_');
+            $writer->save($tempFile);
+            
+            // 파일명 생성
+            $filename = 'monitoring-report-' . now()->format('Y-m-d-H-i-s') . '.xlsx';
+            
+            return response()->download($tempFile, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"'
+            ])->deleteFileAfterSend(true);
+            
+        } catch (\Exception $e) {
+            Log::error('엑셀 리포트 생성 실패', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => '엑셀 리포트 생성에 실패했습니다.'
+            ], 500);
+        }
+    }
+
+    /**
+     * 서버 리소스 시트 생성
+     */
+    private function createServerResourcesSheet($spreadsheet, $data)
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('서버 리소스');
+        
+        // 헤더 설정
+        $headers = ['시간', 'CPU 사용률 (%)', '메모리 사용률 (%)', '디스크 사용률 (%)'];
+        $sheet->fromArray($headers, null, 'A1');
+        
+        // 데이터 입력
+        $row = 2;
+        for ($i = 0; $i < count($data['labels']); $i++) {
+            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
+            $sheet->setCellValue('B' . $row, $data['cpu'][$i] ?? 0);
+            $sheet->setCellValue('C' . $row, $data['memory'][$i] ?? 0);
+            $sheet->setCellValue('D' . $row, $data['disk'][$i] ?? 0);
+            $row++;
+        }
+        
+        // 스타일 적용
+        $this->applySheetStyles($sheet, 'A1:D1');
+    }
+
+    /**
+     * 동시 접속자 시트 생성
+     */
+    private function createConcurrentUsersSheet($spreadsheet, $data)
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('동시 접속자');
+        
+        // 헤더 설정
+        $headers = ['시간', '접속자 수'];
+        $sheet->fromArray($headers, null, 'A1');
+        
+        // 데이터 입력
+        $row = 2;
+        for ($i = 0; $i < count($data['labels']); $i++) {
+            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
+            $sheet->setCellValue('B' . $row, $data['users'][$i] ?? 0);
+            $row++;
+        }
+        
+        // 스타일 적용
+        $this->applySheetStyles($sheet, 'A1:B1');
+    }
+
+    /**
+     * 오류율 시트 생성
+     */
+    private function createErrorRateSheet($spreadsheet, $data)
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('오류율');
+        
+        // 헤더 설정
+        $headers = ['시간', '오류율 (%)'];
+        $sheet->fromArray($headers, null, 'A1');
+        
+        // 데이터 입력
+        $row = 2;
+        for ($i = 0; $i < count($data['labels']); $i++) {
+            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
+            $sheet->setCellValue('B' . $row, $data['rate'][$i] ?? 0);
+            $row++;
+        }
+        
+        // 스타일 적용
+        $this->applySheetStyles($sheet, 'A1:B1');
+    }
+
+    /**
+     * 응답 시간 시트 생성
+     */
+    private function createResponseTimeSheet($spreadsheet, $data)
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('응답 시간');
+        
+        // 헤더 설정
+        $headers = ['시간', '응답 시간 (ms)'];
+        $sheet->fromArray($headers, null, 'A1');
+        
+        // 데이터 입력
+        $row = 2;
+        for ($i = 0; $i < count($data['labels']); $i++) {
+            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
+            $sheet->setCellValue('B' . $row, $data['time'][$i] ?? 0);
+            $row++;
+        }
+        
+        // 스타일 적용
+        $this->applySheetStyles($sheet, 'A1:B1');
+    }
+
+    /**
+     * 요약 시트 생성
+     */
+    private function createSummarySheet($spreadsheet, $data)
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('요약');
+        
+        // 현재 서버 상태 조회
+        $serverStatus = $this->getServerStatus();
+        $concurrentUsers = $this->getConcurrentUsers();
+        $errorMetrics = $this->getErrorMetrics();
+        
+        // 요약 데이터
+        $summaryData = [
+            ['항목', '현재 값', '단위'],
+            ['리포트 생성 시간', now()->format('Y-m-d H:i:s'), ''],
+            ['', '', ''],
+            ['=== 서버 리소스 ===', '', ''],
+            ['CPU 사용률', $serverStatus['data']['cpu']['usage'] ?? 0, '%'],
+            ['메모리 사용률', $serverStatus['data']['memory']['usage'] ?? 0, '%'],
+            ['디스크 사용률', $serverStatus['data']['disk']['usage'] ?? 0, '%'],
+            ['', '', ''],
+            ['=== 접속자 통계 ===', '', ''],
+            ['현재 접속자', $concurrentUsers['data']['current'] ?? 0, '명'],
+            ['시간당 접속자', $concurrentUsers['data']['hourly'] ?? 0, '명'],
+            ['일일 접속자', $concurrentUsers['data']['daily'] ?? 0, '명'],
+            ['', '', ''],
+            ['=== 성능 지표 ===', '', ''],
+            ['오류율', $errorMetrics['data']['error_rate'] ?? 0, '%'],
+            ['평균 응답 시간', $errorMetrics['data']['response_time']['avg'] ?? 0, 'ms'],
+            ['업로드 성공률', $errorMetrics['data']['upload_success']['rate'] ?? 0, '%'],
+        ];
+        
+        // 데이터 입력
+        $sheet->fromArray($summaryData, null, 'A1');
+        
+        // 스타일 적용
+        $this->applySheetStyles($sheet, 'A1:C1');
+        
+        // 열 너비 자동 조정
+        foreach (range('A', 'C') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+    }
+
+    /**
+     * 시트 스타일 적용
+     */
+    private function applySheetStyles($sheet, $headerRange)
+    {
+        // 헤더 스타일
+        $sheet->getStyle($headerRange)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF']
+            ],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '366092']
+            ],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER
+            ]
+        ]);
+        
+        // 테두리 적용
+        $sheet->getStyle($headerRange)->applyFromArray([
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN
+                ]
+            ]
+        ]);
+    }
+
+    /**
      * CPU 사용률 조회
      */
     private function getCpuUsage()

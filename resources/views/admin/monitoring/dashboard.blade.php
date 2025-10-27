@@ -14,7 +14,7 @@
                         <i class="bi bi-arrow-clockwise"></i> 새로고침
                     </button>
                     <button class="btn btn-outline-success" onclick="exportReport()">
-                        <i class="bi bi-download"></i> 리포트 다운로드
+                        <i class="bi bi-file-earmark-excel"></i> 엑셀 리포트 다운로드
                     </button>
                 </div>
             </div>
@@ -510,23 +510,43 @@ function updateAlerts(alerts) {
     container.innerHTML = alertsHtml;
 }
 
-// 리포트 다운로드
+// 리포트 다운로드 (엑셀 파일)
 function exportReport() {
-    const reportData = {
-        timestamp: new Date().toISOString(),
-        serverResources: chartData.serverResources,
-        concurrentUsers: chartData.concurrentUsers,
-        errorRate: chartData.errorRate,
-        responseTime: chartData.responseTime
-    };
-
-    const dataStr = JSON.stringify(reportData, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-    
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(dataBlob);
-    link.download = `monitoring-report-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
+    // 서버에서 엑셀 파일 생성 요청
+    fetch('/admin/monitoring/export-excel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({
+            serverResources: chartData.serverResources,
+            concurrentUsers: chartData.concurrentUsers,
+            errorRate: chartData.errorRate,
+            responseTime: chartData.responseTime
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('엑셀 파일 생성에 실패했습니다.');
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // 엑셀 파일 다운로드
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `monitoring-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        console.error('리포트 다운로드 오류:', error);
+        alert('리포트 다운로드 중 오류가 발생했습니다: ' + error.message);
+    });
 }
 </script>
 @endsection

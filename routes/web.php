@@ -293,5 +293,9 @@ Route::prefix('admin/monitoring')->name('admin.monitoring.')->group(function () 
         
         Route::get('/alerts', [App\Http\Controllers\MonitoringController::class, 'getAlerts'])
             ->name('alerts');
+        
+        // 엑셀 리포트 다운로드
+        Route::post('/export-excel', [App\Http\Controllers\MonitoringController::class, 'exportExcel'])
+            ->name('export-excel');
     });
 });
