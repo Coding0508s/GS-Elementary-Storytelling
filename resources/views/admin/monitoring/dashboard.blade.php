@@ -2,6 +2,10 @@
 
 @section('title', '실시간 모니터링 대시보드')
 
+@push('head')
+<meta name="csrf-token" content="{{ csrf_token() }}">
+@endpush
+
 @section('content')
 <div class="container-fluid">
     <!-- 헤더 -->

@@ -234,17 +234,39 @@ class MonitoringController extends Controller
     public function exportExcel(Request $request)
     {
         try {
-            $request->validate([
-                'serverResources' => 'required|array',
-                'concurrentUsers' => 'required|array',
-                'errorRate' => 'required|array',
-                'responseTime' => 'required|array'
-            ]);
-
+            // 데이터 검증 (선택적)
             $data = $request->all();
+            
+            // 기본 데이터 구조 설정
+            $defaultData = [
+                'serverResources' => [
+                    'labels' => [],
+                    'cpu' => [],
+                    'memory' => [],
+                    'disk' => []
+                ],
+                'concurrentUsers' => [
+                    'labels' => [],
+                    'users' => []
+                ],
+                'errorRate' => [
+                    'labels' => [],
+                    'rate' => []
+                ],
+                'responseTime' => [
+                    'labels' => [],
+                    'time' => []
+                ]
+            ];
+            
+            // 요청 데이터와 기본 데이터 병합
+            $data = array_merge($defaultData, $data);
             
             // PhpSpreadsheet를 사용하여 엑셀 파일 생성
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            
+            // 기본 시트 제거
+            $spreadsheet->removeSheetByIndex(0);
             
             // 서버 리소스 시트
             $this->createServerResourcesSheet($spreadsheet, $data['serverResources']);
@@ -279,12 +301,13 @@ class MonitoringController extends Controller
         } catch (\Exception $e) {
             Log::error('엑셀 리포트 생성 실패', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
             
             return response()->json([
                 'success' => false,
-                'error' => '엑셀 리포트 생성에 실패했습니다.'
+                'error' => '엑셀 리포트 생성에 실패했습니다: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -303,12 +326,29 @@ class MonitoringController extends Controller
         
         // 데이터 입력
         $row = 2;
-        for ($i = 0; $i < count($data['labels']); $i++) {
-            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
-            $sheet->setCellValue('B' . $row, $data['cpu'][$i] ?? 0);
-            $sheet->setCellValue('C' . $row, $data['memory'][$i] ?? 0);
-            $sheet->setCellValue('D' . $row, $data['disk'][$i] ?? 0);
-            $row++;
+        $labels = $data['labels'] ?? [];
+        $cpu = $data['cpu'] ?? [];
+        $memory = $data['memory'] ?? [];
+        $disk = $data['disk'] ?? [];
+        
+        // 데이터가 없으면 현재 값으로 채움
+        if (empty($labels)) {
+            $currentCpu = $this->getCpuUsage();
+            $currentMemory = $this->getMemoryUsage();
+            $currentDisk = $this->getDiskUsage();
+            
+            $sheet->setCellValue('A2', now()->format('Y-m-d H:i:s'));
+            $sheet->setCellValue('B2', $currentCpu['usage'] ?? 0);
+            $sheet->setCellValue('C2', $currentMemory['usage'] ?? 0);
+            $sheet->setCellValue('D2', $currentDisk['usage'] ?? 0);
+        } else {
+            for ($i = 0; $i < count($labels); $i++) {
+                $sheet->setCellValue('A' . $row, $labels[$i] ?? '');
+                $sheet->setCellValue('B' . $row, $cpu[$i] ?? 0);
+                $sheet->setCellValue('C' . $row, $memory[$i] ?? 0);
+                $sheet->setCellValue('D' . $row, $disk[$i] ?? 0);
+                $row++;
+            }
         }
         
         // 스타일 적용
@@ -329,10 +369,20 @@ class MonitoringController extends Controller
         
         // 데이터 입력
         $row = 2;
-        for ($i = 0; $i < count($data['labels']); $i++) {
-            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
-            $sheet->setCellValue('B' . $row, $data['users'][$i] ?? 0);
-            $row++;
+        $labels = $data['labels'] ?? [];
+        $users = $data['users'] ?? [];
+        
+        // 데이터가 없으면 현재 값으로 채움
+        if (empty($labels)) {
+            $currentUsers = $this->getActiveSessions();
+            $sheet->setCellValue('A2', now()->format('Y-m-d H:i:s'));
+            $sheet->setCellValue('B2', $currentUsers);
+        } else {
+            for ($i = 0; $i < count($labels); $i++) {
+                $sheet->setCellValue('A' . $row, $labels[$i] ?? '');
+                $sheet->setCellValue('B' . $row, $users[$i] ?? 0);
+                $row++;
+            }
         }
         
         // 스타일 적용
@@ -353,10 +403,20 @@ class MonitoringController extends Controller
         
         // 데이터 입력
         $row = 2;
-        for ($i = 0; $i < count($data['labels']); $i++) {
-            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
-            $sheet->setCellValue('B' . $row, $data['rate'][$i] ?? 0);
-            $row++;
+        $labels = $data['labels'] ?? [];
+        $rate = $data['rate'] ?? [];
+        
+        // 데이터가 없으면 현재 값으로 채움
+        if (empty($labels)) {
+            $currentErrorRate = $this->getHourlyErrorRate();
+            $sheet->setCellValue('A2', now()->format('Y-m-d H:i:s'));
+            $sheet->setCellValue('B2', $currentErrorRate);
+        } else {
+            for ($i = 0; $i < count($labels); $i++) {
+                $sheet->setCellValue('A' . $row, $labels[$i] ?? '');
+                $sheet->setCellValue('B' . $row, $rate[$i] ?? 0);
+                $row++;
+            }
         }
         
         // 스타일 적용
@@ -377,10 +437,20 @@ class MonitoringController extends Controller
         
         // 데이터 입력
         $row = 2;
-        for ($i = 0; $i < count($data['labels']); $i++) {
-            $sheet->setCellValue('A' . $row, $data['labels'][$i] ?? '');
-            $sheet->setCellValue('B' . $row, $data['time'][$i] ?? 0);
-            $row++;
+        $labels = $data['labels'] ?? [];
+        $time = $data['time'] ?? [];
+        
+        // 데이터가 없으면 현재 값으로 채움
+        if (empty($labels)) {
+            $currentResponseTime = $this->getAverageResponseTime();
+            $sheet->setCellValue('A2', now()->format('Y-m-d H:i:s'));
+            $sheet->setCellValue('B2', $currentResponseTime);
+        } else {
+            for ($i = 0; $i < count($labels); $i++) {
+                $sheet->setCellValue('A' . $row, $labels[$i] ?? '');
+                $sheet->setCellValue('B' . $row, $time[$i] ?? 0);
+                $row++;
+            }
         }
         
         // 스타일 적용
@@ -395,10 +465,16 @@ class MonitoringController extends Controller
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('요약');
         
-        // 현재 서버 상태 조회
-        $serverStatus = $this->getServerStatus();
-        $concurrentUsers = $this->getConcurrentUsers();
-        $errorMetrics = $this->getErrorMetrics();
+        // 현재 서버 상태 조회 (직접 데이터 메서드 호출)
+        $cpuUsage = $this->getCpuUsage();
+        $memoryUsage = $this->getMemoryUsage();
+        $diskUsage = $this->getDiskUsage();
+        $activeSessions = $this->getActiveSessions();
+        $hourlyUsers = $this->getHourlyUsers();
+        $dailyUsers = $this->getDailyUsers();
+        $errorRate = $this->getHourlyErrorRate();
+        $responseTime = $this->getAverageResponseTime();
+        $uploadSuccess = $this->getUploadSuccessRate();
         
         // 요약 데이터
         $summaryData = [
@@ -406,19 +482,19 @@ class MonitoringController extends Controller
             ['리포트 생성 시간', now()->format('Y-m-d H:i:s'), ''],
             ['', '', ''],
             ['=== 서버 리소스 ===', '', ''],
-            ['CPU 사용률', $serverStatus['data']['cpu']['usage'] ?? 0, '%'],
-            ['메모리 사용률', $serverStatus['data']['memory']['usage'] ?? 0, '%'],
-            ['디스크 사용률', $serverStatus['data']['disk']['usage'] ?? 0, '%'],
+            ['CPU 사용률', $cpuUsage['usage'] ?? 0, '%'],
+            ['메모리 사용률', $memoryUsage['usage'] ?? 0, '%'],
+            ['디스크 사용률', $diskUsage['usage'] ?? 0, '%'],
             ['', '', ''],
             ['=== 접속자 통계 ===', '', ''],
-            ['현재 접속자', $concurrentUsers['data']['current'] ?? 0, '명'],
-            ['시간당 접속자', $concurrentUsers['data']['hourly'] ?? 0, '명'],
-            ['일일 접속자', $concurrentUsers['data']['daily'] ?? 0, '명'],
+            ['현재 접속자', $activeSessions, '명'],
+            ['시간당 접속자', $hourlyUsers, '명'],
+            ['일일 접속자', $dailyUsers, '명'],
             ['', '', ''],
             ['=== 성능 지표 ===', '', ''],
-            ['오류율', $errorMetrics['data']['error_rate'] ?? 0, '%'],
-            ['평균 응답 시간', $errorMetrics['data']['response_time']['avg'] ?? 0, 'ms'],
-            ['업로드 성공률', $errorMetrics['data']['upload_success']['rate'] ?? 0, '%'],
+            ['오류율', $errorRate, '%'],
+            ['평균 응답 시간', $responseTime, 'ms'],
+            ['업로드 성공률', $uploadSuccess, '%'],
         ];
         
         // 데이터 입력
@@ -461,6 +537,108 @@ class MonitoringController extends Controller
                 ]
             ]
         ]);
+    }
+
+    /**
+     * 디스크 사용률 조회
+     */
+    private function getDiskUsage()
+    {
+        try {
+            $totalSpace = disk_total_space('/');
+            $freeSpace = disk_free_space('/');
+            $usedSpace = $totalSpace - $freeSpace;
+            $usage = round(($usedSpace / $totalSpace) * 100, 2);
+            
+            return [
+                'usage' => $usage,
+                'total' => $this->formatBytes($totalSpace),
+                'used' => $this->formatBytes($usedSpace),
+                'free' => $this->formatBytes($freeSpace)
+            ];
+        } catch (\Exception $e) {
+            return ['usage' => 0, 'total' => '0 B', 'used' => '0 B', 'free' => '0 B'];
+        }
+    }
+
+    /**
+     * 시간당 접속자 수 조회
+     */
+    private function getHourlyUsers()
+    {
+        try {
+            return \DB::table('sessions')
+                ->where('last_activity', '>=', now()->subHour()->timestamp)
+                ->count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 일일 접속자 수 조회
+     */
+    private function getDailyUsers()
+    {
+        try {
+            return \DB::table('sessions')
+                ->where('last_activity', '>=', now()->subDay()->timestamp)
+                ->count();
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 평균 응답 시간 조회
+     */
+    private function getAverageResponseTime()
+    {
+        try {
+            $responseTime = \Cache::get('monitoring_response_time', []);
+            if (empty($responseTime)) {
+                return 0;
+            }
+            
+            return round(array_sum($responseTime) / count($responseTime), 2);
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 업로드 성공률 조회
+     */
+    private function getUploadSuccessRate()
+    {
+        try {
+            $totalUploads = \DB::table('video_submissions')->count();
+            $successfulUploads = \DB::table('video_submissions')
+                ->where('status', 'completed')
+                ->count();
+            
+            if ($totalUploads == 0) {
+                return 0;
+            }
+            
+            return round(($successfulUploads / $totalUploads) * 100, 2);
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 바이트를 읽기 쉬운 형태로 변환
+     */
+    private function formatBytes($bytes, $precision = 2)
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, $precision) . ' ' . $units[$i];
     }
 
     /**
