@@ -454,8 +454,7 @@ function startBatchAiEvaluation() {
     .then(data => {
         if (data.success) {
             alert(data.message);
-            isEvaluationRunning = true;
-            startProgressMonitoring();
+            // 즉시 완료되므로 페이지 새로고침
             location.reload();
         } else {
             alert('오류: ' + data.message);

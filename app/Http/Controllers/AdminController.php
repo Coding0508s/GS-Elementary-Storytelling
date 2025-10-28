@@ -16,6 +16,7 @@ use App\Models\Evaluation;
 use App\Models\VideoAssignment;
 use App\Models\Institution;
 use App\Models\AiEvaluation;
+use App\Services\OpenAiService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -2325,9 +2326,9 @@ public function assignVideo(Request $request)
                 ]);
             }
 
-            $processedCount = 0;
             $queuedCount = 0;
-            $skippedCount = 0; // 영상 파일이 없는 영상 수
+            $alreadyProcessingCount = 0;
+            $noFileCount = 0;
 
             foreach ($submissions as $submission) {
                 // 기존 AI 평가가 처리 중인지 확인
@@ -2336,7 +2337,7 @@ public function assignVideo(Request $request)
                     ->first();
 
                 if ($existingEvaluation) {
-                    $processedCount++;
+                    $alreadyProcessingCount++;
                     continue;
                 }
 
@@ -2355,11 +2356,11 @@ public function assignVideo(Request $request)
                     $aiEvaluation->error_message = '영상 파일이 존재하지 않습니다.';
                     $aiEvaluation->save();
                     
-                    $skippedCount++;
+                    $noFileCount++;
                     continue;
                 }
 
-                // Job을 큐에 추가
+                // Job을 큐에 추가 (비동기 처리)
                 \App\Jobs\BatchAiEvaluationJob::dispatch($submission->id, $admin->id);
                 $queuedCount++;
             }
@@ -2367,14 +2368,17 @@ public function assignVideo(Request $request)
             Log::info('일괄 AI 채점 시작', [
                 'admin_id' => $admin->id,
                 'total_submissions' => $submissions->count(),
-                'already_processing' => $processedCount,
                 'queued_jobs' => $queuedCount,
-                'skipped_no_file' => $skippedCount
+                'already_processing' => $alreadyProcessingCount,
+                'no_file' => $noFileCount
             ]);
 
             $message = "일괄 AI 채점을 시작했습니다. {$queuedCount}개의 영상이 처리 대기열에 추가되었습니다.";
-            if ($skippedCount > 0) {
-                $message .= " (영상 파일이 없는 {$skippedCount}개 영상은 제외되었습니다.)";
+            if ($alreadyProcessingCount > 0) {
+                $message .= " (이미 처리 중인 {$alreadyProcessingCount}개 영상은 건너뛰었습니다.)";
+            }
+            if ($noFileCount > 0) {
+                $message .= " (영상 파일이 없는 {$noFileCount}개 영상은 제외되었습니다.)";
             }
 
             return response()->json([
@@ -2382,9 +2386,9 @@ public function assignVideo(Request $request)
                 'message' => $message,
                 'data' => [
                     'total_submissions' => $submissions->count(),
-                    'already_processing' => $processedCount,
                     'queued_jobs' => $queuedCount,
-                    'skipped_no_file' => $skippedCount
+                    'already_processing' => $alreadyProcessingCount,
+                    'no_file' => $noFileCount
                 ]
             ]);
 
