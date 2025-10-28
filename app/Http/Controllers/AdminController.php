@@ -2423,17 +2423,23 @@ public function assignVideo(Request $request)
             // 전체 영상 수
             $totalSubmissions = VideoSubmission::count();
 
-            // AI 평가 완료된 영상 수
-            $completedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_COMPLETED)->count();
+            // AI 평가 완료된 영상 수 (제출 영상 기준)
+            $completedEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_COMPLETED);
+            })->count();
 
-            // 처리 중인 영상 수
-            $processingEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_PROCESSING)->count();
+            // 처리 중인 영상 수 (제출 영상 기준)
+            $processingEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_PROCESSING);
+            })->count();
 
-            // 실패한 영상 수
-            $failedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)->count();
+            // 실패한 영상 수 (제출 영상 기준)
+            $failedEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_FAILED);
+            })->count();
 
-            // 대기 중인 영상 수
-            $pendingSubmissions = $totalSubmissions - $completedEvaluations - $processingEvaluations - $failedEvaluations;
+            // 대기 중인 영상 수 (AI 평가가 없는 영상)
+            $pendingSubmissions = VideoSubmission::whereDoesntHave('aiEvaluations')->count();
 
             // 진행률 계산
             $progressPercentage = $totalSubmissions > 0 ? round(($completedEvaluations / $totalSubmissions) * 100, 1) : 0;
@@ -2620,17 +2626,36 @@ public function assignVideo(Request $request)
             // 페이지네이션
             $submissions = $query->paginate(20)->appends($request->query());
 
-            // 통계 데이터
+            // 통계 데이터 (제출 영상 기준으로 카운트)
             $totalSubmissions = VideoSubmission::count();
-            $completedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_COMPLETED)->count();
-            $processingEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_PROCESSING)->count();
-            $noFileEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)
-                ->where('error_message', '영상 파일이 존재하지 않습니다.')
-                ->count();
-            $failedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)
-                ->where('error_message', '!=', '영상 파일이 존재하지 않습니다.')
-                ->count();
-            $pendingSubmissions = $totalSubmissions - $completedEvaluations - $processingEvaluations - $failedEvaluations - $noFileEvaluations;
+            
+            // AI 평가 완료된 영상 수
+            $completedEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_COMPLETED);
+            })->count();
+            
+            // 처리 중인 영상 수
+            $processingEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_PROCESSING);
+            })->count();
+            
+            // 파일없음 영상 수
+            $noFileEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_FAILED)
+                      ->where('error_message', '영상 파일이 존재하지 않습니다.');
+            })->count();
+            
+            // 실패한 영상 수 (파일없음 제외)
+            $failedEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_FAILED)
+                      ->where(function($q) {
+                          $q->where('error_message', '!=', '영상 파일이 존재하지 않습니다.')
+                            ->orWhereNull('error_message');
+                      });
+            })->count();
+            
+            // 대기 중인 영상 수 (AI 평가가 없는 영상)
+            $pendingSubmissions = VideoSubmission::whereDoesntHave('aiEvaluations')->count();
 
             // 기관 목록 (필터용)
             $institutions = VideoSubmission::select('institution_name')
