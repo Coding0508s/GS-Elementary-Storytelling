@@ -355,8 +355,9 @@ class AdminController extends Controller
             '접수번호', '학생명(한글)', '학생명(영어)', '거주지역', '기관명', '반명', '학년', '나이',
             '학부모명', '연락처', 'Unit주제', '업로드일시', '파일명', '파일크기',
             '배정된심사위원', '심사상태', 
-            '발음점수', '어휘점수', '유창성점수', '자신감점수', '총점',
-            '순위', '심사코멘트', '심사완료일시'
+            '정확한 발음과 자연스러운 억양, 전달력', '올바른 어휘 및 표현 사용', '유창성 수준', 
+            '자신감, 긍정적이고 밝은 태도', '주제와 발표 내용과의 연결성', '자연스러운 구성과 흐름', '창의적 내용',
+            '총점', '순위', '심사코멘트', '심사완료일시'
         ];
 
         // 헤더 스타일 설정
@@ -452,26 +453,29 @@ class AdminController extends Controller
             $sheet->setCellValue('O' . $rowIndex, $judge);
             $sheet->setCellValue('P' . $rowIndex, $status);
             
-            // 점수 정보
+            // 점수 정보 (7개 평가 항목)
             $sheet->setCellValue('Q' . $rowIndex, $evaluation ? $evaluation->pronunciation_score : '');
             $sheet->setCellValue('R' . $rowIndex, $evaluation ? $evaluation->vocabulary_score : '');
             $sheet->setCellValue('S' . $rowIndex, $evaluation ? $evaluation->fluency_score : '');
             $sheet->setCellValue('T' . $rowIndex, $evaluation ? $evaluation->confidence_score : '');
-            $sheet->setCellValue('U' . $rowIndex, $evaluation ? $evaluation->total_score : '');
+            $sheet->setCellValue('U' . $rowIndex, $evaluation ? $evaluation->topic_connection_score : '');
+            $sheet->setCellValue('V' . $rowIndex, $evaluation ? $evaluation->structure_flow_score : '');
+            $sheet->setCellValue('W' . $rowIndex, $evaluation ? $evaluation->creativity_score : '');
+            $sheet->setCellValue('X' . $rowIndex, $evaluation ? $evaluation->total_score : '');
             
             // 순위 및 코멘트
-            $sheet->setCellValue('V' . $rowIndex, $rank ? $rank . '위' : '');
-            $sheet->setCellValue('W' . $rowIndex, $evaluation ? $evaluation->comments : '');
+            $sheet->setCellValue('Y' . $rowIndex, $rank ? $rank . '위' : '');
+            $sheet->setCellValue('Z' . $rowIndex, $evaluation ? $evaluation->comments : '');
             
             // 완료 일시
             $lastEvaluatedAt = $evaluation ? $evaluation->evaluated_at : null;
-            $sheet->setCellValue('X' . $rowIndex, $lastEvaluatedAt ? $lastEvaluatedAt->format('Y-m-d H:i:s') : '');
+            $sheet->setCellValue('AA' . $rowIndex, $lastEvaluatedAt ? $lastEvaluatedAt->format('Y-m-d H:i:s') : '');
             
             $rowIndex++;
         }
 
-        // 열 너비 자동 조정 (X열까지)
-        foreach (range('A', 'X') as $column) {
+        // 열 너비 자동 조정 (AA열까지)
+        foreach (range('A', 'AA') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -1298,19 +1302,19 @@ public function assignVideo(Request $request)
         foreach ($qualifiedEvaluations as $evaluation) {
             $submission = $evaluation->videoSubmission;
             
-            // 등급 계산
+            // 등급 계산 (70점 만점 기준)
             $grade = '';
-            if ($evaluation->total_score >= 36) {
+            if ($evaluation->total_score >= 63) {
                 $grade = 'A+';
-            } elseif ($evaluation->total_score >= 32) {
+            } elseif ($evaluation->total_score >= 56) {
                 $grade = 'A';
-            } elseif ($evaluation->total_score >= 28) {
+            } elseif ($evaluation->total_score >= 49) {
                 $grade = 'B+';
-            } elseif ($evaluation->total_score >= 24) {
+            } elseif ($evaluation->total_score >= 42) {
                 $grade = 'B';
-            } elseif ($evaluation->total_score >= 20) {
+            } elseif ($evaluation->total_score >= 35) {
                 $grade = 'C+';
-            } elseif ($evaluation->total_score >= 16) {
+            } elseif ($evaluation->total_score >= 28) {
                 $grade = 'C';
             } else {
                 $grade = 'D';
@@ -2177,12 +2181,13 @@ public function assignVideo(Request $request)
             // 헤더 설정
             $headers = [
                 'ID', '학생명(한글)', '학생명(영문)', '기관명', '학년', '나이',
-                '발음/억양/전달력', '어휘/표현', '유창성', 'AI 총점',
-                'AI 심사평', '음성인식 텍스트', '평가일시', '평가자'
+                '정확한 발음과 자연스러운 억양, 전달력', '올바른 어휘 및 표현 사용', '유창성 수준', 
+                '자신감, 긍정적이고 밝은 태도', '주제와 발표 내용과의 연결성', '자연스러운 구성과 흐름', '창의적 내용',
+                'AI 총점', 'AI 심사평', '음성인식 텍스트', '평가일시', '평가자'
             ];
             
             // 헤더 행 추가
-            $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
+            $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];
             foreach ($headers as $index => $header) {
                 $sheet->setCellValue($columns[$index] . '1', $header);
             }
@@ -2224,6 +2229,10 @@ public function assignVideo(Request $request)
                     $evaluation->pronunciation_score,
                     $evaluation->vocabulary_score,
                     $evaluation->fluency_score,
+                    $evaluation->confidence_score,
+                    $evaluation->topic_connection_score,
+                    $evaluation->structure_flow_score,
+                    $evaluation->creativity_score,
                     $evaluation->total_score,
                     $evaluation->ai_feedback ?? '',
                     $evaluation->transcription ?? '',
@@ -2241,7 +2250,7 @@ public function assignVideo(Request $request)
             foreach ($columns as $index => $col) {
                 if ($index >= count($headers)) break;
                 
-                if (in_array($col, ['K', 'L'])) { // AI 심사평, 음성인식 텍스트 컬럼
+                if (in_array($col, ['O', 'P'])) { // AI 심사평, 음성인식 텍스트 컬럼
                     $sheet->getColumnDimension($col)->setWidth(50);
                 } else {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
