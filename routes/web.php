@@ -147,6 +147,25 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/password-reset', [AdminController::class, 'showPasswordReset'])
             ->name('password.reset');
         
+        // 일괄 AI 채점 관련
+        Route::post('/batch-ai-evaluation/start', [AdminController::class, 'startBatchAiEvaluation'])
+            ->name('batch.ai.evaluation.start');
+        
+        Route::get('/batch-ai-evaluation/progress', [AdminController::class, 'getBatchAiEvaluationProgress'])
+            ->name('batch.ai.evaluation.progress');
+        
+        Route::post('/batch-ai-evaluation/retry', [AdminController::class, 'retryFailedAiEvaluations'])
+            ->name('batch.ai.evaluation.retry');
+        
+        // 영상 일괄 채점 페이지
+        Route::get('/batch-evaluation', [AdminController::class, 'batchEvaluationList'])
+            ->name('batch.evaluation.list');
+        
+        // 개별 영상 AI 채점
+        Route::post('/batch-evaluation/start-single/{submissionId}', [AdminController::class, 'startSingleAiEvaluation'])
+            ->name('batch.evaluation.start.single');
+        
+        
         Route::post('/password-reset', [AdminController::class, 'resetPassword'])
             ->name('password.reset.execute');
         
@@ -265,7 +284,7 @@ Route::prefix('judge')->name('judge.')->group(function () {
         Route::get('/ai-evaluation/{id}/result', [JudgeController::class, 'showAiEvaluation'])
             ->name('ai.evaluation.result');
         
-        Route::get('/ai-result/{id}', [JudgeController::class, 'showAiResult'])
+        Route::get('/ai-result/{id}', [JudgeController::class, 'getAiResult'])
             ->name('ai.result.show');
     });
 });

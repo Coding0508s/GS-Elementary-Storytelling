@@ -156,41 +156,62 @@
                                 @php
                                     // auth('admin')->id()가 문자열을 반환하는 경우 숫자 ID로 변환
                                     $currentAdminId = auth('admin')->user()->id ?? auth('admin')->id();
-                                    $aiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
+                                    
+                                    // 관리자가 일괄 채점한 AI 평가가 있는지 확인 (우선순위)
+                                    $batchAiEval = $submission->aiEvaluations->where('processing_status', 'completed')->first();
+                                    
+                                    // 현재 심사위원의 AI 평가
+                                    $currentAiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
                                     
                                     // 디버깅용 - 브라우저 콘솔에서 확인 가능
                                     echo "<script>console.log('=== PHP 디버깅 ===');</script>";
                                     echo "<script>console.log('PHP currentAdminId: " . $currentAdminId . "');</script>";
-                                    echo "<script>console.log('PHP aiEval: " . ($aiEval ? 'exists' : 'null') . "');</script>";
-                                    if ($aiEval) {
-                                        echo "<script>console.log('PHP aiEval status: " . $aiEval->processing_status . "');</script>";
-                                        echo "<script>console.log('PHP aiEval id: " . $aiEval->id . "');</script>";
-                                    }
-                                    echo "<script>console.log('PHP 조건 결과: " . (!$aiEval || $aiEval->processing_status === 'failed' ? 'AI 평가 버튼' : ($aiEval->processing_status === 'processing' ? '처리중 버튼' : ($aiEval->processing_status === 'completed' ? '결과 보기 버튼' : '알 수 없음'))) . "');</script>";
+                                    echo "<script>console.log('PHP batchAiEval: " . ($batchAiEval ? 'exists' : 'null') . "');</script>";
+                                    echo "<script>console.log('PHP currentAiEval: " . ($currentAiEval ? 'exists' : 'null') . "');</script>";
                                 @endphp
-                                <div class="btn-group mt-1" role="group">
-                                    @if(!$aiEval || $aiEval->processing_status === 'failed')
-                                        <button type="button" 
-                                                class="btn btn-outline-info btn-sm ai-evaluate-btn"
-                                                data-assignment-id="{{ $assignment->id }}"
-                                                title="AI로 평가하기">
-                                            <i class="bi bi-robot"></i> AI 평가
-                                        </button>
-                                    @elseif($aiEval->processing_status === 'processing')
-                                        <button type="button" 
-                                                class="btn btn-warning btn-sm" 
-                                                disabled>
-                                            <i class="bi bi-arrow-clockwise"></i> 처리중...
-                                        </button>
-                                    @elseif($aiEval->processing_status === 'completed')
+                                
+                                @if($batchAiEval)
+                                    <!-- 관리자 일괄 채점 결과가 있는 경우 -->
+                                    <div class="btn-group mt-1" role="group">
                                         <button type="button" 
                                                 class="btn btn-success btn-sm view-ai-result-btn"
-                                                data-ai-evaluation-id="{{ $aiEval->id }}"
-                                                title="AI 평가 결과 보기">
-                                            <i class="bi bi-check-circle"></i> 결과 보기
+                                                data-ai-evaluation-id="{{ $batchAiEval->id }}"
+                                                title="관리자 일괄 채점 AI 평가 결과 보기">
+                                            <i class="bi bi-robot"></i> AI 평가 결과
                                         </button>
-                                    @endif
-                                </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle"></i> 
+                                            관리자가 일괄 채점한 AI 평가 결과가 자동으로 반영됩니다.
+                                        </small>
+                                    </div>
+                                @else
+                                    <!-- 관리자 일괄 채점 결과가 없는 경우 기존 로직 -->
+                                    <div class="btn-group mt-1" role="group">
+                                        @if(!$currentAiEval || $currentAiEval->processing_status === 'failed')
+                                            <button type="button" 
+                                                    class="btn btn-outline-info btn-sm ai-evaluate-btn"
+                                                    data-assignment-id="{{ $assignment->id }}"
+                                                    title="AI로 평가하기">
+                                                <i class="bi bi-robot"></i> AI 평가
+                                            </button>
+                                        @elseif($currentAiEval->processing_status === 'processing')
+                                            <button type="button" 
+                                                    class="btn btn-warning btn-sm" 
+                                                    disabled>
+                                                <i class="bi bi-arrow-clockwise"></i> 처리중...
+                                            </button>
+                                        @elseif($currentAiEval->processing_status === 'completed')
+                                            <button type="button" 
+                                                    class="btn btn-success btn-sm view-ai-result-btn"
+                                                    data-ai-evaluation-id="{{ $currentAiEval->id }}"
+                                                    title="AI 평가 결과 보기">
+                                                <i class="bi bi-check-circle"></i> 결과 보기
+                                            </button>
+                                        @endif
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -410,9 +431,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // AI 점수 자동 반영 알림 표시
     const aiNotification = document.createElement('div');
     aiNotification.className = 'alert alert-info alert-dismissible fade show mt-3';
+    
+    // AI 평가가 관리자에 의해 일괄 채점되었는지 확인
+    const isBatchEvaluation = {{ $aiEvaluation->admin_id == 1 ? 'true' : 'false' }};
+    const evaluationSource = isBatchEvaluation ? '관리자 일괄 채점' : 'AI 개별 평가';
+    
     aiNotification.innerHTML = `
         <i class="bi bi-robot"></i> 
         <strong>AI 평가 결과가 자동 반영되었습니다!</strong><br>
+        <small class="text-muted">출처: ${evaluationSource}</small><br>
         발음(${aiScores.pronunciation_score}점), 어휘(${aiScores.vocabulary_score}점), 유창성(${aiScores.fluency_score}점)이 설정되었습니다. 필요시 수정 가능합니다.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
@@ -555,11 +582,13 @@ document.addEventListener('DOMContentLoaded', function() {
     @php
         $currentAdminId = auth('admin')->user()->id ?? auth('admin')->id();
         $currentAiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
+        $batchAiEval = $submission->aiEvaluations->where('processing_status', 'completed')->first();
     @endphp
     
     const currentAdminId = {{ $currentAdminId ?? 'null' }};
     const assignmentId = {{ $assignment->id }};
     const hasAiEvaluation = {{ $currentAiEval ? 'true' : 'false' }};
+    const hasBatchAiEvaluation = {{ $batchAiEval ? 'true' : 'false' }};
     const aiEvaluateUrl = '{{ url("/judge/ai-evaluate") }}';
     
     // 디버깅 정보 출력
@@ -567,6 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('currentAdminId:', currentAdminId);
     console.log('assignmentId:', assignmentId);
     console.log('hasAiEvaluation:', hasAiEvaluation);
+    console.log('hasBatchAiEvaluation:', hasBatchAiEvaluation);
     console.log('aiEvaluateUrl:', aiEvaluateUrl);
     console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'));
     
@@ -642,6 +672,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         if (e.target.closest('.ai-evaluate-btn')) {
             e.preventDefault();
+            
+            // 관리자 일괄 채점 결과가 있는 경우 AI 평가 실행 방지
+            if (hasBatchAiEvaluation) {
+                alert('관리자가 이미 일괄 채점한 AI 평가 결과가 있습니다. AI 평가를 다시 실행할 수 없습니다.');
+                return;
+            }
+            
             const button = e.target.closest('.ai-evaluate-btn');
             const assignmentId = button.dataset.assignmentId;
             

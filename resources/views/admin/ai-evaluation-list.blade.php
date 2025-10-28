@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    const modal = createAiDetailModal(data.aiEvaluation);
+                    const modal = createAiDetailModal(data.data);
                     document.body.appendChild(modal);
                     const bsModal = new bootstrap.Modal(modal);
                     bsModal.show();
@@ -361,17 +361,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <h6>학생 정보</h6>
-                                <p><strong>이름:</strong> ${aiEvaluation.video_submission.student_name_korean} (${aiEvaluation.video_submission.student_name_english})</p>
-                                <p><strong>학교:</strong> ${aiEvaluation.video_submission.school_name}</p>
-                                <p><strong>학년:</strong> ${aiEvaluation.video_submission.grade}</p>
-                                <p><strong>과제:</strong> ${aiEvaluation.video_submission.required_task || '-'}</p>
-                                <p><strong>질문:</strong> ${aiEvaluation.video_submission.selected_question || '-'}</p>
+                                <p><strong>이름:</strong> ${aiEvaluation.student_name} (${aiEvaluation.student_name_english})</p>
+                                <p><strong>기관:</strong> ${aiEvaluation.institution}</p>
+                                <p><strong>반:</strong> ${aiEvaluation.class_name}</p>
+                                <p><strong>과제:</strong> ${aiEvaluation.unit_topic || '-'}</p>
+                                <p><strong>질문:</strong> -</p>
                             </div>
                             <div class="col-md-6">
                                 <h6>평가 정보</h6>
-                                <p><strong>평가자:</strong> ${aiEvaluation.judge.name}</p>
-                                <p><strong>평가일:</strong> ${new Date(aiEvaluation.created_at).toLocaleString('ko-KR')}</p>
-                                <p><strong>상태:</strong> ${getStatusBadge(aiEvaluation.status)}</p>
+                                <p><strong>평가자:</strong> ${aiEvaluation.admin_name}</p>
+                                <p><strong>평가일:</strong> ${aiEvaluation.processed_at ? new Date(aiEvaluation.processed_at).toLocaleString('ko-KR') : '-'}</p>
+                                <p><strong>상태:</strong> ${getStatusBadge(aiEvaluation.processing_status)}</p>
                             </div>
                         </div>
                         

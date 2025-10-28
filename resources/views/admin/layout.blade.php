@@ -25,7 +25,7 @@
         
         
         .sidebar {
-            min-height: 100vh;
+            height: 100vh; /* min-height에서 height로 변경 */
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             position: fixed;
@@ -33,7 +33,33 @@
             left: 0;
             width: 280px; /* 고정 너비로 변경 */
             z-index: 1020;
-            overflow-y: auto;
+            overflow-y: auto; /* 세로 스크롤 활성화 */
+            overflow-x: hidden; /* 가로 스크롤 방지 */
+        }
+        
+        /* 사이드바 스크롤바 스타일링 */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Firefox용 스크롤바 스타일링 */
+        .sidebar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
         }
         
         @media (min-width: 1200px) {
@@ -112,8 +138,11 @@
         @media (max-width: 767px) {
             .sidebar {
                 width: 280px; /* 모바일에서도 고정 너비 */
+                height: 100vh; /* 모바일에서도 전체 높이 */
                 transform: translateX(-100%);
                 transition: transform 0.3s ease;
+                overflow-y: auto; /* 모바일에서도 스크롤 활성화 */
+                overflow-x: hidden; /* 가로 스크롤 방지 */
             }
             
             .sidebar.show {
@@ -358,6 +387,11 @@
                             <i class="bi bi-robot"></i> AI 채점 결과
                         </a>
                         
+                        <a class="nav-link {{ request()->routeIs('admin.batch.evaluation.*') ? 'active' : '' }}" 
+                           href="{{ route('admin.batch.evaluation.list') }}">
+                            <i class="bi bi-collection-play"></i> 영상 일괄 채점
+                        </a>
+                        
                         <a class="nav-link {{ request()->routeIs('admin.ai.settings*') ? 'active' : '' }}" 
                            href="{{ route('admin.ai.settings') }}">
                             <i class="bi bi-gear"></i> AI 설정
@@ -448,6 +482,30 @@
                         </div>
                     @endif
                     
+                    <!-- AI 채점 진행상황 표시 -->
+                    <div id="ai-evaluation-progress" class="alert alert-info d-none" role="alert">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">처리중...</span>
+                            </div>
+                            <div class="flex-grow-1">
+                                <strong>AI 일괄 채점 진행중</strong>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    <span id="progress-text">대기중...</span>
+                                </small>
+                            </div>
+                            <div class="ms-3">
+                                <a href="{{ route('admin.batch.evaluation.list') }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> 상세보기
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
                     @if($errors->any())
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <i class="bi bi-exclamation-triangle"></i>
@@ -486,8 +544,82 @@
                 });
             }
         });
+        
+        // AI 채점 진행상황 모니터링
+        let progressCheckInterval = null;
+        
+        function checkAiEvaluationProgress() {
+            fetch('{{ route("admin.batch.ai.evaluation.progress") }}', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const progressContainer = document.getElementById('ai-evaluation-progress');
+                        const progressBar = document.getElementById('progress-bar');
+                        const progressText = document.getElementById('progress-text');
+                        
+                        const total = data.data.total_submissions;
+                        const completed = data.data.completed_evaluations;
+                        const processing = data.data.processing_evaluations;
+                        const failed = data.data.failed_evaluations;
+                        const pending = data.data.pending_submissions;
+                        
+                        // 진행중인 작업이 있는지 확인
+                        if (processing > 0 || (completed + failed) < total) {
+                            // 진행상황 표시
+                            progressContainer.classList.remove('d-none');
+                            
+                            // 진행률 계산
+                            const progressPercentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+                            progressBar.style.width = progressPercentage + '%';
+                            
+                            // 진행상황 텍스트 업데이트
+                            progressText.textContent = `완료: ${completed}/${total} | 처리중: ${processing} | 실패: ${failed} | 대기: ${pending}`;
+                            
+                            // 진행률에 따른 색상 변경
+                            if (progressPercentage === 100) {
+                                progressBar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+                                progressBar.classList.add('bg-success');
+                                progressText.textContent = `완료: ${completed}/${total} (100%)`;
+                                
+                                // 완료 후 3초 뒤에 숨기기
+                                setTimeout(() => {
+                                    progressContainer.classList.add('d-none');
+                                }, 3000);
+                            } else if (progressPercentage > 0) {
+                                progressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
+                                progressBar.classList.remove('bg-success');
+                            }
+                        } else {
+                            // 진행중인 작업이 없으면 숨기기
+                            progressContainer.classList.add('d-none');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('AI 채점 진행상황 확인 오류:', error);
+                });
+        }
+        
+        // 페이지 로드 시 진행상황 확인
+        checkAiEvaluationProgress();
+        
+        // 5초마다 진행상황 확인
+        progressCheckInterval = setInterval(checkAiEvaluationProgress, 5000);
+        
+        // 페이지 언로드 시 인터벌 정리
+        window.addEventListener('beforeunload', function() {
+            if (progressCheckInterval) {
+                clearInterval(progressCheckInterval);
+            }
+        });
     </script>
     
     @yield('scripts')
+    @stack('scripts')
 </body>
 </html>

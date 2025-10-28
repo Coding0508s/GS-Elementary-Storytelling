@@ -1949,28 +1949,21 @@ public function assignVideo(Request $request)
             
             return response()->json([
                 'success' => true,
-                'aiEvaluation' => [
+                'data' => [
                     'id' => $aiEvaluation->id,
+                    'student_name' => $aiEvaluation->videoSubmission->student_name_korean,
+                    'student_name_english' => $aiEvaluation->videoSubmission->student_name_english,
+                    'institution' => $aiEvaluation->videoSubmission->institution_name,
+                    'class_name' => $aiEvaluation->videoSubmission->class_name,
                     'pronunciation_score' => $aiEvaluation->pronunciation_score,
                     'vocabulary_score' => $aiEvaluation->vocabulary_score,
                     'fluency_score' => $aiEvaluation->fluency_score,
                     'total_score' => $aiEvaluation->total_score,
-                    'ai_feedback' => $aiEvaluation->ai_feedback,
                     'transcription' => $aiEvaluation->transcription,
-                    'status' => $aiEvaluation->processing_status,
-                    'created_at' => $aiEvaluation->created_at->toISOString(),
-                    'processed_at' => $aiEvaluation->processed_at ? $aiEvaluation->processed_at->toISOString() : null,
-                    'video_submission' => [
-                        'student_name_korean' => $aiEvaluation->videoSubmission->student_name_korean,
-                        'student_name_english' => $aiEvaluation->videoSubmission->student_name_english,
-                        'school_name' => $aiEvaluation->videoSubmission->institution_name,
-                        'grade' => $aiEvaluation->videoSubmission->grade,
-                        'required_task' => $aiEvaluation->videoSubmission->unit_topic,
-                        'selected_question' => null
-                    ],
-                    'judge' => [
-                        'name' => $aiEvaluation->admin->name
-                    ]
+                    'ai_feedback' => $aiEvaluation->ai_feedback,
+                    'processing_status' => $aiEvaluation->processing_status,
+                    'processed_at' => $aiEvaluation->processed_at ? $aiEvaluation->processed_at->format('Y-m-d H:i:s') : null,
+                    'admin_name' => $aiEvaluation->admin->name ?? '시스템'
                 ]
             ]);
 
@@ -2302,6 +2295,522 @@ public function assignVideo(Request $request)
                 'trace' => $e->getTraceAsString()
             ]);
             return back()->with('error', '[Excel Download Error] AI 평가 결과 Excel 파일 생성 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 일괄 AI 채점 시작
+     */
+    public function startBatchAiEvaluation(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            // 처리할 영상들 가져오기 (AI 평가가 완료되지 않은 것들)
+            $submissions = VideoSubmission::whereDoesntHave('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_COMPLETED);
+            })->get();
+
+            if ($submissions->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '처리할 영상이 없습니다. 모든 영상이 이미 AI 채점이 완료되었습니다.'
+                ]);
+            }
+
+            $processedCount = 0;
+            $queuedCount = 0;
+            $skippedCount = 0; // 영상 파일이 없는 영상 수
+
+            foreach ($submissions as $submission) {
+                // 기존 AI 평가가 처리 중인지 확인
+                $existingEvaluation = AiEvaluation::where('video_submission_id', $submission->id)
+                    ->where('processing_status', AiEvaluation::STATUS_PROCESSING)
+                    ->first();
+
+                if ($existingEvaluation) {
+                    $processedCount++;
+                    continue;
+                }
+
+                // 영상 파일 존재 여부 확인
+                if (!$this->checkVideoFileExists($submission)) {
+                    Log::warning('영상 파일이 존재하지 않아 건너뜀', [
+                        'submission_id' => $submission->id,
+                        'video_path' => $submission->video_file_path
+                    ]);
+                    
+                    // AI 평가 레코드를 실패 상태로 생성
+                    $aiEvaluation = AiEvaluation::where('video_submission_id', $submission->id)->first() ?? new AiEvaluation();
+                    $aiEvaluation->video_submission_id = $submission->id;
+                    $aiEvaluation->admin_id = $admin->id;
+                    $aiEvaluation->processing_status = AiEvaluation::STATUS_FAILED;
+                    $aiEvaluation->error_message = '영상 파일이 존재하지 않습니다.';
+                    $aiEvaluation->save();
+                    
+                    $skippedCount++;
+                    continue;
+                }
+
+                // Job을 큐에 추가
+                \App\Jobs\BatchAiEvaluationJob::dispatch($submission->id, $admin->id);
+                $queuedCount++;
+            }
+
+            Log::info('일괄 AI 채점 시작', [
+                'admin_id' => $admin->id,
+                'total_submissions' => $submissions->count(),
+                'already_processing' => $processedCount,
+                'queued_jobs' => $queuedCount,
+                'skipped_no_file' => $skippedCount
+            ]);
+
+            $message = "일괄 AI 채점을 시작했습니다. {$queuedCount}개의 영상이 처리 대기열에 추가되었습니다.";
+            if ($skippedCount > 0) {
+                $message .= " (영상 파일이 없는 {$skippedCount}개 영상은 제외되었습니다.)";
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'total_submissions' => $submissions->count(),
+                    'already_processing' => $processedCount,
+                    'queued_jobs' => $queuedCount,
+                    'skipped_no_file' => $skippedCount
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('일괄 AI 채점 시작 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '일괄 AI 채점 시작 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 일괄 AI 채점 진행상황 조회
+     */
+    public function getBatchAiEvaluationProgress(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            // 전체 영상 수
+            $totalSubmissions = VideoSubmission::count();
+
+            // AI 평가 완료된 영상 수
+            $completedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_COMPLETED)->count();
+
+            // 처리 중인 영상 수
+            $processingEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_PROCESSING)->count();
+
+            // 실패한 영상 수
+            $failedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)->count();
+
+            // 대기 중인 영상 수
+            $pendingSubmissions = $totalSubmissions - $completedEvaluations - $processingEvaluations - $failedEvaluations;
+
+            // 진행률 계산
+            $progressPercentage = $totalSubmissions > 0 ? round(($completedEvaluations / $totalSubmissions) * 100, 1) : 0;
+
+            // 최근 처리된 평가들 (최근 10개)
+            $recentEvaluations = AiEvaluation::with(['videoSubmission', 'admin'])
+                ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
+                ->orderBy('processed_at', 'desc')
+                ->limit(10)
+                ->get()
+                ->map(function($evaluation) {
+                    return [
+                        'id' => $evaluation->id,
+                        'student_name' => $evaluation->videoSubmission->student_name_korean,
+                        'institution' => $evaluation->videoSubmission->institution_name,
+                        'total_score' => $evaluation->total_score,
+                        'processed_at' => $evaluation->processed_at ? $evaluation->processed_at->format('Y-m-d H:i:s') : null,
+                        'admin_name' => $evaluation->admin->name ?? '시스템'
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_submissions' => $totalSubmissions,
+                    'completed_evaluations' => $completedEvaluations,
+                    'processing_evaluations' => $processingEvaluations,
+                    'failed_evaluations' => $failedEvaluations,
+                    'pending_submissions' => $pendingSubmissions,
+                    'progress_percentage' => $progressPercentage,
+                    'recent_evaluations' => $recentEvaluations
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('일괄 AI 채점 진행상황 조회 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '진행상황 조회 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 실패한 AI 평가 재시도
+     */
+    public function retryFailedAiEvaluations(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            // 실패한 AI 평가들 가져오기
+            $failedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)->get();
+
+            if ($failedEvaluations->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '재시도할 실패한 평가가 없습니다.'
+                ]);
+            }
+
+            $retryCount = 0;
+
+            foreach ($failedEvaluations as $evaluation) {
+                // Job을 큐에 추가
+                \App\Jobs\BatchAiEvaluationJob::dispatch($evaluation->video_submission_id, $admin->id);
+                $retryCount++;
+            }
+
+            Log::info('실패한 AI 평가 재시도', [
+                'admin_id' => $admin->id,
+                'retry_count' => $retryCount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$retryCount}개의 실패한 평가를 재시도 대기열에 추가했습니다.",
+                'data' => [
+                    'retry_count' => $retryCount
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('실패한 AI 평가 재시도 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '재시도 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 영상 일괄 채점 페이지
+     */
+    public function batchEvaluationList(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        try {
+            // 검색 및 필터링 파라미터
+            $search = $request->get('search', '');
+            $status = $request->get('status', 'all');
+            $institution = $request->get('institution', '');
+            $sortBy = $request->get('sort', 'created_at');
+            $sortOrder = $request->get('order', 'desc');
+
+            // 기본 쿼리
+            $query = VideoSubmission::with(['aiEvaluations', 'evaluations']);
+
+            // 검색 조건
+            if (!empty($search)) {
+                $query->where(function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%")
+                      ->orWhere('class_name', 'like', "%{$search}%");
+                });
+            }
+
+            // 기관 필터
+            if (!empty($institution)) {
+                $query->where('institution_name', $institution);
+            }
+
+            // AI 평가 상태 필터
+            if ($status !== 'all') {
+                switch ($status) {
+                    case 'completed':
+                        $query->whereHas('aiEvaluations', function($q) {
+                            $q->where('processing_status', AiEvaluation::STATUS_COMPLETED);
+                        });
+                        break;
+                    case 'processing':
+                        $query->whereHas('aiEvaluations', function($q) {
+                            $q->where('processing_status', AiEvaluation::STATUS_PROCESSING);
+                        });
+                        break;
+                    case 'failed':
+                        $query->whereHas('aiEvaluations', function($q) {
+                            $q->where('processing_status', AiEvaluation::STATUS_FAILED)
+                              ->where('error_message', '!=', '영상 파일이 존재하지 않습니다.');
+                        });
+                        break;
+                    case 'no_file':
+                        $query->whereHas('aiEvaluations', function($q) {
+                            $q->where('processing_status', AiEvaluation::STATUS_FAILED)
+                              ->where('error_message', '영상 파일이 존재하지 않습니다.');
+                        });
+                        break;
+                    case 'pending':
+                        $query->whereDoesntHave('aiEvaluations');
+                        break;
+                }
+            }
+
+            // 정렬
+            $allowedSortFields = ['created_at', 'student_name_korean', 'institution_name', 'video_file_name'];
+            if (in_array($sortBy, $allowedSortFields)) {
+                $query->orderBy($sortBy, $sortOrder);
+            } else {
+                $query->orderBy('created_at', 'desc');
+            }
+
+            // 페이지네이션
+            $submissions = $query->paginate(20)->appends($request->query());
+
+            // 통계 데이터
+            $totalSubmissions = VideoSubmission::count();
+            $completedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_COMPLETED)->count();
+            $processingEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_PROCESSING)->count();
+            $noFileEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)
+                ->where('error_message', '영상 파일이 존재하지 않습니다.')
+                ->count();
+            $failedEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_FAILED)
+                ->where('error_message', '!=', '영상 파일이 존재하지 않습니다.')
+                ->count();
+            $pendingSubmissions = $totalSubmissions - $completedEvaluations - $processingEvaluations - $failedEvaluations - $noFileEvaluations;
+
+            // 기관 목록 (필터용)
+            $institutions = VideoSubmission::select('institution_name')
+                ->distinct()
+                ->orderBy('institution_name')
+                ->pluck('institution_name');
+
+            // 진행률 계산
+            $progressPercentage = $totalSubmissions > 0 ? round(($completedEvaluations / $totalSubmissions) * 100, 1) : 0;
+
+            return view('admin.batch-evaluation', compact(
+                'submissions',
+                'totalSubmissions',
+                'completedEvaluations',
+                'processingEvaluations',
+                'failedEvaluations',
+                'noFileEvaluations',
+                'pendingSubmissions',
+                'progressPercentage',
+                'institutions',
+                'search',
+                'status',
+                'institution',
+                'sortBy',
+                'sortOrder'
+            ));
+
+        } catch (\Exception $e) {
+            Log::error('영상 일괄 채점 페이지 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()->with('error', '페이지 로드 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 개별 영상 AI 채점 시작
+     */
+    public function startSingleAiEvaluation(Request $request, $submissionId)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            // 영상 제출 정보 확인
+            $submission = VideoSubmission::find($submissionId);
+            if (!$submission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '영상을 찾을 수 없습니다.'
+                ], 404);
+            }
+
+            // 영상 파일 존재 여부 확인
+            if (!$this->checkVideoFileExists($submission)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '영상 파일이 존재하지 않습니다.'
+                ], 400);
+            }
+
+            // 기존 AI 평가가 처리 중인지 확인
+            $existingEvaluation = AiEvaluation::where('video_submission_id', $submissionId)
+                ->where('processing_status', AiEvaluation::STATUS_PROCESSING)
+                ->first();
+
+            if ($existingEvaluation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '이미 처리 중인 영상입니다.'
+                ]);
+            }
+
+            // AI 평가 레코드 생성 또는 업데이트
+            $aiEvaluation = AiEvaluation::updateOrCreate(
+                [
+                    'video_submission_id' => $submissionId,
+                    'admin_id' => $admin->id
+                ],
+                [
+                    'processing_status' => AiEvaluation::STATUS_PROCESSING,
+                    'error_message' => null,
+                    'ai_feedback' => '대용량 파일 처리 중입니다. 영상 길이에 따라 5-15분 소요될 수 있습니다.'
+                ]
+            );
+
+            // OpenAI API를 사용한 실제 AI 평가 처리 (동기)
+            try {
+                $openAiService = new OpenAiService();
+                $result = $openAiService->evaluateVideo($submission->video_file_path);
+
+                // 결과 저장
+                $aiEvaluation->update([
+                    'pronunciation_score' => $result['pronunciation_score'],
+                    'vocabulary_score' => $result['vocabulary_score'],
+                    'fluency_score' => $result['fluency_score'],
+                    'transcription' => $result['transcription'],
+                    'ai_feedback' => $result['ai_feedback'],
+                    'processing_status' => AiEvaluation::STATUS_COMPLETED,
+                    'processed_at' => now()
+                ]);
+
+                // 총점 계산
+                $aiEvaluation->calculateTotalScore();
+                $aiEvaluation->save();
+
+                Log::info('개별 AI 채점 완료', [
+                    'admin_id' => $admin->id,
+                    'submission_id' => $submissionId,
+                    'total_score' => $aiEvaluation->total_score
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'AI 채점이 성공적으로 완료되었습니다.',
+                    'ai_evaluation_id' => $aiEvaluation->id
+                ]);
+
+            } catch (\Exception $e) {
+                Log::error('개별 AI 채점 실패', [
+                    'admin_id' => $admin->id,
+                    'submission_id' => $submissionId,
+                    'error' => $e->getMessage()
+                ]);
+
+                $aiEvaluation->update([
+                    'processing_status' => AiEvaluation::STATUS_FAILED,
+                    'error_message' => $e->getMessage()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI 채점 중 오류가 발생했습니다: ' . $e->getMessage()
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('개별 AI 채점 시작 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'submission_id' => $submissionId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 채점 시작 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 영상 파일 존재 여부 확인
+     */
+    private function checkVideoFileExists($submission)
+    {
+        try {
+            // S3에 저장된 경우
+            if ($submission->isStoredOnS3()) {
+                return \Illuminate\Support\Facades\Storage::disk('s3')->exists($submission->video_file_path);
+            }
+            
+            // 로컬에 저장된 경우 - public 디스크 사용
+            if ($submission->isStoredLocally()) {
+                return \Illuminate\Support\Facades\Storage::disk('public')->exists($submission->video_file_path);
+            }
+            
+            // 기본 스토리지에서 확인 (public 디스크)
+            return \Illuminate\Support\Facades\Storage::disk('public')->exists($submission->video_file_path);
+            
+        } catch (\Exception $e) {
+            Log::error('영상 파일 존재 여부 확인 중 오류', [
+                'submission_id' => $submission->id,
+                'video_path' => $submission->video_file_path,
+                'error' => $e->getMessage()
+            ]);
+            return false;
         }
     }
 }

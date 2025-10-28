@@ -139,12 +139,20 @@ class JudgeController extends Controller
                                     ->orderBy('created_at', 'asc')
                                     ->paginate(10);
 
-        // 각 assignment에 현재 심사위원의 evaluation만 추가
+        // 각 assignment에 현재 심사위원의 evaluation과 관리자 AI 평가 정보 추가
         $assignments->getCollection()->transform(function ($assignment) use ($judge) {
             $currentEvaluation = Evaluation::where('video_submission_id', $assignment->video_submission_id)
                                          ->where('admin_id', $judge->id)
                                          ->first();
             $assignment->setRelation('evaluation', $currentEvaluation);
+            
+            // 관리자가 일괄 채점한 AI 평가 결과 확인
+            $adminAiEvaluation = AiEvaluation::where('video_submission_id', $assignment->video_submission_id)
+                                            ->where('admin_id', '!=', $judge->id) // 관리자의 AI 평가
+                                            ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
+                                            ->first();
+            $assignment->admin_ai_evaluation = $adminAiEvaluation;
+            
             return $assignment;
         });
 
@@ -189,10 +197,10 @@ class JudgeController extends Controller
                                         ->orderBy('created_at', 'asc')
                                         ->first();
 
-        // AI 평가 결과 가져오기 (해당 심사위원의 AI 평가)
+        // AI 평가 결과 가져오기 (관리자가 일괄 채점한 AI 평가 우선, 없으면 해당 심사위원의 AI 평가)
         $aiEvaluation = AiEvaluation::where('video_submission_id', $submission->id)
-                                  ->where('admin_id', $judge->id)
                                   ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
+                                  ->orderBy('admin_id', 'asc') // 관리자(admin)의 AI 평가를 우선적으로 가져옴
                                   ->first();
 
         // 다른 심사위원이 이미 채점했는지 확인
@@ -750,6 +758,68 @@ class JudgeController extends Controller
 
         } catch (\Exception $e) {
             Log::error('AI 평가 결과 Ajax 조회 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 평가 결과를 불러올 수 없습니다.'
+            ], 500);
+        }
+    }
+
+    /**
+     * AI 평가 결과 조회 (Ajax용)
+     */
+    public function getAiResult($id)
+    {
+        try {
+            $judge = Auth::guard('admin')->user();
+            if (!$judge || !$judge->isJudge()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '심사위원만 접근할 수 있습니다.'
+                ], 403);
+            }
+
+            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])->findOrFail($id);
+            
+            // 해당 심사위원이 접근할 수 있는 영상인지 확인
+            $assignment = VideoAssignment::where('admin_id', $judge->id)
+                                      ->where('video_submission_id', $aiEvaluation->video_submission_id)
+                                      ->first();
+            
+            if (!$assignment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '접근 권한이 없습니다.'
+                ], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'aiEvaluation' => [
+                    'id' => $aiEvaluation->id,
+                    'student_name' => $aiEvaluation->videoSubmission->student_name_korean,
+                    'student_name_english' => $aiEvaluation->videoSubmission->student_name_english,
+                    'institution' => $aiEvaluation->videoSubmission->institution_name,
+                    'class_name' => $aiEvaluation->videoSubmission->class_name,
+                    'pronunciation_score' => $aiEvaluation->pronunciation_score,
+                    'vocabulary_score' => $aiEvaluation->vocabulary_score,
+                    'fluency_score' => $aiEvaluation->fluency_score,
+                    'total_score' => $aiEvaluation->total_score,
+                    'transcription' => $aiEvaluation->transcription,
+                    'ai_feedback' => $aiEvaluation->ai_feedback,
+                    'processing_status' => $aiEvaluation->processing_status,
+                    'processed_at' => $aiEvaluation->processed_at ? $aiEvaluation->processed_at->format('Y-m-d H:i:s') : null,
+                    'admin_name' => $aiEvaluation->admin->name ?? '시스템'
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('AI 평가 결과 조회 오류: ' . $e->getMessage(), [
+                'judge_id' => $judge->id ?? null,
+                'ai_evaluation_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'AI 평가 결과를 불러올 수 없습니다.'

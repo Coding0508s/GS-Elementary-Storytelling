@@ -412,12 +412,25 @@ Important notes:
     {
         try {
             Log::info('AI 영상 평가 시작', ['video_path' => $videoFilePath]);
+            $totalStartTime = microtime(true);
 
             // 1단계: 영상에서 오디오 추출
+            $extractStartTime = microtime(true);
             $audioFilePath = $this->extractAudioFromVideo($videoFilePath);
+            $extractEndTime = microtime(true);
+            Log::info('오디오 추출 완료', [
+                'audio_path' => $audioFilePath,
+                'extraction_time' => round($extractEndTime - $extractStartTime, 2) . ' seconds'
+            ]);
             
             // 2단계: 음성을 텍스트로 변환
+            $transcribeStartTime = microtime(true);
             $transcription = $this->transcribeAudio($audioFilePath);
+            $transcribeEndTime = microtime(true);
+            Log::info('음성 전사 완료', [
+                'transcription_length' => strlen($transcription),
+                'transcription_time' => round($transcribeEndTime - $transcribeStartTime, 2) . ' seconds'
+            ]);
             
             // 임시 오디오 파일 삭제
             if (file_exists($audioFilePath)) {
@@ -428,12 +441,18 @@ Important notes:
                 throw new \Exception('음성 변환 결과가 비어있습니다.');
             }
 
-            Log::info('음성 전사 완료', ['transcription_length' => strlen($transcription)]);
-
             // 3단계: 텍스트를 바탕으로 평가
+            $evaluateStartTime = microtime(true);
             $evaluation = $this->evaluateEnglishPresentation($transcription);
+            $evaluateEndTime = microtime(true);
+            Log::info('AI 평가 완료', array_merge($evaluation, [
+                'evaluation_time' => round($evaluateEndTime - $evaluateStartTime, 2) . ' seconds'
+            ]));
             
-            Log::info('AI 평가 완료', $evaluation);
+            $totalEndTime = microtime(true);
+            Log::info('전체 AI 평가 완료', [
+                'total_time' => round($totalEndTime - $totalStartTime, 2) . ' seconds'
+            ]);
             
             // 4단계: 결과 합치기
             return array_merge($evaluation, [
