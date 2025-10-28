@@ -2179,16 +2179,15 @@ public function assignVideo(Request $request)
             // 시트 이름 설정
             $sheet->setTitle('AI 평가 결과');
             
-            // 헤더 설정
+            // 헤더 설정 (AI가 평가하는 3개 항목만)
             $headers = [
                 'ID', '학생명(한글)', '학생명(영문)', '기관명', '학년', '나이',
-                '정확한 발음과 자연스러운 억양, 전달력', '올바른 어휘 및 표현 사용', '유창성 수준', 
-                '자신감, 긍정적이고 밝은 태도', '주제와 발표 내용과의 연결성', '자연스러운 구성과 흐름', '창의적 내용',
+                '정확한 발음과 자연스러운 억양, 전달력', '올바른 어휘 및 표현 사용', '유창성 수준',
                 'AI 총점', 'AI 심사평', '음성인식 텍스트', '평가일시', '평가자'
             ];
             
             // 헤더 행 추가
-            $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];
+            $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'];
             foreach ($headers as $index => $header) {
                 $sheet->setCellValue($columns[$index] . '1', $header);
             }
@@ -2217,7 +2216,7 @@ public function assignVideo(Request $request)
                 ]
             ]);
             
-            // 데이터 행 추가
+            // 데이터 행 추가 (AI가 평가하는 3개 항목만)
             $row = 2;
             foreach ($aiEvaluations as $evaluation) {
                 $data = [
@@ -2230,10 +2229,6 @@ public function assignVideo(Request $request)
                     $evaluation->pronunciation_score,
                     $evaluation->vocabulary_score,
                     $evaluation->fluency_score,
-                    $evaluation->confidence_score,
-                    $evaluation->topic_connection_score,
-                    $evaluation->structure_flow_score,
-                    $evaluation->creativity_score,
                     $evaluation->total_score,
                     $evaluation->ai_feedback ?? '',
                     $evaluation->transcription ?? '',
@@ -2251,7 +2246,7 @@ public function assignVideo(Request $request)
             foreach ($columns as $index => $col) {
                 if ($index >= count($headers)) break;
                 
-                if (in_array($col, ['O', 'P'])) { // AI 심사평, 음성인식 텍스트 컬럼
+                if (in_array($col, ['K', 'L'])) { // AI 심사평, 음성인식 텍스트 컬럼
                     $sheet->getColumnDimension($col)->setWidth(50);
                 } else {
                     $sheet->getColumnDimension($col)->setAutoSize(true);
