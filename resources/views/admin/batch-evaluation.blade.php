@@ -508,12 +508,7 @@ function retryFailedEvaluations() {
 
 // 진행상황 확인 함수
 function checkAiEvaluationProgress() {
-    fetch('{{ route("admin.batch.ai.evaluation.progress") }}', {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
+    fetch('{{ route("admin.batch.ai.evaluation.progress") }}')
     .then(response => response.json())
     .then(data => {
         if (data.success) {
@@ -633,13 +628,7 @@ function viewAiEvaluation(evaluationId) {
     content.innerHTML = '<div class="text-center"><i class="bi bi-arrow-clockwise"></i> 로딩 중...</div>';
     modal.show();
     
-    fetch(`{{ url('admin/ai-evaluation') }}/${evaluationId}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        }
-    })
+    fetch(`{{ url('admin/ai-evaluation') }}/${evaluationId}`)
     .then(response => response.json())
     .then(data => {
         if (data.success) {

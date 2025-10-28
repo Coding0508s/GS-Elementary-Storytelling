@@ -549,12 +549,7 @@
         let progressCheckInterval = null;
         
         function checkAiEvaluationProgress() {
-            fetch('{{ route("admin.batch.ai.evaluation.progress") }}', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
+            fetch('{{ route("admin.batch.ai.evaluation.progress") }}')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
