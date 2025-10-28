@@ -475,7 +475,8 @@ class AdminController extends Controller
         }
 
         // 열 너비 자동 조정 (AA열까지)
-        foreach (range('A', 'AA') as $column) {
+        $columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA'];
+        foreach ($columns as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
