@@ -5,7 +5,21 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-speedometer2"></i> 관리자 대시보드</h1>
-    <small class="text-muted">{{ now()->format('Y년 m월 d일 H:i') }}</small>
+    <div class="d-flex align-items-center gap-3">
+        <!-- 대회 상태 토글 -->
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted">대회 페이지:</span>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="contestToggle" 
+                       {{ $contestActive ? 'checked' : '' }} 
+                       style="transform: scale(1.2);">
+                <label class="form-check-label fw-bold" for="contestToggle" id="contestStatusLabel">
+                    {{ $contestActive ? '활성화' : '비활성화' }}
+                </label>
+            </div>
+        </div>
+        <small class="text-muted">{{ now()->format('Y년 m월 d일 H:i') }}</small>
+    </div>
 </div>
 
 <!-- 통계 카드 -->
@@ -54,6 +68,56 @@
                 </div>
                 <h3 class="text-info">{{ number_format($assignedSubmissions) }}</h3>
                 <p class="card-text text-muted">배정된 영상</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 대회 활성화 상태 -->
+<div class="card admin-card mb-4">
+    <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <h5 class="mb-0 text-white">
+            <i class="bi bi-trophy"></i> 대회 관리
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        @if($contestActive)
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 2rem;"></i>
+                        @else
+                            <i class="bi bi-x-circle-fill text-danger" style="font-size: 2rem;"></i>
+                        @endif
+                    </div>
+                    <div>
+                        <h4 class="mb-1">
+                            @if($contestActive)
+                                <span class="text-success">대회 활성화됨</span>
+                            @else
+                                <span class="text-danger">대회 비활성화됨</span>
+                            @endif
+                        </h4>
+                        <p class="text-muted mb-0">
+                            @if($contestActive)
+                                현재 사용자들이 대회에 참여할 수 있습니다.
+                            @else
+                                현재 대회가 비활성화되어 사용자 접근이 제한됩니다.
+                            @endif
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="d-grid">
+                    <button id="contest-toggle-btn" 
+                            class="btn {{ $contestActive ? 'btn-danger' : 'btn-success' }} btn-lg"
+                            data-active="{{ $contestActive ? 'true' : 'false' }}">
+                        <i class="bi {{ $contestActive ? 'bi-pause-circle' : 'bi-play-circle' }}"></i>
+                        {{ $contestActive ? '대회 비활성화' : '대회 활성화' }}
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -583,6 +647,213 @@ document.addEventListener('DOMContentLoaded', function() {
             button.innerHTML = originalText;
             button.disabled = false;
         });
+    }
+
+    // 대회 활성화 토글 기능
+    const contestToggleBtn = document.getElementById('contest-toggle-btn');
+    if (contestToggleBtn) {
+        contestToggleBtn.addEventListener('click', function() {
+            const isActive = this.dataset.active === 'true';
+            const action = isActive ? '비활성화' : '활성화';
+            
+            if (confirm(`대회를 ${action}하시겠습니까?`)) {
+                toggleContestStatus();
+            }
+        });
+    }
+
+    function toggleContestStatus() {
+        const button = document.getElementById('contest-toggle-btn');
+        const originalText = button.innerHTML;
+        
+        // 버튼 비활성화 및 로딩 표시
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i> 처리 중...';
+        
+        // CSRF 토큰을 동적으로 새로 가져오기
+        fetch('/admin/csrf-token', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            const csrfToken = data.csrf_token;
+            console.log('Fresh CSRF Token (button):', csrfToken);
+            
+            return fetch('{{ route("admin.contest.toggle") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: '_token=' + encodeURIComponent(csrfToken)
+            });
+        })
+        .then(response => {
+            console.log('Button response status:', response.status);
+            console.log('Button response headers:', response.headers);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // 응답이 JSON인지 확인
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                // HTML 응답인 경우 로그인 페이지로 리다이렉트
+                if (contentType && contentType.includes('text/html')) {
+                    alert('세션이 만료되었습니다. 다시 로그인해주세요.');
+                    window.location.href = '{{ route("admin.login") }}';
+                    return;
+                }
+                throw new Error(`Expected JSON response, got: ${contentType}`);
+            }
+            
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // 성공 시 페이지 새로고침
+                location.reload();
+            } else {
+                alert('오류: ' + data.message);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('네트워크 오류가 발생했습니다.');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    }
+
+    // 대회 상태 토글 기능
+    const contestToggle = document.getElementById('contestToggle');
+    const contestStatusLabel = document.getElementById('contestStatusLabel');
+    
+    if (contestToggle) {
+        contestToggle.addEventListener('change', function() {
+            const isActive = this.checked;
+            const originalText = contestStatusLabel.textContent;
+            
+            // 로딩 상태 표시
+            contestStatusLabel.textContent = '변경 중...';
+            contestToggle.disabled = true;
+            
+            // CSRF 토큰을 동적으로 새로 가져오기
+            fetch('{{ route("admin.csrf-token") }}', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const csrfToken = data.csrf_token;
+                console.log('Fresh CSRF Token:', csrfToken);
+                
+                return fetch('{{ route("admin.contest.toggle") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRF-TOKEN': csrfToken
+                    },
+                    body: '_token=' + encodeURIComponent(csrfToken)
+                });
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // 응답이 JSON인지 확인
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    // HTML 응답인 경우 로그인 페이지로 리다이렉트
+                    if (contentType && contentType.includes('text/html')) {
+                        alert('세션이 만료되었습니다. 다시 로그인해주세요.');
+                        window.location.href = '{{ route("admin.login") }}';
+                        return;
+                    }
+                    throw new Error(`Expected JSON response, got: ${contentType}`);
+                }
+                
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                
+                if (data.success) {
+                    // 성공 시 UI 업데이트
+                    contestStatusLabel.textContent = data.contest_active ? '활성화' : '비활성화';
+                    contestToggle.checked = data.contest_active;
+                    
+                    // 성공 메시지 표시
+                    showAlert('success', data.message);
+                } else {
+                    // 실패 시 원래 상태로 복원
+                    contestToggle.checked = !isActive;
+                    contestStatusLabel.textContent = originalText;
+                    showAlert('danger', data.message || '대회 상태 변경에 실패했습니다.');
+                }
+            })
+            .catch(error => {
+                console.error('Detailed error:', error);
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                
+                // 실패 시 원래 상태로 복원
+                contestToggle.checked = !isActive;
+                contestStatusLabel.textContent = originalText;
+                showAlert('danger', `네트워크 오류가 발생했습니다: ${error.message}`);
+            })
+            .finally(() => {
+                contestToggle.disabled = false;
+            });
+        });
+    }
+    
+    // 알림 표시 함수
+    function showAlert(type, message) {
+        const alertContainer = document.getElementById('alertContainer') || createAlertContainer();
+        const alertId = 'alert-' + Date.now();
+        
+        const alertHtml = `
+            <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        alertContainer.insertAdjacentHTML('beforeend', alertHtml);
+        
+        // 5초 후 자동 제거
+        setTimeout(() => {
+            const alertElement = document.getElementById(alertId);
+            if (alertElement) {
+                alertElement.remove();
+            }
+        }, 5000);
+    }
+    
+    function createAlertContainer() {
+        const container = document.createElement('div');
+        container.id = 'alertContainer';
+        container.style.position = 'fixed';
+        container.style.top = '20px';
+        container.style.right = '20px';
+        container.style.zIndex = '9999';
+        container.style.maxWidth = '400px';
+        document.body.appendChild(container);
+        return container;
     }
 });
 </script>

@@ -75,6 +75,10 @@ Route::get('/admin/login', [AdminController::class, 'showLogin'])
 Route::post('/admin/login', [AdminController::class, 'login'])
     ->name('admin.login.process');
 
+// CSRF 토큰 엔드포인트 (인증 없이 접근 가능)
+Route::get('/admin/csrf-token', [AdminController::class, 'getCsrfToken'])
+    ->name('admin.csrf-token');
+
 // 관리자 인증이 필요한 라우트들
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('auth:admin')->group(function () {
@@ -85,6 +89,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 로그아웃
         Route::post('/logout', [AdminController::class, 'logout'])
             ->name('logout');
+        
         
         // 심사 관련
         Route::get('/evaluations', [AdminController::class, 'evaluationList'])
@@ -205,6 +210,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 영상 일괄 삭제
         Route::post('/videos/delete', [AdminController::class, 'deleteSelectedVideos'])
             ->name('videos.delete');
+        
+        // 대회 활성화 상태 토글
+        Route::post('/contest/toggle', [AdminController::class, 'toggleContestStatus'])
+            ->name('contest.toggle');
         
         // 영상 보기
         Route::get('/video/{id}/view', [AdminController::class, 'viewVideo'])

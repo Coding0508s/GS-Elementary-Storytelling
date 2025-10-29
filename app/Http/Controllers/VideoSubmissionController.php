@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Models\Institution;
+use App\Models\SiteSetting;
 use App\Jobs\SendSmsJob;
 use Illuminate\Support\Facades\Session;
 
@@ -30,6 +31,11 @@ class VideoSubmissionController extends Controller
      */
     public function showPrivacyConsent(Request $request)
     {
+        // 대회 활성화 상태 확인
+        if (!\App\Models\SiteSetting::isContestActive()) {
+            return view('contest-disabled');
+        }
+        
         // 개선된 세션 락 메커니즘으로 동시 접속 충돌 방지 (300-500명 대응)
         $sessionLockKey = 'session_lock:' . $request->ip();
         $lockAcquired = cache()->add($sessionLockKey, true, 10); // 10초 락 (5초 → 10초)
@@ -72,6 +78,11 @@ class VideoSubmissionController extends Controller
      */
     public function showUploadForm(Request $request)
     {
+        // 대회 활성화 상태 확인
+        if (!\App\Models\SiteSetting::isContestActive()) {
+            return view('contest-disabled');
+        }
+        
         // 세션 보안 검증
         $securityCheck = $this->validateSessionSecurity($request);
         if ($securityCheck) {
@@ -257,6 +268,14 @@ class VideoSubmissionController extends Controller
      */
     public function uploadVideo(Request $request)
     {
+        // 대회 활성화 상태 확인
+        if (!\App\Models\SiteSetting::isContestActive()) {
+            return response()->json([
+                'success' => false,
+                'message' => '대회가 일시 중단되어 업로드할 수 없습니다.'
+            ], 403);
+        }
+        
         // S3 직접 업로드인지 확인
         $isS3DirectUpload = $request->has('s3_key') && $request->has('s3_url');
         

@@ -16,6 +16,7 @@ use App\Models\Evaluation;
 use App\Models\VideoAssignment;
 use App\Models\Institution;
 use App\Models\AiEvaluation;
+use App\Models\SiteSetting;
 use App\Services\OpenAiService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -141,6 +142,9 @@ class AdminController extends Controller
         // 심사위원 수 계산
         $judgesCount = Admin::where('role', 'judge')->count();
 
+        // 대회 활성화 상태 확인
+        $contestActive = SiteSetting::isContestActive();
+
         return view('admin.dashboard', compact(
             'totalSubmissions',
             'evaluatedSubmissions',
@@ -148,8 +152,47 @@ class AdminController extends Controller
             'pendingSubmissions',
             'recentSubmissions',
             'adminStats',
-            'judgesCount'
+            'judgesCount',
+            'contestActive'
         ));
+    }
+
+    /**
+     * CSRF 토큰 가져오기
+     */
+    public function getCsrfToken(Request $request)
+    {
+        return response()->json([
+            'csrf_token' => csrf_token()
+        ]);
+    }
+
+    /**
+     * 대회 활성화 상태 토글
+     */
+    public function toggleContestStatus(Request $request)
+    {
+        try {
+            $currentStatus = SiteSetting::isContestActive();
+            $newValue = $currentStatus ? 'false' : 'true';
+            
+            // 직접 설정 업데이트
+            SiteSetting::set('contest_active', $newValue, '대회 페이지 활성화 상태');
+            
+            $statusText = $newValue === 'true' ? '활성화' : '비활성화';
+            
+            return response()->json([
+                'success' => true,
+                'message' => "대회 페이지가 {$statusText}되었습니다.",
+                'contest_active' => $newValue === 'true'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('대회 상태 토글 실패: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => '대회 상태 변경에 실패했습니다.'
+            ], 500);
+        }
     }
 
     /**
