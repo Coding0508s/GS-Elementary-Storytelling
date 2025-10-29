@@ -2453,6 +2453,12 @@ public function assignVideo(Request $request)
 
             // 진행률 계산
             $progressPercentage = $totalSubmissions > 0 ? round(($completedEvaluations / $totalSubmissions) * 100, 1) : 0;
+            
+            Log::info('진행률 계산', [
+                'completed_evaluations' => $completedEvaluations,
+                'total_submissions' => $totalSubmissions,
+                'progress_percentage' => $progressPercentage
+            ]);
 
             // 최근 처리된 평가들 (최근 10개)
             $recentEvaluations = AiEvaluation::with(['videoSubmission', 'admin'])

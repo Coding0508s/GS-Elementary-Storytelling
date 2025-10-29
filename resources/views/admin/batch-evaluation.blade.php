@@ -671,6 +671,11 @@ function updateStatisticsCards(data) {
     const progressBar = document.querySelector('.progress-bar.bg-success');
     if (progressBar) {
         const percentage = data.progress_percentage;
+        console.log('진행률 업데이트:', {
+            completed: data.completed_evaluations,
+            total: data.total_submissions,
+            percentage: percentage
+        });
         progressBar.style.width = percentage + '%';
         progressBar.setAttribute('aria-valuenow', percentage);
         progressBar.textContent = percentage + '%';
