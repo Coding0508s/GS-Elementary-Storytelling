@@ -16,14 +16,14 @@
 </div>
 
 <!-- 처리 과정 안내 -->
-<div class="alert alert-info mb-4">
+<!-- <div class="alert alert-info mb-4">
     <div class="d-flex align-items-center">
         <i class="bi bi-lightbulb me-2"></i>
         <div>
             <strong>처리 과정:</strong> 영상 → 음성 추출 → Whisper 음성인식 → GPT-4 평가 → 점수 저장
         </div>
     </div>
-</div>
+</div> -->
 
 <!-- AI 일괄 채점 컨트롤 -->
 <div class="card admin-card mb-4">
