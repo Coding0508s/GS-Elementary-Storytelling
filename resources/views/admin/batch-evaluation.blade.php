@@ -23,7 +23,7 @@
                 <div class="display-4 text-primary mb-2">
                     <i class="bi bi-camera-video"></i>
                 </div>
-                <h3 class="text-primary">{{ number_format($totalSubmissions) }}</h3>
+                <h3 class="text-primary" data-card="total">{{ number_format($totalSubmissions) }}</h3>
                 <p class="card-text text-muted">총 영상 수</p>
             </div>
         </div>
@@ -35,7 +35,7 @@
                 <div class="display-4 text-success mb-2">
                     <i class="bi bi-check-circle"></i>
                 </div>
-                <h3 class="text-success">{{ number_format($completedEvaluations) }}</h3>
+                <h3 class="text-success" data-card="completed">{{ number_format($completedEvaluations) }}</h3>
                 <p class="card-text text-muted">AI 채점 완료</p>
             </div>
         </div>
@@ -47,7 +47,7 @@
                 <div class="display-4 text-warning mb-2">
                     <i class="bi bi-clock"></i>
                 </div>
-                <h3 class="text-warning">{{ number_format($pendingSubmissions) }}</h3>
+                <h3 class="text-warning" data-card="pending">{{ number_format($pendingSubmissions) }}</h3>
                 <p class="card-text text-muted">대기 중</p>
             </div>
         </div>
@@ -59,7 +59,7 @@
                 <div class="display-4 text-danger mb-2">
                     <i class="bi bi-exclamation-triangle"></i>
                 </div>
-                <h3 class="text-danger">{{ number_format($failedEvaluations) }}</h3>
+                <h3 class="text-danger" data-card="failed">{{ number_format($failedEvaluations) }}</h3>
                 <p class="card-text text-muted">실패</p>
             </div>
         </div>
@@ -71,7 +71,7 @@
                 <div class="display-4 text-warning mb-2">
                     <i class="bi bi-file-x"></i>
                 </div>
-                <h3 class="text-warning">{{ number_format($noFileEvaluations) }}</h3>
+                <h3 class="text-warning" data-card="no_file">{{ number_format($noFileEvaluations) }}</h3>
                 <p class="card-text text-muted">파일없음</p>
             </div>
         </div>
@@ -103,27 +103,27 @@
         <div class="row mt-3">
             <div class="col-2 text-center">
                 <small class="text-muted">완료</small><br>
-                <strong class="text-success">{{ $completedEvaluations }}개</strong>
+                <strong class="text-success" data-stat="completed">{{ $completedEvaluations }}개</strong>
             </div>
             <div class="col-2 text-center">
                 <small class="text-muted">처리중</small><br>
-                <strong class="text-primary">{{ $processingEvaluations }}개</strong>
+                <strong class="text-primary" data-stat="processing">{{ $processingEvaluations }}개</strong>
             </div>
             <div class="col-2 text-center">
                 <small class="text-muted">실패</small><br>
-                <strong class="text-danger">{{ $failedEvaluations }}개</strong>
+                <strong class="text-danger" data-stat="failed">{{ $failedEvaluations }}개</strong>
             </div>
             <div class="col-2 text-center">
                 <small class="text-muted">파일없음</small><br>
-                <strong class="text-warning">{{ $noFileEvaluations }}개</strong>
+                <strong class="text-warning" data-stat="no_file">{{ $noFileEvaluations }}개</strong>
             </div>
             <div class="col-2 text-center">
                 <small class="text-muted">대기</small><br>
-                <strong class="text-warning">{{ $pendingSubmissions }}개</strong>
+                <strong class="text-warning" data-stat="pending">{{ $pendingSubmissions }}개</strong>
             </div>
             <div class="col-2 text-center">
                 <small class="text-muted">전체</small><br>
-                <strong class="text-dark">{{ $totalSubmissions }}개</strong>
+                <strong class="text-dark" data-stat="total">{{ $totalSubmissions }}개</strong>
             </div>
         </div>
     </div>
@@ -512,29 +512,94 @@ function checkAiEvaluationProgress() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // 처리 중인 평가가 있으면 모니터링 시작
-            if (data.data.processing_evaluations > 0) {
+            const progressData = data.data;
+            
+            // 통계 카드 업데이트
+            updateStatisticsCards(progressData);
+            
+            // 처리 중인 평가가 있거나 대기 중인 평가가 있으면 모니터링 시작
+            if (progressData.processing_evaluations > 0 || progressData.pending_submissions > 0) {
                 isEvaluationRunning = true;
                 if (!progressInterval) {
+                    console.log('진행 중인 작업 감지. 자동 모니터링 시작...');
                     startProgressMonitoring();
                 }
             } else {
                 isEvaluationRunning = false;
                 if (progressInterval) {
+                    console.log('모든 작업 완료. 모니터링 중지.');
                     clearInterval(progressInterval);
                     progressInterval = null;
                 }
             }
             
             // 실패한 평가가 있으면 재시도 버튼 표시
-            if (data.data.failed_evaluations > 0) {
-                document.getElementById('retry-failed-evaluations').style.display = 'block';
+            const retryButton = document.getElementById('retry-failed-evaluations');
+            if (retryButton) {
+                if (progressData.failed_evaluations > 0) {
+                    retryButton.style.display = 'block';
+                } else {
+                    retryButton.style.display = 'none';
+                }
             }
         }
     })
     .catch(error => {
         console.error('Error:', error);
     });
+}
+
+// 통계 카드 업데이트 함수
+function updateStatisticsCards(data) {
+    // 상단 카드 업데이트
+    const cardElements = {
+        'total': data.total_submissions,
+        'completed': data.completed_evaluations,
+        'pending': data.pending_submissions,
+        'failed': data.failed_evaluations,
+        'no_file': data.no_file_evaluations || 0
+    };
+    
+    Object.keys(cardElements).forEach(key => {
+        const element = document.querySelector(`[data-card="${key}"]`);
+        if (element) {
+            element.textContent = cardElements[key].toLocaleString();
+        }
+    });
+    
+    // 진행률 업데이트
+    const progressBar = document.querySelector('.progress-bar.bg-success');
+    if (progressBar) {
+        const percentage = data.progress_percentage;
+        progressBar.style.width = percentage + '%';
+        progressBar.setAttribute('aria-valuenow', percentage);
+        progressBar.textContent = percentage + '%';
+    }
+    
+    // 하단 통계 업데이트
+    updateBottomStatistics(data);
+}
+
+// 하단 통계 업데이트 함수
+function updateBottomStatistics(data) {
+    const statsElements = {
+        'completed': data.completed_evaluations,
+        'processing': data.processing_evaluations,
+        'failed': data.failed_evaluations,
+        'no_file': data.no_file_evaluations || 0,
+        'pending': data.pending_submissions,
+        'total': data.total_submissions
+    };
+    
+    // 각 통계 업데이트
+    Object.keys(statsElements).forEach(key => {
+        const element = document.querySelector(`[data-stat="${key}"]`);
+        if (element) {
+            element.textContent = statsElements[key] + '개';
+        }
+    });
+    
+    console.log('📊 통계 업데이트 완료:', statsElements);
 }
 
 // 진행상황 모니터링 시작

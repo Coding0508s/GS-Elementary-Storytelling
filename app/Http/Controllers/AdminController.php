@@ -2433,9 +2433,19 @@ public function assignVideo(Request $request)
                 $query->where('processing_status', AiEvaluation::STATUS_PROCESSING);
             })->count();
 
-            // 실패한 영상 수 (제출 영상 기준)
+            // 파일없음 영상 수 (제출 영상 기준)
+            $noFileEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
+                $query->where('processing_status', AiEvaluation::STATUS_FAILED)
+                      ->where('error_message', '영상 파일이 존재하지 않습니다.');
+            })->count();
+            
+            // 실패한 영상 수 (파일없음 제외, 제출 영상 기준)
             $failedEvaluations = VideoSubmission::whereHas('aiEvaluations', function($query) {
-                $query->where('processing_status', AiEvaluation::STATUS_FAILED);
+                $query->where('processing_status', AiEvaluation::STATUS_FAILED)
+                      ->where(function($q) {
+                          $q->where('error_message', '!=', '영상 파일이 존재하지 않습니다.')
+                            ->orWhereNull('error_message');
+                      });
             })->count();
 
             // 대기 중인 영상 수 (AI 평가가 없는 영상)
@@ -2468,6 +2478,7 @@ public function assignVideo(Request $request)
                     'completed_evaluations' => $completedEvaluations,
                     'processing_evaluations' => $processingEvaluations,
                     'failed_evaluations' => $failedEvaluations,
+                    'no_file_evaluations' => $noFileEvaluations,
                     'pending_submissions' => $pendingSubmissions,
                     'progress_percentage' => $progressPercentage,
                     'recent_evaluations' => $recentEvaluations
