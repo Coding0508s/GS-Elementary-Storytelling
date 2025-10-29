@@ -368,7 +368,35 @@ Important notes:
     private function parseEvaluationResponse($response)
     {
         try {
-            // JSON 부분만 추출
+            Log::info('AI 응답 파싱 시작', ['response_length' => strlen($response)]);
+            
+            // 방법 1: 전체 응답이 JSON인 경우
+            $evaluation = json_decode($response, true);
+            if (json_last_error() === JSON_ERROR_NONE && isset($evaluation['pronunciation_score'])) {
+                Log::info('전체 JSON 파싱 성공');
+                return [
+                    'pronunciation_score' => max(0, min(10, (int)$evaluation['pronunciation_score'])),
+                    'vocabulary_score' => max(0, min(10, (int)$evaluation['vocabulary_score'])),
+                    'fluency_score' => max(0, min(10, (int)$evaluation['fluency_score'])),
+                    'ai_feedback' => $evaluation['detailed_feedback'] ?? 'No detailed feedback provided.'
+                ];
+            }
+            
+            // 방법 2: JSON이 텍스트에 포함된 경우 (마크다운 코드 블록 등)
+            // ```json ... ``` 형식 제거
+            $cleanedResponse = preg_replace('/```json\s*|\s*```/', '', $response);
+            $evaluation = json_decode($cleanedResponse, true);
+            if (json_last_error() === JSON_ERROR_NONE && isset($evaluation['pronunciation_score'])) {
+                Log::info('마크다운 제거 후 JSON 파싱 성공');
+                return [
+                    'pronunciation_score' => max(0, min(10, (int)$evaluation['pronunciation_score'])),
+                    'vocabulary_score' => max(0, min(10, (int)$evaluation['vocabulary_score'])),
+                    'fluency_score' => max(0, min(10, (int)$evaluation['fluency_score'])),
+                    'ai_feedback' => $evaluation['detailed_feedback'] ?? 'No detailed feedback provided.'
+                ];
+            }
+            
+            // 방법 3: JSON 부분만 추출
             $jsonStart = strpos($response, '{');
             $jsonEnd = strrpos($response, '}');
             
@@ -376,7 +404,8 @@ Important notes:
                 $jsonString = substr($response, $jsonStart, $jsonEnd - $jsonStart + 1);
                 $evaluation = json_decode($jsonString, true);
                 
-                if ($evaluation && isset($evaluation['pronunciation_score'])) {
+                if (json_last_error() === JSON_ERROR_NONE && isset($evaluation['pronunciation_score'])) {
+                    Log::info('부분 JSON 추출 후 파싱 성공');
                     return [
                         'pronunciation_score' => max(0, min(10, (int)$evaluation['pronunciation_score'])),
                         'vocabulary_score' => max(0, min(10, (int)$evaluation['vocabulary_score'])),
@@ -386,21 +415,54 @@ Important notes:
                 }
             }
             
-            // JSON 파싱 실패 시 기본값 반환
+            // 방법 4: 정규식으로 점수와 피드백 추출 시도
+            $scores = [];
+            if (preg_match('/"pronunciation_score"\s*:\s*(\d+)/', $response, $matches)) {
+                $scores['pronunciation_score'] = (int)$matches[1];
+            }
+            if (preg_match('/"vocabulary_score"\s*:\s*(\d+)/', $response, $matches)) {
+                $scores['vocabulary_score'] = (int)$matches[1];
+            }
+            if (preg_match('/"fluency_score"\s*:\s*(\d+)/', $response, $matches)) {
+                $scores['fluency_score'] = (int)$matches[1];
+            }
+            if (preg_match('/"detailed_feedback"\s*:\s*"([^"]+(?:\\.[^"]*)*)"/', $response, $matches)) {
+                $scores['ai_feedback'] = str_replace('\\"', '"', $matches[1]);
+            }
+            
+            if (count($scores) >= 3) {
+                Log::info('정규식으로 점수 추출 성공', ['scores' => $scores]);
+                return [
+                    'pronunciation_score' => max(0, min(10, $scores['pronunciation_score'] ?? 5)),
+                    'vocabulary_score' => max(0, min(10, $scores['vocabulary_score'] ?? 5)),
+                    'fluency_score' => max(0, min(10, $scores['fluency_score'] ?? 5)),
+                    'ai_feedback' => $scores['ai_feedback'] ?? 'Feedback extraction failed.'
+                ];
+            }
+            
+            // 모든 방법 실패 시
+            Log::error('AI 응답 파싱 실패', [
+                'response_preview' => substr($response, 0, 500),
+                'json_error' => json_last_error_msg()
+            ]);
+            
             return [
                 'pronunciation_score' => 5,
                 'vocabulary_score' => 5,
                 'fluency_score' => 5,
-                'ai_feedback' => 'Unable to parse AI evaluation. Raw response: ' . $response
+                'ai_feedback' => 'Unable to parse AI evaluation. Please contact support with this error.'
             ];
 
         } catch (\Exception $e) {
-            Log::error('AI 응답 파싱 오류: ' . $e->getMessage());
+            Log::error('AI 응답 파싱 예외 발생', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return [
                 'pronunciation_score' => 5,
                 'vocabulary_score' => 5,
                 'fluency_score' => 5,
-                'ai_feedback' => 'Error parsing AI response: ' . $e->getMessage()
+                'ai_feedback' => 'Error parsing AI response. Please try again.'
             ];
         }
     }
