@@ -464,8 +464,12 @@ function startBatchAiEvaluation() {
     .then(data => {
         if (data.success) {
             alert(data.message);
-            // 즉시 완료되므로 페이지 새로고침
-            location.reload();
+            // 시작 후 자동 모니터링 시작
+            isEvaluationRunning = true;
+            startProgressMonitoring();
+            // 버튼 상태 전환
+            document.getElementById('start-batch-evaluation').style.display = 'none';
+            document.getElementById('cancel-batch-evaluation').style.display = 'block';
         } else {
             alert('오류: ' + data.message);
         }
@@ -507,8 +511,8 @@ function cancelBatchAiEvaluation() {
             // 취소 버튼 숨기고 시작 버튼 표시
             document.getElementById('cancel-batch-evaluation').style.display = 'none';
             document.getElementById('start-batch-evaluation').style.display = 'block';
-            // 페이지 새로고침으로 최신 상태 반영
-            location.reload();
+            // 통계 업데이트
+            checkAiEvaluationProgress();
         } else {
             alert('오류: ' + data.message);
         }
@@ -544,7 +548,9 @@ function retryFailedEvaluations() {
             alert(data.message);
             isEvaluationRunning = true;
             startProgressMonitoring();
-            location.reload();
+            // 버튼 상태 전환
+            document.getElementById('start-batch-evaluation').style.display = 'none';
+            document.getElementById('cancel-batch-evaluation').style.display = 'block';
         } else {
             alert('오류: ' + data.message);
         }
