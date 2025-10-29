@@ -154,6 +154,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/batch-ai-evaluation/progress', [AdminController::class, 'getBatchAiEvaluationProgress'])
             ->name('batch.ai.evaluation.progress');
         
+        Route::post('/batch-ai-evaluation/cancel', [AdminController::class, 'cancelBatchAiEvaluation'])
+            ->name('batch.ai.evaluation.cancel');
+        
         Route::post('/batch-ai-evaluation/retry', [AdminController::class, 'retryFailedAiEvaluations'])
             ->name('batch.ai.evaluation.retry');
         

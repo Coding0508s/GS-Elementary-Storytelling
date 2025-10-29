@@ -2499,6 +2499,63 @@ public function assignVideo(Request $request)
     }
 
     /**
+     * 일괄 AI 채점 취소
+     */
+    public function cancelBatchAiEvaluation(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            // 처리 중인 AI 평가들을 실패로 변경
+            $processingEvaluations = AiEvaluation::where('processing_status', AiEvaluation::STATUS_PROCESSING)->get();
+            
+            $cancelledCount = 0;
+            foreach ($processingEvaluations as $evaluation) {
+                $evaluation->update([
+                    'processing_status' => AiEvaluation::STATUS_FAILED,
+                    'error_message' => '관리자에 의해 취소되었습니다.'
+                ]);
+                $cancelledCount++;
+            }
+
+            // 큐에 있는 대기 중인 작업들 제거 (Laravel 8+ 방식)
+            // 주의: 이 방법은 모든 큐 작업을 제거하므로 신중하게 사용
+            \Illuminate\Support\Facades\Artisan::call('queue:clear', ['--queue' => 'default']);
+
+            Log::info('일괄 AI 채점 취소', [
+                'admin_id' => $admin->id,
+                'cancelled_evaluations' => $cancelledCount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "일괄 AI 채점을 취소했습니다. {$cancelledCount}개의 처리 중인 평가가 중단되었습니다.",
+                'data' => [
+                    'cancelled_count' => $cancelledCount
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('일괄 AI 채점 취소 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '일괄 AI 채점 취소 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * 실패한 AI 평가 재시도
      */
     public function retryFailedAiEvaluations(Request $request)

@@ -155,6 +155,9 @@
                     <button id="start-batch-evaluation" class="btn btn-primary">
                         <i class="bi bi-play-circle"></i> 일괄 AI 채점 시작
                     </button>
+                    <button id="cancel-batch-evaluation" class="btn btn-danger" style="display: none;">
+                        <i class="bi bi-x-circle"></i> 일괄 AI 채점 취소
+                    </button>
                     <button id="retry-failed-evaluations" class="btn btn-warning" style="display: none;">
                         <i class="bi bi-arrow-clockwise"></i> 실패한 평가 재시도
                     </button>
@@ -422,6 +425,13 @@ document.getElementById('start-batch-evaluation').addEventListener('click', func
     }
 });
 
+// 일괄 AI 채점 취소
+document.getElementById('cancel-batch-evaluation').addEventListener('click', function() {
+    if (confirm('진행 중인 일괄 AI 채점을 취소하시겠습니까?\n\n처리 중인 작업이 중단되고 대기 중인 작업이 제거됩니다.')) {
+        cancelBatchAiEvaluation();
+    }
+});
+
 // 실패한 평가 재시도
 document.getElementById('retry-failed-evaluations').addEventListener('click', function() {
     if (confirm('실패한 AI 평가들을 재시도하시겠습니까?')) {
@@ -455,6 +465,49 @@ function startBatchAiEvaluation() {
         if (data.success) {
             alert(data.message);
             // 즉시 완료되므로 페이지 새로고침
+            location.reload();
+        } else {
+            alert('오류: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('네트워크 오류가 발생했습니다.');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+// 일괄 AI 채점 취소 함수
+function cancelBatchAiEvaluation() {
+    const button = document.getElementById('cancel-batch-evaluation');
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 취소 중...';
+    button.disabled = true;
+    
+    fetch('{{ route("admin.batch.ai.evaluation.cancel") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            isEvaluationRunning = false;
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+            // 취소 버튼 숨기고 시작 버튼 표시
+            document.getElementById('cancel-batch-evaluation').style.display = 'none';
+            document.getElementById('start-batch-evaluation').style.display = 'block';
+            // 페이지 새로고침으로 최신 상태 반영
             location.reload();
         } else {
             alert('오류: ' + data.message);
@@ -524,6 +577,9 @@ function checkAiEvaluationProgress() {
                     console.log('진행 중인 작업 감지. 자동 모니터링 시작...');
                     startProgressMonitoring();
                 }
+                // 취소 버튼 표시, 시작 버튼 숨김
+                document.getElementById('cancel-batch-evaluation').style.display = 'block';
+                document.getElementById('start-batch-evaluation').style.display = 'none';
             } else {
                 isEvaluationRunning = false;
                 if (progressInterval) {
@@ -531,6 +587,9 @@ function checkAiEvaluationProgress() {
                     clearInterval(progressInterval);
                     progressInterval = null;
                 }
+                // 시작 버튼 표시, 취소 버튼 숨김
+                document.getElementById('start-batch-evaluation').style.display = 'block';
+                document.getElementById('cancel-batch-evaluation').style.display = 'none';
             }
             
             // 실패한 평가가 있으면 재시도 버튼 표시
