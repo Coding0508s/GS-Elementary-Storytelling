@@ -202,6 +202,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/ai-evaluation/{id}', [AdminController::class, 'getAiEvaluationDetail'])
             ->name('ai-evaluation.detail');
         
+        // 영상 일괄 삭제
+        Route::post('/videos/delete', [AdminController::class, 'deleteSelectedVideos'])
+            ->name('videos.delete');
+        
         // 영상 보기
         Route::get('/video/{id}/view', [AdminController::class, 'viewVideo'])
             ->name('video.view');

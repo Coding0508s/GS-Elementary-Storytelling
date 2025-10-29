@@ -91,7 +91,7 @@
                 <strong class="text-success">{{ $evaluatedSubmissions }}개</strong>
             </div>
             <div class="col-6 text-center">
-                <small class="text-muted">심사 대기</small><br>
+                <small class="text-muted">배정 대기중 영상</small><br>
                 <strong class="text-warning">{{ $pendingSubmissions }}개</strong>
             </div>
         </div>
@@ -173,9 +173,17 @@
 <div class="card admin-card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bi bi-clock-history"></i> 최근 접수된 영상</h5>
-        <a href="{{ route('admin.evaluation.list') }}" class="btn btn-sm btn-outline-light">
-            전체 보기 <i class="bi bi-arrow-right"></i>
-        </a>
+        <div class="d-flex gap-2">
+            <button id="select-all-videos" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-check-square"></i> 전체 선택
+            </button>
+            <button id="delete-selected-videos" class="btn btn-sm btn-danger" disabled>
+                <i class="bi bi-trash"></i> 선택 삭제
+            </button>
+            <a href="{{ route('admin.evaluation.list') }}" class="btn btn-sm btn-outline-light">
+                전체 보기 <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
     </div>
     <div class="card-body">
         @if($recentSubmissions->count() > 0)
@@ -183,6 +191,9 @@
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
+                            <th width="50">
+                                <input type="checkbox" id="select-all-checkbox" class="form-check-input">
+                            </th>
                             <th>접수번호</th>
                             <th>접수일</th>
                             <th>학생명</th>
@@ -195,6 +206,11 @@
                     <tbody>
                         @foreach($recentSubmissions as $submission)
                         <tr>
+                            <td>
+                                <input type="checkbox" class="form-check-input video-checkbox" 
+                                       value="{{ $submission->id }}" 
+                                       data-student-name="{{ $submission->student_name_korean }}">
+                            </td>
                             <td>
                                 <small>{{ $submission->receipt_number }}</small>
                             </td>
@@ -457,6 +473,118 @@ function manageLogs() {
         }, 2000);
     }
 }
+
+// 영상 삭제 관련 기능
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    const videoCheckboxes = document.querySelectorAll('.video-checkbox');
+    const deleteButton = document.getElementById('delete-selected-videos');
+    const selectAllButton = document.getElementById('select-all-videos');
+
+    // 전체 선택 체크박스 이벤트
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            videoCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateDeleteButton();
+        });
+    }
+
+    // 전체 선택 버튼 이벤트
+    if (selectAllButton) {
+        selectAllButton.addEventListener('click', function() {
+            const allChecked = Array.from(videoCheckboxes).every(cb => cb.checked);
+            videoCheckboxes.forEach(checkbox => {
+                checkbox.checked = !allChecked;
+            });
+            selectAllCheckbox.checked = !allChecked;
+            updateDeleteButton();
+        });
+    }
+
+    // 개별 체크박스 이벤트
+    videoCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateSelectAllCheckbox();
+            updateDeleteButton();
+        });
+    });
+
+    // 삭제 버튼 이벤트
+    if (deleteButton) {
+        deleteButton.addEventListener('click', function() {
+            const selectedIds = Array.from(videoCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+            
+            if (selectedIds.length === 0) {
+                alert('삭제할 영상을 선택해주세요.');
+                return;
+            }
+
+            const selectedNames = Array.from(videoCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.dataset.studentName);
+
+            if (confirm(`선택한 ${selectedIds.length}개의 영상을 삭제하시겠습니까?\n\n학생: ${selectedNames.join(', ')}`)) {
+                deleteSelectedVideos(selectedIds);
+            }
+        });
+    }
+
+    function updateSelectAllCheckbox() {
+        if (selectAllCheckbox) {
+            const checkedCount = Array.from(videoCheckboxes).filter(cb => cb.checked).length;
+            selectAllCheckbox.checked = checkedCount === videoCheckboxes.length;
+            selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < videoCheckboxes.length;
+        }
+    }
+
+    function updateDeleteButton() {
+        if (deleteButton) {
+            const checkedCount = Array.from(videoCheckboxes).filter(cb => cb.checked).length;
+            deleteButton.disabled = checkedCount === 0;
+            deleteButton.innerHTML = checkedCount > 0 
+                ? `<i class="bi bi-trash"></i> 선택 삭제 (${checkedCount})`
+                : `<i class="bi bi-trash"></i> 선택 삭제`;
+        }
+    }
+
+    function deleteSelectedVideos(ids) {
+        const button = deleteButton;
+        const originalText = button.innerHTML;
+        
+        button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 삭제 중...';
+        button.disabled = true;
+
+        fetch('{{ route("admin.videos.delete") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({ ids: ids })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`${data.deleted_count}개의 영상이 삭제되었습니다.`);
+                location.reload();
+            } else {
+                alert('오류: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('네트워크 오류가 발생했습니다.');
+        })
+        .finally(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    }
+});
 </script>
 @endpush
 

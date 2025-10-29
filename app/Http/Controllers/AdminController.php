@@ -2916,4 +2916,104 @@ public function assignVideo(Request $request)
             return false;
         }
     }
+
+    /**
+     * 선택된 영상들 삭제
+     */
+    public function deleteSelectedVideos(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            $ids = $request->input('ids', []);
+            
+            if (empty($ids) || !is_array($ids)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '삭제할 영상을 선택해주세요.'
+                ]);
+            }
+
+            // 영상 제출 데이터 조회
+            $submissions = VideoSubmission::whereIn('id', $ids)->get();
+            
+            if ($submissions->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '삭제할 영상을 찾을 수 없습니다.'
+                ]);
+            }
+
+            $deletedCount = 0;
+            $deletedFiles = [];
+
+            foreach ($submissions as $submission) {
+                try {
+                    // 관련 데이터 삭제
+                    // 1. AI 평가 삭제
+                    $submission->aiEvaluations()->delete();
+                    
+                    // 2. 심사 평가 삭제
+                    $submission->evaluation()->delete();
+                    
+                    // 3. 영상 파일 삭제 (S3 또는 로컬)
+                    if ($submission->video_file_path) {
+                        if ($submission->isStoredOnS3()) {
+                            \Illuminate\Support\Facades\Storage::disk('s3')->delete($submission->video_file_path);
+                        } else {
+                            \Illuminate\Support\Facades\Storage::disk('public')->delete($submission->video_file_path);
+                        }
+                        $deletedFiles[] = $submission->video_file_path;
+                    }
+                    
+                    // 4. 영상 제출 데이터 삭제
+                    $submission->delete();
+                    $deletedCount++;
+                    
+                } catch (\Exception $e) {
+                    Log::error('영상 삭제 중 오류', [
+                        'submission_id' => $submission->id,
+                        'student_name' => $submission->student_name_korean,
+                        'error' => $e->getMessage()
+                    ]);
+                    // 개별 영상 삭제 실패해도 계속 진행
+                }
+            }
+
+            Log::info('영상 일괄 삭제 완료', [
+                'admin_id' => $admin->id,
+                'requested_count' => count($ids),
+                'deleted_count' => $deletedCount,
+                'deleted_files' => $deletedFiles
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$deletedCount}개의 영상이 삭제되었습니다.",
+                'data' => [
+                    'deleted_count' => $deletedCount,
+                    'requested_count' => count($ids)
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('영상 일괄 삭제 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'requested_ids' => $ids,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '영상 삭제 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
