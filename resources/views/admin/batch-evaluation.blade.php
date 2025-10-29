@@ -15,6 +15,16 @@
     </div>
 </div>
 
+<!-- 처리 과정 안내 -->
+<div class="alert alert-info mb-4">
+    <div class="d-flex align-items-center">
+        <i class="bi bi-lightbulb me-2"></i>
+        <div>
+            <strong>처리 과정:</strong> 영상 → 음성 추출 → Whisper 음성인식 → GPT-4 평가 → 점수 저장
+        </div>
+    </div>
+</div>
+
 <!-- 통계 카드 -->
 <div class="row mb-4">
     <div class="col-md-3 mb-3">
@@ -143,12 +153,6 @@
                     <i class="bi bi-info-circle"></i> 
                     모든 제출 영상을 AI Whisper와 GPT-4를 사용하여 자동으로 채점합니다.
                 </p>
-                <div class="alert alert-info py-2 mb-3">
-                    <small>
-                        <i class="bi bi-lightbulb"></i> 
-                        <strong>처리 과정:</strong> 영상 → 음성 추출 → Whisper 음성인식 → GPT-4 평가 → 점수 저장
-                    </small>
-                </div>
             </div>
             <div class="col-md-4">
                 <div class="d-grid gap-2">
