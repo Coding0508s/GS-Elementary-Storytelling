@@ -421,16 +421,18 @@ function initializeButtonStates() {
     const hasProcessing = {{ $processingEvaluations }} > 0;
     const hasPending = {{ $pendingSubmissions }} > 0;
     
-    if (hasProcessing || hasPending) {
-        // 진행 중이거나 대기 중인 작업이 있으면 취소 버튼 표시
+    if (hasProcessing) {
+        // 실제로 처리 중인 작업이 있을 때만 취소 버튼 표시
         document.getElementById('start-batch-evaluation').style.display = 'none';
         document.getElementById('cancel-batch-evaluation').style.display = 'block';
         isEvaluationRunning = true;
+        console.log('초기 상태: 처리 중인 작업 있음 - 취소 버튼 표시');
     } else {
-        // 작업이 없으면 시작 버튼 표시
+        // 처리 중인 작업이 없으면 시작 버튼 표시 (대기 중인 작업이 있어도)
         document.getElementById('start-batch-evaluation').style.display = 'block';
         document.getElementById('cancel-batch-evaluation').style.display = 'none';
         isEvaluationRunning = false;
+        console.log('초기 상태: 처리 중인 작업 없음 - 시작 버튼 표시');
     }
 }
 
@@ -597,8 +599,8 @@ function checkAiEvaluationProgress() {
             // 통계 카드 업데이트
             updateStatisticsCards(progressData);
             
-            // 처리 중인 평가가 있거나 대기 중인 평가가 있으면 모니터링 시작
-            if (progressData.processing_evaluations > 0 || progressData.pending_submissions > 0) {
+            // 실제로 처리 중인 평가가 있을 때만 취소 버튼 표시
+            if (progressData.processing_evaluations > 0) {
                 isEvaluationRunning = true;
                 if (!progressInterval) {
                     console.log('진행 중인 작업 감지. 자동 모니터링 시작...');
@@ -609,7 +611,7 @@ function checkAiEvaluationProgress() {
                 const startBtn = document.getElementById('start-batch-evaluation');
                 if (cancelBtn) cancelBtn.style.display = 'block';
                 if (startBtn) startBtn.style.display = 'none';
-                console.log('버튼 상태: 취소 버튼 표시, 시작 버튼 숨김');
+                console.log('버튼 상태: 취소 버튼 표시, 시작 버튼 숨김 (처리 중)');
             } else {
                 isEvaluationRunning = false;
                 if (progressInterval) {
@@ -617,12 +619,18 @@ function checkAiEvaluationProgress() {
                     clearInterval(progressInterval);
                     progressInterval = null;
                 }
-                // 시작 버튼 표시, 취소 버튼 숨김
+                // 시작 버튼 표시, 취소 버튼 숨김 (대기 중인 작업이 있어도)
                 const startBtn = document.getElementById('start-batch-evaluation');
                 const cancelBtn = document.getElementById('cancel-batch-evaluation');
                 if (startBtn) startBtn.style.display = 'block';
                 if (cancelBtn) cancelBtn.style.display = 'none';
-                console.log('버튼 상태: 시작 버튼 표시, 취소 버튼 숨김');
+                console.log('버튼 상태: 시작 버튼 표시, 취소 버튼 숨김 (대기 중)');
+            }
+            
+            // 대기 중인 작업이 있으면 모니터링 시작 (버튼 상태와 무관)
+            if (progressData.pending_submissions > 0 && !progressInterval) {
+                console.log('대기 중인 작업 감지. 자동 모니터링 시작...');
+                startProgressMonitoring();
             }
             
             // 실패한 평가가 있으면 재시도 버튼 표시
