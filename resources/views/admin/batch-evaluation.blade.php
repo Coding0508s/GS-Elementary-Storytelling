@@ -260,7 +260,11 @@
                     </thead>
                     <tbody>
                         @foreach($submissions as $submission)
-                        <tr>
+                        @php
+                            $aiEvaluation = $submission->aiEvaluations->first();
+                            $status = $aiEvaluation ? $aiEvaluation->processing_status : 'pending';
+                        @endphp
+                        <tr data-status="{{ $status }}">
                             <td>
                                 <small>{{ $submission->receipt_number }}</small>
                             </td>
@@ -879,6 +883,108 @@ function viewAiEvaluation(evaluationId) {
         content.innerHTML = '<div class="alert alert-danger">네트워크 오류가 발생했습니다.</div>';
     });
 }
+
+// 영상 목록 테이블 실시간 동기화
+let tableRefreshInterval = null;
+let isTableRefreshEnabled = false;
+
+// 테이블 자동 새로고침 기능 추가
+document.addEventListener('DOMContentLoaded', function() {
+    // 테이블 새로고침 버튼 추가
+    const headerDiv = document.querySelector('.card-header .d-flex.justify-content-between.align-items-center');
+    if (headerDiv) {
+        const tableRefreshBtn = document.createElement('button');
+        tableRefreshBtn.type = 'button';
+        tableRefreshBtn.className = 'btn btn-sm btn-outline-info me-2';
+        tableRefreshBtn.id = 'table-refresh-btn';
+        tableRefreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 테이블 새로고침';
+        headerDiv.appendChild(tableRefreshBtn);
+        
+        // 테이블 새로고침 버튼 이벤트
+        tableRefreshBtn.addEventListener('click', function() {
+            toggleTableRefresh();
+        });
+    }
+    
+    // 처리 중인 평가가 있는지 확인하여 자동 새로고침 시작
+    checkForProcessingVideos();
+});
+
+function toggleTableRefresh() {
+    const btn = document.getElementById('table-refresh-btn');
+    
+    if (isTableRefreshEnabled) {
+        // 테이블 새로고침 중지
+        if (tableRefreshInterval) {
+            clearInterval(tableRefreshInterval);
+            tableRefreshInterval = null;
+        }
+        isTableRefreshEnabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 테이블 새로고침';
+        btn.className = 'btn btn-sm btn-outline-info me-2';
+        console.log('테이블 자동 새로고침 중지');
+    } else {
+        // 테이블 새로고침 시작
+        tableRefreshInterval = setInterval(function() {
+            refreshVideoTable();
+        }, 3000); // 3초마다 새로고침
+        isTableRefreshEnabled = true;
+        btn.innerHTML = '<i class="bi bi-pause-circle"></i> 새로고침 중지';
+        btn.className = 'btn btn-sm btn-info me-2';
+        console.log('테이블 자동 새로고침 시작 (3초 간격)');
+    }
+}
+
+function checkForProcessingVideos() {
+    // 처리 중인 영상이 있는지 확인
+    const processingRows = document.querySelectorAll('tr[data-status="processing"]');
+    if (processingRows.length > 0) {
+        console.log(`${processingRows.length}개의 처리 중인 영상 감지. 테이블 자동 새로고침 시작.`);
+        toggleTableRefresh();
+    }
+}
+
+function refreshVideoTable() {
+    // AJAX로 영상 목록 데이터 새로고침
+    fetch(window.location.href, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        // 새로운 HTML에서 테이블 부분만 추출
+        const parser = new DOMParser();
+        const newDoc = parser.parseFromString(html, 'text/html');
+        const newTable = newDoc.querySelector('table tbody');
+        const currentTable = document.querySelector('table tbody');
+        
+        if (newTable && currentTable) {
+            // 테이블 내용 업데이트
+            currentTable.innerHTML = newTable.innerHTML;
+            
+            // 처리 중인 영상이 없으면 자동 새로고침 중지
+            const processingRows = document.querySelectorAll('tr[data-status="processing"]');
+            if (processingRows.length === 0 && isTableRefreshEnabled) {
+                console.log('모든 영상 처리 완료. 테이블 자동 새로고침 중지.');
+                toggleTableRefresh();
+            }
+            
+            console.log('영상 목록 테이블 새로고침 완료');
+        }
+    })
+    .catch(error => {
+        console.error('테이블 새로고침 오류:', error);
+    });
+}
+
+// 페이지를 떠날 때 테이블 새로고침 중지
+window.addEventListener('beforeunload', function() {
+    if (tableRefreshInterval) {
+        clearInterval(tableRefreshInterval);
+    }
+});
 </script>
 @endpush
 
