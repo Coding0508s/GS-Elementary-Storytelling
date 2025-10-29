@@ -25,6 +25,41 @@
     </div>
 </div>
 
+<!-- AI 일괄 채점 컨트롤 -->
+<div class="card admin-card mb-4">
+    <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <h5 class="mb-0 text-white">
+            <i class="bi bi-robot"></i> AI 일괄 채점 컨트롤
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <p class="text-muted mb-3">
+                    <i class="bi bi-info-circle"></i> 
+                    모든 제출 영상을 AI Whisper와 GPT-4를 사용하여 자동으로 채점합니다.
+                </p>
+            </div>
+            <div class="col-md-4">
+                <div class="d-grid gap-2">
+                    <button id="start-batch-evaluation" class="btn btn-primary">
+                        <i class="bi bi-play-circle"></i> 일괄 AI 채점 시작
+                    </button>
+                    <button id="cancel-batch-evaluation" class="btn btn-danger" style="display: none;">
+                        <i class="bi bi-x-circle"></i> 일괄 AI 채점 취소
+                    </button>
+                    <button id="retry-failed-evaluations" class="btn btn-warning" style="display: none;">
+                        <i class="bi bi-arrow-clockwise"></i> 실패한 평가 재시도
+                    </button>
+                    <button id="stop-evaluation" class="btn btn-danger" style="display: none;">
+                        <i class="bi bi-stop-circle"></i> 채점 중지
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 통계 카드 -->
 <div class="row mb-4">
     <div class="col-md-3 mb-3">
@@ -139,40 +174,6 @@
     </div>
 </div>
 
-<!-- 일괄 채점 컨트롤 -->
-<div class="card admin-card mb-4">
-    <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-        <h5 class="mb-0 text-white">
-            <i class="bi bi-robot"></i> AI 일괄 채점 컨트롤
-        </h5>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-8">
-                <p class="text-muted mb-3">
-                    <i class="bi bi-info-circle"></i> 
-                    모든 제출 영상을 AI Whisper와 GPT-4를 사용하여 자동으로 채점합니다.
-                </p>
-            </div>
-            <div class="col-md-4">
-                <div class="d-grid gap-2">
-                    <button id="start-batch-evaluation" class="btn btn-primary">
-                        <i class="bi bi-play-circle"></i> 일괄 AI 채점 시작
-                    </button>
-                    <button id="cancel-batch-evaluation" class="btn btn-danger" style="display: none;">
-                        <i class="bi bi-x-circle"></i> 일괄 AI 채점 취소
-                    </button>
-                    <button id="retry-failed-evaluations" class="btn btn-warning" style="display: none;">
-                        <i class="bi bi-arrow-clockwise"></i> 실패한 평가 재시도
-                    </button>
-                    <button id="stop-evaluation" class="btn btn-danger" style="display: none;">
-                        <i class="bi bi-stop-circle"></i> 채점 중지
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- 검색 및 필터 -->
 <div class="card admin-card mb-4">
