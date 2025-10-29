@@ -502,5 +502,124 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// 실시간 동기화 기능
+let autoRefreshInterval = null;
+let isAutoRefreshEnabled = false;
+
+// 자동 새로고침 토글 버튼 추가
+document.addEventListener('DOMContentLoaded', function() {
+    // 자동 새로고침 버튼 추가
+    const headerDiv = document.querySelector('.d-flex.justify-content-between.align-items-center.mb-4 > div:last-child');
+    if (headerDiv) {
+        const autoRefreshBtn = document.createElement('button');
+        autoRefreshBtn.type = 'button';
+        autoRefreshBtn.className = 'btn btn-outline-info me-2';
+        autoRefreshBtn.id = 'auto-refresh-btn';
+        autoRefreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 자동 새로고침';
+        headerDiv.insertBefore(autoRefreshBtn, headerDiv.firstChild);
+        
+        // 자동 새로고침 버튼 이벤트
+        autoRefreshBtn.addEventListener('click', function() {
+            toggleAutoRefresh();
+        });
+    }
+    
+    // 처리 중인 평가가 있는지 확인하여 자동 새로고침 시작
+    checkForProcessingEvaluations();
+});
+
+function toggleAutoRefresh() {
+    const btn = document.getElementById('auto-refresh-btn');
+    
+    if (isAutoRefreshEnabled) {
+        // 자동 새로고침 중지
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+        isAutoRefreshEnabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 자동 새로고침';
+        btn.className = 'btn btn-outline-info me-2';
+        console.log('자동 새로고침 중지');
+    } else {
+        // 자동 새로고침 시작
+        autoRefreshInterval = setInterval(function() {
+            refreshPageData();
+        }, 5000); // 5초마다 새로고침
+        isAutoRefreshEnabled = true;
+        btn.innerHTML = '<i class="bi bi-pause-circle"></i> 새로고침 중지';
+        btn.className = 'btn btn-info me-2';
+        console.log('자동 새로고침 시작 (5초 간격)');
+    }
+}
+
+function checkForProcessingEvaluations() {
+    // 처리 중인 평가가 있는지 확인
+    const processingRows = document.querySelectorAll('tr[data-status="processing"]');
+    if (processingRows.length > 0) {
+        console.log(`${processingRows.length}개의 처리 중인 평가 감지. 자동 새로고침 시작.`);
+        toggleAutoRefresh();
+    }
+}
+
+function refreshPageData() {
+    // AJAX로 페이지 데이터 새로고침
+    fetch(window.location.href, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        // 새로운 HTML에서 테이블 부분만 추출
+        const parser = new DOMParser();
+        const newDoc = parser.parseFromString(html, 'text/html');
+        const newTable = newDoc.querySelector('table tbody');
+        const currentTable = document.querySelector('table tbody');
+        
+        if (newTable && currentTable) {
+            // 테이블 내용 업데이트
+            currentTable.innerHTML = newTable.innerHTML;
+            
+            // 통계 카드 업데이트
+            updateStatisticsCards(newDoc);
+            
+            // 처리 중인 평가가 없으면 자동 새로고침 중지
+            const processingRows = document.querySelectorAll('tr[data-status="processing"]');
+            if (processingRows.length === 0 && isAutoRefreshEnabled) {
+                console.log('모든 평가 완료. 자동 새로고침 중지.');
+                toggleAutoRefresh();
+            }
+            
+            console.log('페이지 데이터 새로고침 완료');
+        }
+    })
+    .catch(error => {
+        console.error('페이지 새로고침 오류:', error);
+    });
+}
+
+function updateStatisticsCards(newDoc) {
+    // 통계 카드 업데이트
+    const statsCards = newDoc.querySelectorAll('.stats-card h3');
+    const currentStatsCards = document.querySelectorAll('.stats-card h3');
+    
+    if (statsCards.length === currentStatsCards.length) {
+        statsCards.forEach((newCard, index) => {
+            if (currentStatsCards[index]) {
+                currentStatsCards[index].textContent = newCard.textContent;
+            }
+        });
+    }
+}
+
+// 페이지를 떠날 때 자동 새로고침 중지
+window.addEventListener('beforeunload', function() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+});
 </script>
 @endsection
