@@ -18,6 +18,7 @@ use App\Models\Institution;
 use App\Models\AiEvaluation;
 use App\Models\SiteSetting;
 use App\Services\OpenAiService;
+use Illuminate\Support\Facades\Schema;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -142,8 +143,13 @@ class AdminController extends Controller
         // 심사위원 수 계산
         $judgesCount = Admin::where('role', 'judge')->count();
 
-        // 대회 활성화 상태 확인
-        $contestActive = SiteSetting::isContestActive();
+        // 대회 활성화 상태 확인 (안전한 방식)
+        try {
+            $contestActive = SiteSetting::isContestActive();
+        } catch (\Exception $e) {
+            \Log::error('SiteSetting 오류: ' . $e->getMessage());
+            $contestActive = true; // 기본값으로 true 설정
+        }
 
         return view('admin.dashboard', compact(
             'totalSubmissions',
@@ -173,6 +179,11 @@ class AdminController extends Controller
     public function toggleContestStatus(Request $request)
     {
         try {
+            // SiteSetting 사용 전에 데이터베이스 연결 확인
+            if (!Schema::hasTable('site_settings')) {
+                throw new \Exception('site_settings 테이블이 존재하지 않습니다.');
+            }
+            
             $currentStatus = SiteSetting::isContestActive();
             $newValue = $currentStatus ? 'false' : 'true';
             
@@ -190,7 +201,7 @@ class AdminController extends Controller
             Log::error('대회 상태 토글 실패: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => '대회 상태 변경에 실패했습니다.'
+                'message' => '대회 상태 변경에 실패했습니다: ' . $e->getMessage()
             ], 500);
         }
     }
