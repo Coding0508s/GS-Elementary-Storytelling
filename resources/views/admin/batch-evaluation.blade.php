@@ -945,6 +945,28 @@ function checkForProcessingVideos() {
 }
 
 function refreshVideoTable() {
+    // 진행상황 API를 사용하여 더 정확한 데이터 가져오기
+    fetch('{{ route("admin.batch.ai.evaluation.progress") }}')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('진행상황 API 응답:', data.data);
+            
+            // 통계 카드 업데이트
+            updateStatisticsCards(data.data);
+            
+            // 개별 영상 상태는 서버에서 최신 데이터를 가져와서 업데이트
+            refreshIndividualVideoStatus();
+        }
+    })
+    .catch(error => {
+        console.error('진행상황 API 오류:', error);
+        // API 실패 시 기존 방식으로 폴백
+        refreshVideoTableFallback();
+    });
+}
+
+function refreshIndividualVideoStatus() {
     // AJAX로 영상 목록 데이터 새로고침
     fetch(window.location.href, {
         method: 'GET',
@@ -961,8 +983,61 @@ function refreshVideoTable() {
         const currentTable = document.querySelector('table tbody');
         
         if (newTable && currentTable) {
-            // 테이블 내용 업데이트
-            currentTable.innerHTML = newTable.innerHTML;
+            // 기존 행들을 ID로 매핑
+            const currentRows = Array.from(currentTable.querySelectorAll('tr'));
+            const newRows = Array.from(newTable.querySelectorAll('tr'));
+            
+            let hasChanges = false;
+            
+            // 각 행을 개별적으로 업데이트
+            newRows.forEach((newRow, index) => {
+                if (currentRows[index]) {
+                    const currentRow = currentRows[index];
+                    const newStatus = newRow.getAttribute('data-status');
+                    const currentStatus = currentRow.getAttribute('data-status');
+                    
+                    // 상태가 변경된 경우에만 해당 행 업데이트
+                    if (newStatus !== currentStatus) {
+                        console.log(`영상 ${index + 1} 상태 변경: ${currentStatus} → ${newStatus}`);
+                        hasChanges = true;
+                        
+                        // AI 채점 상태 셀 업데이트 (5번째 컬럼)
+                        const newStatusCell = newRow.children[4];
+                        const currentStatusCell = currentRow.children[4];
+                        if (newStatusCell && currentStatusCell) {
+                            currentStatusCell.innerHTML = newStatusCell.innerHTML;
+                        }
+                        
+                        // AI 점수 셀 업데이트 (6번째 컬럼)
+                        const newScoreCell = newRow.children[5];
+                        const currentScoreCell = currentRow.children[5];
+                        if (newScoreCell && currentScoreCell) {
+                            currentScoreCell.innerHTML = newScoreCell.innerHTML;
+                        }
+                        
+                        // 처리 시간 셀 업데이트 (7번째 컬럼)
+                        const newTimeCell = newRow.children[6];
+                        const currentTimeCell = currentRow.children[6];
+                        if (newTimeCell && currentTimeCell) {
+                            currentTimeCell.innerHTML = newTimeCell.innerHTML;
+                        }
+                        
+                        // 작업 버튼 셀 업데이트 (8번째 컬럼)
+                        const newActionCell = newRow.children[7];
+                        const currentActionCell = currentRow.children[7];
+                        if (newActionCell && currentActionCell) {
+                            currentActionCell.innerHTML = newActionCell.innerHTML;
+                        }
+                        
+                        // 행의 data-status 속성 업데이트
+                        currentRow.setAttribute('data-status', newStatus);
+                    }
+                }
+            });
+            
+            if (hasChanges) {
+                console.log('영상 상태 변경 감지 및 업데이트 완료');
+            }
             
             // 처리 중인 영상이 없으면 자동 새로고침 중지
             const processingRows = document.querySelectorAll('tr[data-status="processing"]');
@@ -976,6 +1051,31 @@ function refreshVideoTable() {
     })
     .catch(error => {
         console.error('테이블 새로고침 오류:', error);
+    });
+}
+
+function refreshVideoTableFallback() {
+    // 기존 방식으로 폴백
+    fetch(window.location.href, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        const parser = new DOMParser();
+        const newDoc = parser.parseFromString(html, 'text/html');
+        const newTable = newDoc.querySelector('table tbody');
+        const currentTable = document.querySelector('table tbody');
+        
+        if (newTable && currentTable) {
+            currentTable.innerHTML = newTable.innerHTML;
+            console.log('폴백 방식으로 테이블 새로고침 완료');
+        }
+    })
+    .catch(error => {
+        console.error('폴백 테이블 새로고침 오류:', error);
     });
 }
 
