@@ -410,8 +410,29 @@ let isEvaluationRunning = false;
 
 // 페이지 로드 시 진행상황 확인
 document.addEventListener('DOMContentLoaded', function() {
+    // 초기 버튼 상태 설정
+    initializeButtonStates();
     checkAiEvaluationProgress();
 });
+
+// 초기 버튼 상태 설정 함수
+function initializeButtonStates() {
+    // 서버에서 받은 초기 상태에 따라 버튼 설정
+    const hasProcessing = {{ $processingEvaluations }} > 0;
+    const hasPending = {{ $pendingSubmissions }} > 0;
+    
+    if (hasProcessing || hasPending) {
+        // 진행 중이거나 대기 중인 작업이 있으면 취소 버튼 표시
+        document.getElementById('start-batch-evaluation').style.display = 'none';
+        document.getElementById('cancel-batch-evaluation').style.display = 'block';
+        isEvaluationRunning = true;
+    } else {
+        // 작업이 없으면 시작 버튼 표시
+        document.getElementById('start-batch-evaluation').style.display = 'block';
+        document.getElementById('cancel-batch-evaluation').style.display = 'none';
+        isEvaluationRunning = false;
+    }
+}
 
 // AI 일괄 채점 시작
 document.getElementById('start-batch-evaluation').addEventListener('click', function() {
@@ -584,8 +605,11 @@ function checkAiEvaluationProgress() {
                     startProgressMonitoring();
                 }
                 // 취소 버튼 표시, 시작 버튼 숨김
-                document.getElementById('cancel-batch-evaluation').style.display = 'block';
-                document.getElementById('start-batch-evaluation').style.display = 'none';
+                const cancelBtn = document.getElementById('cancel-batch-evaluation');
+                const startBtn = document.getElementById('start-batch-evaluation');
+                if (cancelBtn) cancelBtn.style.display = 'block';
+                if (startBtn) startBtn.style.display = 'none';
+                console.log('버튼 상태: 취소 버튼 표시, 시작 버튼 숨김');
             } else {
                 isEvaluationRunning = false;
                 if (progressInterval) {
@@ -594,8 +618,11 @@ function checkAiEvaluationProgress() {
                     progressInterval = null;
                 }
                 // 시작 버튼 표시, 취소 버튼 숨김
-                document.getElementById('start-batch-evaluation').style.display = 'block';
-                document.getElementById('cancel-batch-evaluation').style.display = 'none';
+                const startBtn = document.getElementById('start-batch-evaluation');
+                const cancelBtn = document.getElementById('cancel-batch-evaluation');
+                if (startBtn) startBtn.style.display = 'block';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+                console.log('버튼 상태: 시작 버튼 표시, 취소 버튼 숨김');
             }
             
             // 실패한 평가가 있으면 재시도 버튼 표시
