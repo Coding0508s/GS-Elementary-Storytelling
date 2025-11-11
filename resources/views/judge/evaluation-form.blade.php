@@ -270,13 +270,13 @@
             <div class="row mb-4">
                 @php
                     $criteria = [
-                        'pronunciation_score' => ['title' => '발음·억양', 'icon' => 'bi-mic'],
-                        'vocabulary_score' => ['title' => '어휘·표현', 'icon' => 'bi-book'],
-                        'fluency_score' => ['title' => '유창성', 'icon' => 'bi-chat-dots'],
-                        'confidence_score' => ['title' => '자신감', 'icon' => 'bi-emoji-smile'],
-                        'topic_connection_score' => ['title' => '주제연결성', 'icon' => 'bi-link-45deg'],
-                        'structure_flow_score' => ['title' => '구성·흐름', 'icon' => 'bi-arrow-down-up'],
-                        'creativity_score' => ['title' => '창의성', 'icon' => 'bi-lightbulb']
+                        'pronunciation_score' => ['title' => '발음·억양', 'icon' => 'bi-mic', 'description' => 'AI가 평가한 점수입니다.'],
+                        'vocabulary_score' => ['title' => '어휘·표현', 'icon' => 'bi-book', 'description' => 'AI가 평가한 점수입니다.'],
+                        'fluency_score' => ['title' => '유창성', 'icon' => 'bi-chat-dots', 'description' => 'AI가 평가한 점수입니다.'],
+                        'confidence_score' => ['title' => '자신감, 긍정적이고 밝은 태도', 'icon' => 'bi-emoji-smile', 'description' => '☞심사 가이드 : 자신있고 명확히 들리는 목소리로 표현하는 지 여부'],
+                        'topic_connection_score' => ['title' => '주제와 발표 내용과의 연결성', 'icon' => 'bi-link-45deg', 'description' => '☞심사 가이드: 원 story 그대로의 문장과 단어를 정확히 전달했는 지 여부'],
+                        'structure_flow_score' => ['title' => '자연스러운 구성과 흐름', 'icon' => 'bi-arrow-down-up', 'description' => '☞심사 가이드: 말할 때 흐름이 끊기지 않고 자연스러운 흐름과 목소리 톤으로 표현했는 지 여부'],
+                        'creativity_score' => ['title' => '창의적 내용', 'icon' => 'bi-lightbulb', 'description' => '심사 가이드: 소품이나 visual aid, 율동 및 몸짓 등으로 사용 하여 말하는 내용의 이해와 집중을 도운 경우']
                     ];
                 @endphp
                 
@@ -314,11 +314,17 @@
                                        required
                                        {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
                             </div>
-                            
-                            <!-- 점수 가이드 -->
-                            <div class="text-muted" style="font-size: 0.7rem;">
-                                각 항목별 0-10점으로 평가해주세요
+                            <div class="text-admin-text" style="font-size: 0.8rem;">
+                                @if(isset($info['description']) && !empty($info['description']))
+                                    {{ $info['description'] }}
+                                @else
+                                    AI가 평가한 점수입니다.
+                                @endif
                             </div>
+                            <!-- 점수 가이드 -->
+                            <!-- <div class="text-muted" style="font-size: 0.7rem;">
+                                각 항목별 0-10점으로 평가해주세요
+                            </div> -->
                         </div>
                     </div>
                 </div>
