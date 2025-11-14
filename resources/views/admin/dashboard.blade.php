@@ -306,14 +306,22 @@
                                 @endif
                             </td>
                             <td>
-                                <a href="{{ route('admin.evaluation.show', $submission->id) }}" 
-                                   class="btn btn-sm btn-outline-primary">
-                                    @if($submission->evaluation)
-                                        <i class="bi bi-eye"></i> 보기
-                                    @else
-                                        <i class="bi bi-clipboard-check"></i> 심사
-                                    @endif
-                                </a>
+                                <div class="btn-group" role="group">
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-info" 
+                                            onclick="showVideoModal({{ $submission->id }}, {{ json_encode($submission->student_name_korean) }}, {{ json_encode($submission->video_file_name) }})"
+                                            title="영상 보기">
+                                        <i class="bi bi-play-circle"></i> 영상
+                                    </button>
+                                    <a href="{{ route('admin.evaluation.show', $submission->id) }}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        @if($submission->evaluation)
+                                            <i class="bi bi-eye"></i> 보기
+                                        @else
+                                            <i class="bi bi-clipboard-check"></i> 심사
+                                        @endif
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                         @endforeach
@@ -445,6 +453,52 @@
 
 <!-- 주석 종료 -->
 
+<!-- 영상 재생 모달 -->
+<div class="modal fade" id="videoModal" tabindex="-1" aria-labelledby="videoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="videoModalLabel">
+                    <i class="bi bi-camera-video"></i> 영상 재생
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="video-loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">로딩 중...</span>
+                    </div>
+                    <p class="mt-3 text-muted">영상을 불러오는 중...</p>
+                </div>
+                <div id="video-error" class="alert alert-danger d-none" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span id="video-error-message"></span>
+                </div>
+                <div id="video-container" class="d-none">
+                    <div class="mb-3">
+                        <h6 id="video-student-name" class="mb-1"></h6>
+                        <small id="video-file-name" class="text-muted"></small>
+                    </div>
+                    <div class="ratio ratio-16x9 bg-dark rounded">
+                        <video id="video-player" 
+                               controls 
+                               preload="metadata" 
+                               class="w-100 h-100"
+                               style="object-fit: contain;"
+                               crossorigin="anonymous">
+                            <source id="video-source" src="" type="">
+                            영상을 재생할 수 없습니다. 브라우저가 이 형식을 지원하지 않습니다.
+                        </video>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 위험 구역 -->
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-4">
@@ -479,6 +533,100 @@
 
 @push('scripts')
 <script>
+// 영상 모달 표시 함수
+function showVideoModal(videoId, studentName, fileName) {
+    const modal = new bootstrap.Modal(document.getElementById('videoModal'));
+    const modalElement = document.getElementById('videoModal');
+    
+    // 모달 내용 초기화
+    document.getElementById('video-loading').classList.remove('d-none');
+    document.getElementById('video-error').classList.add('d-none');
+    document.getElementById('video-container').classList.add('d-none');
+    document.getElementById('video-student-name').textContent = studentName;
+    document.getElementById('video-file-name').textContent = fileName;
+    
+    // 기존 비디오 소스 제거
+    const videoPlayer = document.getElementById('video-player');
+    const videoSource = document.getElementById('video-source');
+    videoSource.src = '';
+    videoSource.type = '';
+    videoPlayer.load();
+    
+    // 모달 표시
+    modal.show();
+    
+    // 영상 URL 가져오기
+    fetch(`/admin/video/${videoId}/stream-url`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => {
+        console.log('API 응답 상태:', response.status); // 디버깅용
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.error || '영상 URL을 가져올 수 없습니다.');
+            }).catch(() => {
+                throw new Error(`서버 오류 (${response.status}): 영상 URL을 가져올 수 없습니다.`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('영상 데이터:', data); // 디버깅용
+        if (data.success && data.video_url) {
+            // 로딩 숨기기
+            document.getElementById('video-loading').classList.add('d-none');
+            
+            // 영상 컨테이너 표시
+            document.getElementById('video-container').classList.remove('d-none');
+            
+            // 비디오 소스 설정
+            const videoType = data.video_type || 'mp4';
+            videoSource.src = data.video_url;
+            videoSource.type = `video/${videoType}`;
+            
+            // 비디오 플레이어에 직접 src 설정 (fallback)
+            videoPlayer.src = data.video_url;
+            
+            // 비디오 로드 시도
+            videoPlayer.load();
+            
+            // 비디오 로드 오류 처리
+            videoPlayer.addEventListener('error', function(e) {
+                console.error('비디오 로드 오류:', e);
+                console.error('비디오 URL:', data.video_url);
+                console.error('비디오 타입:', videoType);
+                document.getElementById('video-error').classList.remove('d-none');
+                document.getElementById('video-error-message').textContent = '영상을 재생할 수 없습니다. URL을 확인해주세요.';
+            }, { once: true });
+            
+            // 비디오 로드 성공 확인
+            videoPlayer.addEventListener('loadedmetadata', function() {
+                console.log('비디오 메타데이터 로드 완료');
+            }, { once: true });
+        } else {
+            throw new Error(data.error || '영상 URL을 가져올 수 없습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('영상 로드 오류:', error);
+        document.getElementById('video-loading').classList.add('d-none');
+        document.getElementById('video-error').classList.remove('d-none');
+        document.getElementById('video-error-message').textContent = error.message || '영상을 불러오는 중 오류가 발생했습니다.';
+    });
+    
+    // 모달이 닫힐 때 비디오 정지
+    modalElement.addEventListener('hidden.bs.modal', function() {
+        videoPlayer.pause();
+        videoSource.src = '';
+        videoSource.type = '';
+        videoPlayer.load();
+    }, { once: true });
+}
+
 function clearSystemCache() {
     if (confirm('시스템 캐시를 정리하시겠습니까?')) {
         fetch('/admin/clear-cache', {

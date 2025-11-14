@@ -219,6 +219,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/video/{id}/view', [AdminController::class, 'viewVideo'])
             ->name('video.view');
         
+        // 영상 스트리밍 URL 가져오기 (AJAX)
+        Route::get('/video/{id}/stream-url', [AdminController::class, 'getVideoStreamUrl'])
+            ->name('video.stream.url');
+        
         // AI 설정 관리
         Route::get('/ai-settings', [AdminController::class, 'aiSettings'])
             ->name('ai.settings');

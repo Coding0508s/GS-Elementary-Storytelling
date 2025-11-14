@@ -2069,6 +2069,73 @@ public function assignVideo(Request $request)
     }
 
     /**
+     * 영상 스트리밍 URL 가져오기 (AJAX용)
+     */
+    public function getVideoStreamUrl($id)
+    {
+        try {
+            $submission = VideoSubmission::findOrFail($id);
+            
+            // 영상 URL 생성 (S3 또는 로컬)
+            $videoUrl = null;
+            try {
+                if ($submission->isStoredOnS3()) {
+                    $videoUrl = $submission->getS3TemporaryUrl(24); // 24시간 유효
+                } else {
+                    $videoUrl = $submission->getLocalVideoUrl();
+                }
+            } catch (\Exception $e) {
+                Log::warning('영상 URL 생성 실패: ' . $e->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'error' => '영상 URL을 생성할 수 없습니다.'
+                ], 500);
+            }
+
+            if (!$videoUrl) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '영상 URL을 생성할 수 없습니다.'
+                ], 500);
+            }
+
+            // 비디오 타입 확인 (파일명에서 추출하거나 기본값 사용)
+            $videoType = $submission->video_file_type;
+            if (!$videoType && $submission->video_file_name) {
+                $extension = pathinfo($submission->video_file_name, PATHINFO_EXTENSION);
+                $videoType = strtolower($extension) ?: 'mp4';
+            }
+            $videoType = $videoType ?: 'mp4';
+            
+            Log::info('영상 URL 생성 성공', [
+                'video_id' => $id,
+                'video_url' => $videoUrl,
+                'video_type' => $videoType,
+                'is_s3' => $submission->isStoredOnS3()
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'video_url' => $videoUrl,
+                'video_type' => $videoType,
+                'file_name' => $submission->video_file_name
+            ]);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => '존재하지 않는 영상입니다.'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('영상 URL 조회 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => '영상 URL을 불러오는 중 오류가 발생했습니다.'
+            ], 500);
+        }
+    }
+
+    /**
      * AI 설정 페이지
      */
     public function aiSettings()
