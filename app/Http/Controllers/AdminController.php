@@ -2174,6 +2174,162 @@ public function assignVideo(Request $request)
     }
 
     /**
+     * 접수 정보 수정을 위한 데이터 가져오기
+     */
+    public function getSubmissionForEdit($id)
+    {
+        try {
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '관리자만 접근할 수 있습니다.'
+                ], 403);
+            }
+
+            $submission = VideoSubmission::findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'submission' => [
+                    'id' => $submission->id,
+                    'region' => $submission->region,
+                    'institution_name' => $submission->institution_name,
+                    'class_name' => $submission->class_name,
+                    'student_name_korean' => $submission->student_name_korean,
+                    'student_name_english' => $submission->student_name_english,
+                    'grade' => $submission->grade,
+                    'age' => $submission->age,
+                    'parent_name' => $submission->parent_name,
+                    'parent_phone' => $submission->parent_phone,
+                    'unit_topic' => $submission->unit_topic,
+                ]
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => '존재하지 않는 접수 정보입니다.'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('접수 정보 조회 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => '접수 정보를 불러오는 중 오류가 발생했습니다.'
+            ], 500);
+        }
+    }
+
+    /**
+     * 접수 정보 수정
+     */
+    public function updateSubmission(Request $request, $id)
+    {
+        try {
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '관리자만 접근할 수 있습니다.'
+                ], 403);
+            }
+
+            $submission = VideoSubmission::findOrFail($id);
+
+            // 유효성 검사
+            $validator = Validator::make($request->all(), [
+                'region' => ['required', 'string', function ($attribute, $value, $fail) {
+                    $parts = explode(' ', $value, 2);
+                    if (count($parts) < 2) {
+                        $fail('올바른 지역 형식을 선택해주세요.');
+                        return;
+                    }
+                    
+                    $province = $parts[0];
+                    $city = $parts[1];
+                    
+                    if (!array_key_exists($province, VideoSubmission::REGIONS)) {
+                        $fail('올바른 시/도를 선택해주세요.');
+                        return;
+                    }
+                    
+                    if (!in_array($city, VideoSubmission::REGIONS[$province])) {
+                        $fail('올바른 시/군/구를 선택해주세요.');
+                        return;
+                    }
+                }],
+                'institution_name' => 'required|string|max:255',
+                'class_name' => 'required|string|max:255',
+                'student_name_korean' => 'required|string|max:255',
+                'student_name_english' => 'required|string|max:255',
+                'grade' => 'required|string|max:50',
+                'age' => 'required|integer|min:1|max:100',
+                'parent_name' => 'required|string|max:255',
+                'parent_phone' => 'required|string|max:20',
+                'unit_topic' => 'nullable|string|max:255',
+            ], [
+                'region.required' => '거주 지역을 선택해주세요.',
+                'institution_name.required' => '기관명을 입력해주세요.',
+                'class_name.required' => '반 이름을 입력해주세요.',
+                'student_name_korean.required' => '학생 한글 이름을 입력해주세요.',
+                'student_name_english.required' => '학생 영어 이름을 입력해주세요.',
+                'grade.required' => '학년을 입력해주세요.',
+                'age.required' => '나이를 선택해주세요.',
+                'age.integer' => '올바른 나이를 선택해주세요.',
+                'age.min' => '나이는 1세 이상이어야 합니다.',
+                'age.max' => '나이는 100세 이하여야 합니다.',
+                'parent_name.required' => '학부모 성함을 입력해주세요.',
+                'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => $validator->errors()->first(),
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // 데이터 업데이트
+            $submission->update([
+                'region' => $request->region,
+                'institution_name' => $request->institution_name,
+                'class_name' => $request->class_name,
+                'student_name_korean' => $request->student_name_korean,
+                'student_name_english' => $request->student_name_english,
+                'grade' => $request->grade,
+                'age' => $request->age,
+                'parent_name' => $request->parent_name,
+                'parent_phone' => $request->parent_phone,
+                'unit_topic' => $request->unit_topic,
+            ]);
+
+            Log::info('접수 정보 수정 완료', [
+                'admin_id' => $admin->id,
+                'submission_id' => $submission->id,
+                'student_name' => $submission->student_name_korean
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => '접수 정보가 성공적으로 수정되었습니다.',
+                'submission' => $submission
+            ]);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => '존재하지 않는 접수 정보입니다.'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('접수 정보 수정 오류: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => '접수 정보 수정 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * AI 설정 페이지
      */
     public function aiSettings()
@@ -3115,25 +3271,11 @@ public function assignVideo(Request $request)
 
             foreach ($submissions as $submission) {
                 try {
-                    // 관련 데이터 삭제
-                    // 1. AI 평가 삭제
-                    $submission->aiEvaluations()->delete();
+                    // Soft Delete로 변경 (파일은 삭제하지 않고 휴지통으로 이동)
+                    // 관련 데이터는 그대로 유지 (복원 시 필요)
                     
-                    // 2. 심사 평가 삭제
-                    $submission->evaluation()->delete();
-                    
-                    // 3. 영상 파일 삭제 (S3 또는 로컬)
-                    if ($submission->video_file_path) {
-                        if ($submission->isStoredOnS3()) {
-                            \Illuminate\Support\Facades\Storage::disk('s3')->delete($submission->video_file_path);
-                        } else {
-                            \Illuminate\Support\Facades\Storage::disk('public')->delete($submission->video_file_path);
-                        }
-                        $deletedFiles[] = $submission->video_file_path;
-                    }
-                    
-                    // 4. 영상 제출 데이터 삭제
-                    $submission->delete();
+                    // 영상 제출 데이터를 Soft Delete (휴지통으로 이동)
+                    $submission->delete(); // SoftDeletes 트레이트로 인해 soft delete 됨
                     $deletedCount++;
                     
                 } catch (\Exception $e) {
@@ -3155,7 +3297,7 @@ public function assignVideo(Request $request)
 
             return response()->json([
                 'success' => true,
-                'message' => "{$deletedCount}개의 영상이 삭제되었습니다.",
+                'message' => "{$deletedCount}개의 영상이 휴지통으로 이동되었습니다.",
                 'data' => [
                     'deleted_count' => $deletedCount,
                     'requested_count' => count($ids)
@@ -3168,6 +3310,288 @@ public function assignVideo(Request $request)
                 'requested_ids' => $ids,
                 'trace' => $e->getTraceAsString()
             ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '영상 삭제 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 휴지통 목록
+     */
+    public function trashList(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        // 검색어 가져오기
+        $searchQuery = $request->get('search', '');
+        
+        // 삭제된 영상들 조회 (Soft Deleted)
+        $trashedQuery = VideoSubmission::onlyTrashed()
+                                      ->with(['evaluation', 'assignment.admin']);
+        
+        // 검색어가 있으면 필터링
+        if (!empty($searchQuery)) {
+            $trashedQuery->where(function($query) use ($searchQuery) {
+                $query->where('student_name_korean', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('student_name_english', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('institution_name', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('class_name', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('video_file_name', 'like', '%' . $searchQuery . '%');
+                
+                // 접수번호 검색
+                $driver = DB::connection()->getDriverName();
+                
+                if (is_numeric($searchQuery)) {
+                    $query->orWhere('id', $searchQuery);
+                }
+                
+                if ($driver === 'sqlite') {
+                    $query->orWhereRaw("('GSK-' || substr('00000' || CAST(id AS TEXT), -5)) LIKE ?", ['%' . $searchQuery . '%']);
+                } elseif ($driver === 'mysql' || $driver === 'mariadb') {
+                    $query->orWhereRaw("CONCAT('GSK-', LPAD(id, 5, '0')) LIKE ?", ['%' . $searchQuery . '%']);
+                } elseif ($driver === 'pgsql') {
+                    $query->orWhereRaw("CONCAT('GSK-', LPAD(id::text, 5, '0')) LIKE ?", ['%' . $searchQuery . '%']);
+                }
+            });
+        }
+        
+        $trashedSubmissions = $trashedQuery->orderBy('deleted_at', 'desc')
+                                          ->paginate(20)
+                                          ->appends($request->query());
+
+        return view('admin.trash-list', compact('trashedSubmissions', 'searchQuery'));
+    }
+
+    /**
+     * 영상 복원
+     */
+    public function restoreVideo($id)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            $submission = VideoSubmission::onlyTrashed()->findOrFail($id);
+            $submission->restore();
+
+            Log::info('영상 복원 완료', [
+                'admin_id' => $admin->id,
+                'submission_id' => $id,
+                'student_name' => $submission->student_name_korean
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => '영상이 복원되었습니다.'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('영상 복원 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'submission_id' => $id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '영상 복원 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 영상 완전 삭제 (휴지통에서 영구 삭제)
+     */
+    public function forceDeleteVideo($id)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            $submission = VideoSubmission::onlyTrashed()->findOrFail($id);
+            
+            // 관련 데이터 삭제
+            $submission->aiEvaluations()->delete();
+            $submission->evaluations()->delete();
+            $submission->assignments()->delete();
+            
+            // 영상 파일 삭제 (S3 또는 로컬)
+            if ($submission->video_file_path) {
+                if ($submission->isStoredOnS3()) {
+                    Storage::disk('s3')->delete($submission->video_file_path);
+                } else {
+                    Storage::disk('public')->delete($submission->video_file_path);
+                }
+            }
+            
+            // 영구 삭제
+            $submission->forceDelete();
+
+            Log::info('영상 영구 삭제 완료', [
+                'admin_id' => $admin->id,
+                'submission_id' => $id,
+                'student_name' => $submission->student_name_korean
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => '영상이 영구적으로 삭제되었습니다.'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('영상 영구 삭제 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'submission_id' => $id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '영상 삭제 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 선택된 영상 복원
+     */
+    public function restoreSelectedVideos(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            $ids = $request->input('ids', []);
+            
+            if (empty($ids) || !is_array($ids)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '복원할 영상을 선택해주세요.'
+                ]);
+            }
+
+            $restoredCount = VideoSubmission::onlyTrashed()
+                                          ->whereIn('id', $ids)
+                                          ->restore();
+
+            Log::info('영상 일괄 복원 완료', [
+                'admin_id' => $admin->id,
+                'restored_count' => $restoredCount,
+                'requested_ids' => $ids
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$restoredCount}개의 영상이 복원되었습니다.",
+                'data' => [
+                    'restored_count' => $restoredCount
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('영상 일괄 복원 오류: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => '영상 복원 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 선택된 영상 영구 삭제
+     */
+    public function forceDeleteSelectedVideos(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            $ids = $request->input('ids', []);
+            
+            if (empty($ids) || !is_array($ids)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '삭제할 영상을 선택해주세요.'
+                ]);
+            }
+
+            $submissions = VideoSubmission::onlyTrashed()->whereIn('id', $ids)->get();
+            $deletedCount = 0;
+
+            foreach ($submissions as $submission) {
+                try {
+                    // 관련 데이터 삭제
+                    $submission->aiEvaluations()->delete();
+                    $submission->evaluations()->delete();
+                    $submission->assignments()->delete();
+                    
+                    // 영상 파일 삭제
+                    if ($submission->video_file_path) {
+                        if ($submission->isStoredOnS3()) {
+                            Storage::disk('s3')->delete($submission->video_file_path);
+                        } else {
+                            Storage::disk('public')->delete($submission->video_file_path);
+                        }
+                    }
+                    
+                    // 영구 삭제
+                    $submission->forceDelete();
+                    $deletedCount++;
+                } catch (\Exception $e) {
+                    Log::error('영상 영구 삭제 중 오류', [
+                        'submission_id' => $submission->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            Log::info('영상 일괄 영구 삭제 완료', [
+                'admin_id' => $admin->id,
+                'deleted_count' => $deletedCount,
+                'requested_ids' => $ids
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$deletedCount}개의 영상이 영구적으로 삭제되었습니다.",
+                'data' => [
+                    'deleted_count' => $deletedCount
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('영상 일괄 영구 삭제 오류: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,

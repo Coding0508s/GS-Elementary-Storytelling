@@ -211,6 +211,22 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/videos/delete', [AdminController::class, 'deleteSelectedVideos'])
             ->name('videos.delete');
         
+        // 휴지통 관리
+        Route::get('/trash', [AdminController::class, 'trashList'])
+            ->name('trash.list');
+        
+        Route::post('/trash/restore/{id}', [AdminController::class, 'restoreVideo'])
+            ->name('trash.restore');
+        
+        Route::post('/trash/restore-selected', [AdminController::class, 'restoreSelectedVideos'])
+            ->name('trash.restore.selected');
+        
+        Route::delete('/trash/force-delete/{id}', [AdminController::class, 'forceDeleteVideo'])
+            ->name('trash.force.delete');
+        
+        Route::post('/trash/force-delete-selected', [AdminController::class, 'forceDeleteSelectedVideos'])
+            ->name('trash.force.delete.selected');
+        
         // 대회 활성화 상태 토글
         Route::post('/contest/toggle', [AdminController::class, 'toggleContestStatus'])
             ->name('contest.toggle');
@@ -222,6 +238,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 영상 스트리밍 URL 가져오기 (AJAX)
         Route::get('/video/{id}/stream-url', [AdminController::class, 'getVideoStreamUrl'])
             ->name('video.stream.url');
+        
+        // 접수 정보 수정
+        Route::get('/submissions/{id}/edit', [AdminController::class, 'getSubmissionForEdit'])
+            ->name('submission.edit');
+        
+        Route::put('/submissions/{id}', [AdminController::class, 'updateSubmission'])
+            ->name('submission.update');
         
         // AI 설정 관리
         Route::get('/ai-settings', [AdminController::class, 'aiSettings'])
