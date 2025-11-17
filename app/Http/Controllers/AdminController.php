@@ -2235,6 +2235,15 @@ public function assignVideo(Request $request)
 
             $submission = VideoSubmission::findOrFail($id);
 
+            // 디버깅: 요청 데이터 로깅
+            Log::info('접수 정보 수정 요청', [
+                'submission_id' => $id,
+                'request_all' => $request->all(),
+                'region' => $request->input('region'),
+                'method' => $request->method(),
+                'content_type' => $request->header('Content-Type')
+            ]);
+
             // 유효성 검사
             $validator = Validator::make($request->all(), [
                 'region' => ['required', 'string', function ($attribute, $value, $fail) {
@@ -2289,8 +2298,26 @@ public function assignVideo(Request $request)
                 ], 422);
             }
 
-            // 데이터 업데이트
-            $submission->update([
+            // 기관명이 변경되었는지 확인
+            $institutionChanged = $submission->institution_name !== $request->institution_name;
+            $studentNameChanged = $submission->student_name_korean !== $request->student_name_korean;
+            $gradeChanged = $submission->grade !== $request->grade;
+            
+            // 파일명 업데이트가 필요한 경우 (기관명, 학생명, 학년 중 하나라도 변경된 경우)
+            $updateFileName = $institutionChanged || $studentNameChanged || $gradeChanged;
+            $newFileName = null;
+            
+            if ($updateFileName && $submission->video_file_name) {
+                $newFileName = $this->updateVideoFileName(
+                    $submission->video_file_name,
+                    $request->institution_name,
+                    $request->student_name_korean,
+                    $request->grade
+                );
+            }
+
+            // 업데이트할 데이터 준비
+            $updateData = [
                 'region' => $request->region,
                 'institution_name' => $request->institution_name,
                 'class_name' => $request->class_name,
@@ -2301,18 +2328,29 @@ public function assignVideo(Request $request)
                 'parent_name' => $request->parent_name,
                 'parent_phone' => $request->parent_phone,
                 'unit_topic' => $request->unit_topic,
-            ]);
+            ];
+            
+            // 파일명이 업데이트된 경우 추가
+            if ($newFileName) {
+                $updateData['video_file_name'] = $newFileName;
+            }
+
+            // 데이터 업데이트
+            $submission->update($updateData);
 
             Log::info('접수 정보 수정 완료', [
                 'admin_id' => $admin->id,
                 'submission_id' => $submission->id,
-                'student_name' => $submission->student_name_korean
+                'student_name' => $submission->student_name_korean,
+                'institution_changed' => $institutionChanged,
+                'file_name_updated' => $updateFileName
             ]);
 
             return response()->json([
                 'success' => true,
                 'message' => '접수 정보가 성공적으로 수정되었습니다.',
-                'submission' => $submission
+                'submission' => $submission,
+                'file_name_updated' => $updateFileName
             ]);
 
         } catch (ModelNotFoundException $e) {
@@ -2327,6 +2365,100 @@ public function assignVideo(Request $request)
                 'error' => '접수 정보 수정 중 오류가 발생했습니다: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * 비디오 파일명 업데이트 (기관명, 학생명, 학년 변경 시)
+     * 형식: 기관명_이름_학년_원본파일명_타임스탬프.확장자
+     */
+    private function updateVideoFileName($currentFileName, $newInstitutionName, $newStudentName, $newGrade)
+    {
+        try {
+            // 파일명에서 확장자 추출
+            $extension = pathinfo($currentFileName, PATHINFO_EXTENSION);
+            $fileNameWithoutExt = pathinfo($currentFileName, PATHINFO_FILENAME);
+            
+            // 파일명을 언더스코어로 분리
+            $parts = explode('_', $fileNameWithoutExt);
+            
+            // 파일명 형식이 예상과 다른 경우 (타임스탬프가 여러 부분으로 나뉠 수 있음)
+            // 마지막 부분이 타임스탬프일 가능성이 높음 (날짜_시간_마이크로초 형식)
+            // 따라서 처음 3개 부분이 기관명_이름_학년일 가능성이 높음
+            
+            // 안전한 파일명 생성
+            $safeInstitution = $this->sanitizeFilename($newInstitutionName ?? 'Unknown');
+            $safeStudentName = $this->sanitizeFilename($newStudentName ?? 'Unknown');
+            $safeGrade = $this->sanitizeFilename($newGrade ?? 'Unknown');
+            
+            // 기존 파일명에서 원본파일명과 타임스탬프 부분 추출 시도
+            // 형식: 기관명_이름_학년_원본파일명_타임스탬프
+            // 최소 5개 부분이 있어야 함
+            if (count($parts) >= 5) {
+                // 처음 3개는 기관명_이름_학년, 나머지는 원본파일명과 타임스탬프
+                $originalAndTimestamp = implode('_', array_slice($parts, 3));
+                $newFileName = sprintf(
+                    '%s_%s_%s_%s.%s',
+                    $safeInstitution,
+                    $safeStudentName,
+                    $safeGrade,
+                    $originalAndTimestamp,
+                    $extension
+                );
+            } else {
+                // 형식이 예상과 다른 경우, 타임스탬프를 새로 생성
+                $timestamp = date('Ymd_His') . '_' . substr(microtime(), 2, 6);
+                $baseOriginalName = count($parts) > 3 ? implode('_', array_slice($parts, 3)) : 'video';
+                $safeOriginalName = $this->sanitizeFilename($baseOriginalName);
+                
+                $newFileName = sprintf(
+                    '%s_%s_%s_%s_%s.%s',
+                    $safeInstitution,
+                    $safeStudentName,
+                    $safeGrade,
+                    $safeOriginalName,
+                    $timestamp,
+                    $extension ?: 'mp4'
+                );
+            }
+            
+            // 파일명 길이 제한
+            if (strlen($newFileName) > 200) {
+                $newFileName = substr($newFileName, 0, 200) . '.' . ($extension ?: 'mp4');
+            }
+            
+            return $newFileName;
+        } catch (\Exception $e) {
+            Log::error('파일명 업데이트 오류: ' . $e->getMessage(), [
+                'current_file_name' => $currentFileName,
+                'new_institution' => $newInstitutionName,
+                'new_student' => $newStudentName,
+                'new_grade' => $newGrade
+            ]);
+            // 오류 발생 시 원본 파일명 반환
+            return $currentFileName;
+        }
+    }
+
+    /**
+     * 파일명 안전화 (특수문자 제거, 공백 보존)
+     */
+    private function sanitizeFilename($filename)
+    {
+        // 한글, 영문, 숫자, 공백, 언더스코어, 하이픈만 허용
+        $filename = preg_replace('/[^가-힣a-zA-Z0-9 _-]/', '_', $filename);
+        
+        // 연속된 공백을 하나로 변경
+        $filename = preg_replace('/\s+/', ' ', $filename);
+        
+        // 연속된 언더스코어를 하나로 변경
+        $filename = preg_replace('/_+/', '_', $filename);
+        
+        // 앞뒤 공백 제거
+        $filename = trim($filename);
+        
+        // 공백은 그대로 유지 (언더바로 변경하지 않음)
+        
+        return $filename;
     }
 
     /**

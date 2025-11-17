@@ -610,7 +610,17 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="edit-institution_name" class="form-label">기관명 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="edit-institution_name" name="institution_name" required>
+                                    <div class="position-relative">
+                                        <input type="text" 
+                                               class="form-control" 
+                                               id="edit-institution_name" 
+                                               name="institution_name" 
+                                               placeholder="기관명을 입력하거나 선택해주세요"
+                                               autocomplete="off"
+                                               required>
+                                        <div id="edit-institution_suggestions" class="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-sm" style="display: none; z-index: 1000; max-height: 200px; overflow-y: auto;">
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="edit-class_name" class="form-label">반 이름 <span class="text-danger">*</span></label>
@@ -784,8 +794,21 @@ function showEditModal(submissionId) {
             document.getElementById('edit-parent_name').value = sub.parent_name || '';
             document.getElementById('edit-parent_phone').value = sub.parent_phone || '';
             
-            // 시/군/구 드롭다운 업데이트
+            // 기존 지역 값이 있으면 먼저 설정
+            if (sub.region) {
+                document.getElementById('edit-region').value = sub.region;
+            }
+            
+            // 시/군/구 드롭다운 업데이트 (이 함수가 region 값을 다시 설정할 수 있음)
             updateCityDropdown(province, city);
+            
+            // 시/군/구 드롭다운 업데이트 후에도 region 값이 없으면 다시 설정
+            setTimeout(() => {
+                const regionInput = document.getElementById('edit-region');
+                if (!regionInput.value && province && city) {
+                    regionInput.value = `${province} ${city}`;
+                }
+            }, 100);
             
             // 로딩 숨기고 폼 표시
             document.getElementById('edit-loading').classList.add('d-none');
@@ -846,7 +869,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const provinceSelect = document.getElementById('edit-province');
     if (provinceSelect) {
         provinceSelect.addEventListener('change', function() {
-            updateCityDropdown(this.value);
+            const province = this.value;
+            updateCityDropdown(province);
+            // 시/도 변경 시 region 값도 업데이트
+            const citySelect = document.getElementById('edit-city');
+            const city = citySelect ? citySelect.value : '';
+            const regionInput = document.getElementById('edit-region');
+            if (province && city) {
+                regionInput.value = `${province} ${city}`;
+            } else {
+                regionInput.value = '';
+            }
         });
     }
     
@@ -856,17 +889,143 @@ document.addEventListener('DOMContentLoaded', function() {
         citySelect.addEventListener('change', function() {
             const province = document.getElementById('edit-province').value;
             const city = this.value;
+            const regionInput = document.getElementById('edit-region');
             if (province && city) {
-                document.getElementById('edit-region').value = `${province} ${city}`;
+                regionInput.value = `${province} ${city}`;
+            } else {
+                regionInput.value = '';
             }
         });
+    }
+    
+    // 수정 모달 기관명 자동완성 기능
+    const editInstitutionInput = document.getElementById('edit-institution_name');
+    const editSuggestionsList = document.getElementById('edit-institution_suggestions');
+    let editDebounceTimer;
+    
+    if (editInstitutionInput && editSuggestionsList) {
+        editInstitutionInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            
+            // 디바운스 적용 (300ms 지연)
+            clearTimeout(editDebounceTimer);
+            editDebounceTimer = setTimeout(() => {
+                fetchEditInstitutions(query);
+            }, 300);
+        });
+        
+        editInstitutionInput.addEventListener('blur', function() {
+            // 약간의 지연을 두어 클릭 이벤트가 처리되도록 함
+            setTimeout(() => {
+                hideEditSuggestions();
+            }, 200);
+        });
+        
+        editInstitutionInput.addEventListener('focus', function() {
+            // 포커스 시 항상 기관명 목록 표시
+            fetchEditInstitutions(this.value.trim());
+        });
+        
+        // 키보드 내비게이션 지원
+        editInstitutionInput.addEventListener('keydown', function(e) {
+            const items = editSuggestionsList.querySelectorAll('.suggestion-item');
+            const activeItem = editSuggestionsList.querySelector('.suggestion-item.active');
+            let activeIndex = -1;
+            
+            if (activeItem) {
+                activeIndex = Array.from(items).indexOf(activeItem);
+            }
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (items.length > 0) {
+                    if (activeItem) activeItem.classList.remove('active');
+                    const nextIndex = (activeIndex + 1) % items.length;
+                    items[nextIndex].classList.add('active');
+                    items[nextIndex].style.backgroundColor = '#e9ecef';
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (items.length > 0) {
+                    if (activeItem) activeItem.classList.remove('active');
+                    const prevIndex = activeIndex <= 0 ? items.length - 1 : activeIndex - 1;
+                    items[prevIndex].classList.add('active');
+                    items[prevIndex].style.backgroundColor = '#e9ecef';
+                }
+            } else if (e.key === 'Enter') {
+                if (activeItem) {
+                    e.preventDefault();
+                    editInstitutionInput.value = activeItem.textContent;
+                    hideEditSuggestions();
+                }
+            } else if (e.key === 'Escape') {
+                hideEditSuggestions();
+            }
+        });
+    }
+    
+    function fetchEditInstitutions(query) {
+        fetch(`{{ route('api.institutions') }}?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                showEditSuggestions(data);
+            })
+            .catch(error => {
+                console.error('기관명 검색 오류:', error);
+                hideEditSuggestions();
+            });
+    }
+    
+    function showEditSuggestions(institutions) {
+        editSuggestionsList.innerHTML = '';
+        
+        if (institutions.length === 0) {
+            const query = editInstitutionInput.value.trim();
+            if (query.length === 0) {
+                editSuggestionsList.innerHTML = '<div class="p-2 text-muted small">등록된 기관명이 없습니다. 새로운 기관명을 입력해주세요.</div>';
+            } else {
+                editSuggestionsList.innerHTML = '<div class="p-2 text-muted small">검색 결과가 없습니다. 새로운 기관명을 입력해주세요.</div>';
+            }
+        } else {
+            institutions.forEach(institution => {
+                const item = document.createElement('div');
+                item.className = 'p-2 cursor-pointer border-bottom suggestion-item';
+                item.style.cursor = 'pointer';
+                item.textContent = institution;
+                
+                item.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#f8f9fa';
+                });
+                
+                item.addEventListener('mouseleave', function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.backgroundColor = 'white';
+                    }
+                });
+                
+                item.addEventListener('click', function() {
+                    editInstitutionInput.value = institution;
+                    hideEditSuggestions();
+                    editInstitutionInput.focus();
+                });
+                
+                editSuggestionsList.appendChild(item);
+            });
+        }
+        
+        editSuggestionsList.style.display = 'block';
+    }
+    
+    function hideEditSuggestions() {
+        if (editSuggestionsList) {
+            editSuggestionsList.style.display = 'none';
+        }
     }
 });
 
 // 수정 저장 함수
 function saveEdit() {
     const form = document.getElementById('edit-form');
-    const formData = new FormData(form);
     const submissionId = document.getElementById('edit-submission-id').value;
     const saveBtn = document.getElementById('save-edit-btn');
     
@@ -876,26 +1035,53 @@ function saveEdit() {
         return;
     }
     
-    // 지역 값 확인
-    const region = document.getElementById('edit-region').value;
-    if (!region) {
-        alert('지역을 선택해주세요.');
+    // 지역 값 확인 및 설정
+    const province = document.getElementById('edit-province').value;
+    const city = document.getElementById('edit-city').value;
+    let region = document.getElementById('edit-region').value;
+    
+    // region 값이 없으면 province와 city로 조합
+    if (!region && province && city) {
+        region = `${province} ${city}`;
+        document.getElementById('edit-region').value = region;
+    }
+    
+    if (!region || !province || !city) {
+        alert('시/도와 시/군/구를 모두 선택해주세요.');
         return;
     }
-    formData.set('region', region);
+    
+    // JSON 데이터 준비
+    const data = {
+        region: region,
+        institution_name: document.getElementById('edit-institution_name').value,
+        class_name: document.getElementById('edit-class_name').value,
+        student_name_korean: document.getElementById('edit-student_name_korean').value,
+        student_name_english: document.getElementById('edit-student_name_english').value,
+        grade: document.getElementById('edit-grade').value,
+        age: parseInt(document.getElementById('edit-age').value),
+        parent_name: document.getElementById('edit-parent_name').value,
+        parent_phone: document.getElementById('edit-parent_phone').value,
+        unit_topic: document.getElementById('edit-unit_topic').value || null
+    };
+    
+    // 디버깅: 전송할 데이터 확인
+    console.log('전송할 데이터:', data);
     
     // 버튼 비활성화
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>저장 중...';
     
-    // 저장 요청
+    // 저장 요청 (JSON으로 전송)
     fetch(`/admin/submissions/${submissionId}`, {
         method: 'PUT',
         headers: {
+            'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-Requested-With': 'XMLHttpRequest'
         },
-        body: formData
+        body: JSON.stringify(data)
     })
     .then(response => {
         if (!response.ok) {
