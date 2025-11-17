@@ -412,6 +412,17 @@
                             <i class="bi bi-building"></i> 기관명 관리
                         </a>
                         
+                        <a class="nav-link {{ request()->routeIs('admin.trash.*') ? 'active' : '' }}" 
+                           href="{{ route('admin.trash.list') }}">
+                            <i class="bi bi-trash"></i> 휴지통
+                            @php
+                                $trashCount = \App\Models\VideoSubmission::onlyTrashed()->count();
+                            @endphp
+                            @if($trashCount > 0)
+                                <span class="badge bg-danger ms-1">{{ $trashCount }}</span>
+                            @endif
+                        </a>
+                        
                         <a class="nav-link {{ request()->routeIs('admin.password.*') ? 'active' : '' }}" 
                            href="{{ route('admin.password.reset') }}">
                             <i class="bi bi-key-fill"></i> 비밀번호 재설정
