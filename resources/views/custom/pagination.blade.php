@@ -37,9 +37,10 @@
 
                 {{-- 페이지 번호 링크들 --}}
                 @php
-                    $start = max($paginator->currentPage() - 2, 1);
-                    $end = min($start + 4, $paginator->lastPage());
-                    $start = max($end - 4, 1);
+                    // 현재 페이지 기준 ±5 (최대 11개 표시)
+                    $start = max($paginator->currentPage() - 5, 1);
+                    $end = min($start + 10, $paginator->lastPage());
+                    $start = max($end - 10, 1);
                 @endphp
 
                 @if($start > 1)

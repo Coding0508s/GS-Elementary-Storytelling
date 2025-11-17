@@ -125,10 +125,47 @@ class AdminController extends Controller
         $assignedSubmissions = VideoSubmission::whereHas('assignment')->count();
         $pendingSubmissions = $totalSubmissions - $assignedSubmissions;
         
-        // 최근 업로드된 영상들 
-        $recentSubmissions = VideoSubmission::with(['evaluation', 'assignment.admin'])
-                                          ->orderBy('created_at', 'desc')
-                                          ->paginate(10, ['*'], 'recent');
+        // 검색어 가져오기
+        $searchQuery = request()->get('search', '');
+        
+        // 최근 업로드된 영상들 (검색 기능 포함)
+        $recentSubmissionsQuery = VideoSubmission::with(['evaluation', 'assignment.admin']);
+        
+        // 검색어가 있으면 필터링
+        if (!empty($searchQuery)) {
+            $recentSubmissionsQuery->where(function($query) use ($searchQuery) {
+                $query->where('student_name_korean', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('student_name_english', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('institution_name', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('class_name', 'like', '%' . $searchQuery . '%')
+                      ->orWhere('video_file_name', 'like', '%' . $searchQuery . '%');
+                
+                // 접수번호 검색 (데이터베이스 타입에 따라 다르게 처리)
+                $driver = DB::connection()->getDriverName();
+                
+                // 숫자만 입력한 경우 ID로 직접 검색
+                if (is_numeric($searchQuery)) {
+                    $query->orWhere('id', $searchQuery);
+                }
+                
+                // 접수번호 형식 검색 (GSK-00001 형식)
+                if ($driver === 'sqlite') {
+                    // SQLite는 LPAD를 지원하지 않으므로 문자열 연결과 substr 사용
+                    // 'GSK-' || substr('00000' || id, -5) 형식으로 5자리 0 패딩
+                    $query->orWhereRaw("('GSK-' || substr('00000' || CAST(id AS TEXT), -5)) LIKE ?", ['%' . $searchQuery . '%']);
+                } elseif ($driver === 'mysql' || $driver === 'mariadb') {
+                    // MySQL/MariaDB는 LPAD 사용
+                    $query->orWhereRaw("CONCAT('GSK-', LPAD(id, 5, '0')) LIKE ?", ['%' . $searchQuery . '%']);
+                } elseif ($driver === 'pgsql') {
+                    // PostgreSQL은 LPAD 사용
+                    $query->orWhereRaw("CONCAT('GSK-', LPAD(id::text, 5, '0')) LIKE ?", ['%' . $searchQuery . '%']);
+                }
+            });
+        }
+        
+        $recentSubmissions = $recentSubmissionsQuery->orderBy('created_at', 'desc')
+                                                     ->paginate(10, ['*'], 'recent')
+                                                     ->appends(request()->query());
 
         // 심사위원별 배정 현황
         $adminStats = Admin::withCount(['videoAssignments', 'evaluations'])
@@ -159,7 +196,8 @@ class AdminController extends Controller
             'recentSubmissions',
             'adminStats',
             'judgesCount',
-            'contestActive'
+            'contestActive',
+            'searchQuery'
         ));
     }
 

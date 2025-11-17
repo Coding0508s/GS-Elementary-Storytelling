@@ -250,6 +250,40 @@
         </div>
     </div>
     <div class="card-body">
+        <!-- 검색 영역 -->
+        <div class="row mb-3">
+            <div class="col-md-8">
+                <form method="GET" action="{{ route('admin.dashboard') }}" class="d-flex gap-2">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" 
+                               name="search" 
+                               class="form-control" 
+                               placeholder="학생명, 기관명, 접수번호, 파일명으로 검색..." 
+                               value="{{ $searchQuery ?? '' }}"
+                               id="search-input">
+                        @if(!empty($searchQuery))
+                        <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary" title="검색 초기화">
+                            <i class="bi bi-x-circle"></i>
+                        </a>
+                        @endif
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search"></i> 검색
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-md-4">
+                @if(!empty($searchQuery))
+                <div class="alert alert-info mb-0 py-2">
+                    <i class="bi bi-info-circle"></i> 
+                    "<strong>{{ $searchQuery }}</strong>" 검색 결과: <strong>{{ $recentSubmissions->total() }}</strong>개
+                </div>
+                @endif
+            </div>
+        </div>
         @if($recentSubmissions->count() > 0)
             <div class="table-responsive">
                 <table class="table table-admin table-hover">
@@ -330,11 +364,20 @@
             </div>
         @else
             <div class="text-center py-4">
-                <i class="bi bi-inbox display-4 text-muted"></i>
-                <p class="text-muted mt-2">접수된 영상이 없습니다.</p>
-                <a href="{{ url('/') }}" class="btn btn-outline-primary" target="_blank">
-                    <i class="bi bi-plus-circle"></i> 대회 페이지로 이동
-                </a>
+                @if(!empty($searchQuery))
+                    <i class="bi bi-search display-4 text-muted"></i>
+                    <p class="text-muted mt-2">검색 결과가 없습니다.</p>
+                    <p class="text-muted small">"<strong>{{ $searchQuery }}</strong>"에 해당하는 영상을 찾을 수 없습니다.</p>
+                    <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-left"></i> 검색 초기화
+                    </a>
+                @else
+                    <i class="bi bi-inbox display-4 text-muted"></i>
+                    <p class="text-muted mt-2">접수된 영상이 없습니다.</p>
+                    <a href="{{ url('/') }}" class="btn btn-outline-primary" target="_blank">
+                        <i class="bi bi-plus-circle"></i> 대회 페이지로 이동
+                    </a>
+                @endif
             </div>
         @endif
         
@@ -533,6 +576,19 @@
 
 @push('scripts')
 <script>
+// 검색 입력 필드에서 Enter 키 처리
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.closest('form').submit();
+            }
+        });
+    }
+});
+
 // 영상 모달 표시 함수
 function showVideoModal(videoId, studentName, fileName) {
     const modal = new bootstrap.Modal(document.getElementById('videoModal'));
