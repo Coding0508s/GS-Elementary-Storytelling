@@ -180,6 +180,17 @@ class JudgeController extends Controller
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+        
+        // videoSubmission이 null인 경우 처리 (soft delete된 경우)
+        if (!$submission) {
+            Log::error('VideoSubmission이 존재하지 않음', [
+                'assignment_id' => $assignmentId,
+                'judge_id' => $judge->id,
+                'video_submission_id' => $assignment->video_submission_id
+            ]);
+            return redirect()->route('judge.video.list')
+                            ->with('error', '해당 영상 정보를 찾을 수 없습니다. 영상이 삭제되었을 수 있습니다.');
+        }
 
         // 현재 심사위원의 기존 평가만 가져오기 (다른 심사위원 점수 숨김)
         $currentEvaluation = Evaluation::where('video_submission_id', $submission->id)
@@ -189,10 +200,11 @@ class JudgeController extends Controller
         // assignment에 현재 심사위원의 evaluation만 설정
         $assignment->setRelation('evaluation', $currentEvaluation);
 
-        // 다음 배정된 영상 정보 가져오기
+        // 다음 배정된 영상 정보 가져오기 (videoSubmission이 존재하는 것만)
         $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
                                         ->where('status', VideoAssignment::STATUS_ASSIGNED)
                                         ->where('id', '!=', $assignmentId)
+                                        ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
                                         ->with('videoSubmission')
                                         ->orderBy('created_at', 'asc')
                                         ->first();
@@ -310,15 +322,16 @@ class JudgeController extends Controller
         // 배정 상태를 완료로 변경
         $assignment->completeEvaluation();
 
-        // 다음 배정된 영상 확인
+        // 다음 배정된 영상 확인 (videoSubmission이 존재하는 것만)
         $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
                                         ->where('status', VideoAssignment::STATUS_ASSIGNED)
                                         ->where('id', '!=', $assignmentId)
+                                        ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
                                         ->with('videoSubmission')
                                         ->orderBy('created_at', 'asc')
                                         ->first();
 
-        if ($nextAssignment) {
+        if ($nextAssignment && $nextAssignment->videoSubmission) {
             // 다음 영상이 있으면 바로 심사 페이지로 이동
             return redirect()->route('judge.evaluation.show', $nextAssignment->id)
                             ->with('success', '심사가 완료되었습니다. 다음 영상을 심사해주세요.');
@@ -425,15 +438,16 @@ class JudgeController extends Controller
             'comments' => $request->comments
         ]);
 
-        // 다음 배정된 영상 확인
+        // 다음 배정된 영상 확인 (videoSubmission이 존재하는 것만)
         $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
                                         ->where('status', VideoAssignment::STATUS_ASSIGNED)
                                         ->where('id', '!=', $assignmentId)
+                                        ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
                                         ->with('videoSubmission')
                                         ->orderBy('created_at', 'asc')
                                         ->first();
 
-        if ($nextAssignment) {
+        if ($nextAssignment && $nextAssignment->videoSubmission) {
             // 다음 영상이 있으면 바로 심사 페이지로 이동
             return redirect()->route('judge.evaluation.show', $nextAssignment->id)
                             ->with('success', '심사 결과가 수정되었습니다. 다음 영상을 심사해주세요.');
