@@ -23,8 +23,9 @@ class JudgeController extends Controller
     {
         $judge = Auth::guard('admin')->user();
         
-        // 이 심사위원에게 배정된 영상들
+        // 이 심사위원에게 배정된 영상들 (soft delete되지 않은 videoSubmission만)
         $assignedVideos = VideoAssignment::where('admin_id', $judge->id)
+                                       ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
                                        ->with(['videoSubmission', 'evaluation'])
                                        ->orderBy('created_at', 'asc')
                                        ->get();
@@ -35,8 +36,10 @@ class JudgeController extends Controller
         $inProgressEvaluations = $assignedVideos->where('status', VideoAssignment::STATUS_IN_PROGRESS)->count();
         $pendingEvaluations = $assignedVideos->where('status', VideoAssignment::STATUS_ASSIGNED)->count();
 
-        // 최근 배정된 영상들 (최대 5개)
-        $recentAssignments = $assignedVideos->take(5);
+        // 최근 배정된 영상들 (최대 5개, videoSubmission이 존재하는 것만)
+        $recentAssignments = $assignedVideos->filter(function ($assignment) {
+            return $assignment->videoSubmission !== null;
+        })->take(5);
 
         // 두 심사위원 총합 점수 기준 상위 10명 순위 계산
         $allEvaluatedVideos = VideoSubmission::with(['evaluations'])
@@ -133,14 +136,20 @@ class JudgeController extends Controller
         $inProgressCount = $allAssignments->where('status', VideoAssignment::STATUS_IN_PROGRESS)->count();
         $completedCount = $allAssignments->where('status', VideoAssignment::STATUS_COMPLETED)->count();
         
-        // 페이지네이션을 위한 assignments
+        // 페이지네이션을 위한 assignments (soft delete되지 않은 videoSubmission만)
         $assignments = VideoAssignment::where('admin_id', $judge->id)
+                                    ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
                                     ->with(['videoSubmission'])
                                     ->orderBy('created_at', 'asc')
                                     ->paginate(10);
 
         // 각 assignment에 현재 심사위원의 evaluation과 관리자 AI 평가 정보 추가
         $assignments->getCollection()->transform(function ($assignment) use ($judge) {
+            // videoSubmission이 null인 경우 스킵 (방어적 코딩)
+            if (!$assignment->videoSubmission) {
+                return null;
+            }
+            
             $currentEvaluation = Evaluation::where('video_submission_id', $assignment->video_submission_id)
                                          ->where('admin_id', $judge->id)
                                          ->first();
@@ -154,7 +163,7 @@ class JudgeController extends Controller
             $assignment->admin_ai_evaluation = $adminAiEvaluation;
             
             return $assignment;
-        });
+        })->filter(); // null 값 제거
 
         return view('judge.video-list', compact(
             'assignments', 
@@ -372,6 +381,17 @@ class JudgeController extends Controller
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+        
+        // videoSubmission이 null인 경우 처리 (soft delete된 경우)
+        if (!$submission) {
+            Log::error('VideoSubmission이 존재하지 않음 (수정)', [
+                'assignment_id' => $assignmentId,
+                'judge_id' => $judge->id,
+                'video_submission_id' => $assignment->video_submission_id
+            ]);
+            return redirect()->route('judge.video.list')
+                            ->with('error', '해당 영상 정보를 찾을 수 없습니다. 영상이 삭제되었을 수 있습니다.');
+        }
 
         // 현재 심사위원의 기존 평가만 가져오기 (다른 심사위원 점수 숨김)
         $currentEvaluation = Evaluation::where('video_submission_id', $submission->id)
@@ -472,6 +492,16 @@ class JudgeController extends Controller
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+        
+        // videoSubmission이 null인 경우 처리 (soft delete된 경우)
+        if (!$submission) {
+            Log::error('VideoSubmission이 존재하지 않음 (다운로드)', [
+                'assignment_id' => $assignmentId,
+                'judge_id' => $judge->id,
+                'video_submission_id' => $assignment->video_submission_id
+            ]);
+            return back()->with('error', '해당 영상 정보를 찾을 수 없습니다. 영상이 삭제되었을 수 있습니다.');
+        }
 
         // S3 또는 로컬 스토리지에 따라 다른 다운로드 방법 사용
         if ($submission->isStoredOnS3()) {
@@ -514,6 +544,16 @@ class JudgeController extends Controller
                                    ->firstOrFail();
 
         $submission = $assignment->videoSubmission;
+        
+        // videoSubmission이 null인 경우 처리 (soft delete된 경우)
+        if (!$submission) {
+            Log::error('VideoSubmission이 존재하지 않음 (스트리밍)', [
+                'assignment_id' => $assignmentId,
+                'judge_id' => $judge->id,
+                'video_submission_id' => $assignment->video_submission_id
+            ]);
+            return response()->json(['error' => '해당 영상 정보를 찾을 수 없습니다. 영상이 삭제되었을 수 있습니다.'], 404);
+        }
 
         // S3 또는 로컬 스토리지에 따라 다른 URL 생성
         if ($submission->isStoredOnS3()) {
