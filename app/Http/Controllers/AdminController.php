@@ -872,7 +872,22 @@ public function assignVideo(Request $request)
         }
 
         $assignment = VideoAssignment::findOrFail($id);
+        
+        // 배정 취소 전에 해당 심사위원의 평가 기록(Evaluation)만 삭제
+        // AI 채점 기록(AiEvaluation)은 유지
+        Evaluation::where('video_submission_id', $assignment->video_submission_id)
+                  ->where('admin_id', $assignment->admin_id)
+                  ->delete();
+        
+        // 배정 삭제
         $assignment->delete();
+
+        Log::info('배정 취소 완료', [
+            'admin_id' => $admin->id,
+            'assignment_id' => $id,
+            'video_submission_id' => $assignment->video_submission_id,
+            'judge_id' => $assignment->admin_id
+        ]);
 
         return back()->with('success', '배정이 취소되었습니다.');
     }
