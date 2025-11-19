@@ -95,6 +95,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/evaluations', [AdminController::class, 'evaluationList'])
             ->name('evaluation.list');
         
+        // 평가 순위 페이지 (구체적인 라우트를 먼저 정의)
+        Route::get('/evaluations/ranking', [AdminController::class, 'evaluationRanking'])
+            ->name('evaluation.ranking');
+        
+        // 평가 순위 Excel 다운로드
+        Route::get('/evaluations/ranking/excel', [AdminController::class, 'downloadEvaluationRankingExcel'])
+            ->name('evaluation.ranking.excel');
+        
         Route::get('/evaluations/{id}', [AdminController::class, 'showEvaluation'])
             ->name('evaluation.show');
         
@@ -237,6 +245,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 영상 보기
         Route::get('/video/{id}/view', [AdminController::class, 'viewVideo'])
             ->name('video.view');
+        
+        // 영상 다운로드
+        Route::get('/video/{id}/download', [AdminController::class, 'downloadVideo'])
+            ->name('video.download');
         
         // 영상 스트리밍 URL 가져오기 (AJAX)
         Route::get('/video/{id}/stream-url', [AdminController::class, 'getVideoStreamUrl'])

@@ -457,6 +457,9 @@ class JudgeController extends Controller
             'creativity_score' => $request->creativity_score,
             'comments' => $request->comments
         ]);
+        
+        // 총점이 자동으로 계산되도록 refresh
+        $evaluation->refresh();
 
         // 다음 배정된 영상 확인 (videoSubmission이 존재하는 것만)
         $nextAssignment = VideoAssignment::where('admin_id', $judge->id)

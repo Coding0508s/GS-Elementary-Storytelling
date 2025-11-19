@@ -377,9 +377,14 @@
                             <i class="bi bi-speedometer2"></i> 대시보드
                         </a>
                         
-                        <a class="nav-link {{ request()->routeIs('admin.evaluation.*') ? 'active' : '' }}" 
+                        <a class="nav-link {{ request()->routeIs('admin.evaluation.*') && !request()->routeIs('admin.evaluation.ranking') ? 'active' : '' }}" 
                            href="{{ route('admin.evaluation.list') }}">
                             <i class="bi bi-clipboard-check"></i> 심사 관리
+                        </a>
+                        
+                        <a class="nav-link {{ request()->routeIs('admin.evaluation.ranking') ? 'active' : '' }}" 
+                           href="{{ route('admin.evaluation.ranking') }}">
+                            <i class="bi bi-trophy"></i> 평가 순위
                         </a>
                         
                         <a class="nav-link {{ request()->routeIs('admin.ai.evaluation.*') ? 'active' : '' }}" 

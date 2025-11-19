@@ -1365,6 +1365,8 @@ public function assignVideo(Request $request)
         // 2차 예선 진출자들 가져오기 (심사위원별 → 순위별 정렬)
         $qualifiedEvaluations = Evaluation::where('qualification_status', Evaluation::QUALIFICATION_QUALIFIED)
             ->with(['videoSubmission', 'admin'])
+            ->whereHas('videoSubmission')
+            ->whereHas('admin')
             ->orderBy('admin_id')
             ->orderBy('rank_by_judge')
             ->get();
@@ -1409,6 +1411,14 @@ public function assignVideo(Request $request)
         // 데이터 추가
         $rowIndex = 2;
         foreach ($qualifiedEvaluations as $evaluation) {
+            // videoSubmission과 admin이 없는 경우 건너뛰기
+            if (!$evaluation->videoSubmission || !$evaluation->admin) {
+                Log::warning('Excel 다운로드: videoSubmission 또는 admin이 없는 평가 건너뜀', [
+                    'evaluation_id' => $evaluation->id
+                ]);
+                continue;
+            }
+            
             $submission = $evaluation->videoSubmission;
             
             // 등급 계산 (70점 만점 기준)
@@ -1503,6 +1513,366 @@ public function assignVideo(Request $request)
         }
     }
     */
+
+    /**
+     * 평가 완료 영상 순위 페이지
+     */
+    public function evaluationRanking(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        try {
+            // Evaluation 테이블을 기준으로 조회 (더 안전함)
+            $evaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                ->whereHas('videoSubmission'); // soft-deleted되지 않은 videoSubmission만
+
+            // 검색 필터
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $evaluationQuery->whereHas('videoSubmission', function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%");
+                });
+            }
+
+            // 심사위원 필터
+            if ($request->filled('judge_id')) {
+                $evaluationQuery->where('admin_id', $request->judge_id);
+            }
+
+            // 모든 평가 가져오기
+            $evaluations = $evaluationQuery->get();
+
+            // Evaluation을 VideoAssignment 형태로 변환
+            $assignments = $evaluations->map(function($evaluation) {
+                // 해당 평가에 맞는 VideoAssignment 찾기
+                $assignment = VideoAssignment::where('video_submission_id', $evaluation->video_submission_id)
+                    ->where('admin_id', $evaluation->admin_id)
+                    ->with(['videoSubmission', 'admin'])
+                    ->first();
+                
+                // VideoAssignment가 없어도 Evaluation이 있으면 순위에 포함
+                // VideoAssignment가 없는 경우를 위해 가상 객체 생성
+                if (!$assignment && $evaluation->videoSubmission) {
+                    // 가상 VideoAssignment 객체 생성
+                    $assignment = new VideoAssignment();
+                    $assignment->id = 0; // 임시 ID
+                    $assignment->video_submission_id = $evaluation->video_submission_id;
+                    $assignment->admin_id = $evaluation->admin_id;
+                    $assignment->status = VideoAssignment::STATUS_COMPLETED;
+                    $assignment->setRelation('videoSubmission', $evaluation->videoSubmission);
+                    $assignment->setRelation('admin', $evaluation->admin);
+                }
+                
+                if ($assignment) {
+                    // evaluation 관계를 수동으로 설정
+                    $assignment->setRelation('evaluation', $evaluation);
+                    return $assignment;
+                }
+                return null;
+            })->filter(); // null 값 제거
+
+            // 순위 계산: 점수 내림차순, 동점일 경우 접수순(created_at 오름차순)
+            $rankedAssignments = $assignments->sort(function($a, $b) {
+                $scoreA = $a->evaluation ? $a->evaluation->total_score : 0;
+                $scoreB = $b->evaluation ? $b->evaluation->total_score : 0;
+                
+                // 1차 정렬: 총점 내림차순
+                if ($scoreA !== $scoreB) {
+                    return $scoreB <=> $scoreA;
+                }
+                
+                // 2차 정렬: 동점일 경우 접수순(created_at 오름차순)
+                $timeA = $a->videoSubmission ? $a->videoSubmission->created_at : now();
+                $timeB = $b->videoSubmission ? $b->videoSubmission->created_at : now();
+                return $timeA <=> $timeB;
+            })->values();
+
+            // 순위 부여
+            $rankedAssignments = $rankedAssignments->map(function($assignment, $index) {
+                $assignment->rank = $index + 1;
+                return $assignment;
+            });
+
+            // 페이지네이션
+            $perPage = $request->get('per_page', 50);
+            if (!in_array($perPage, [20, 50, 100, 200])) {
+                $perPage = 50;
+            }
+
+            $currentPage = $request->get('page', 1);
+            $total = $rankedAssignments->count();
+            $items = $rankedAssignments->forPage($currentPage, $perPage);
+            
+            // 페이지네이션 객체 생성
+            $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
+                $items,
+                $total,
+                $perPage,
+                $currentPage,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
+
+            // 심사위원 목록 (필터용)
+            $judges = Admin::where('role', 'judge')
+                ->orderBy('name')
+                ->get();
+
+            // 통계 정보
+            $totalCompleted = $rankedAssignments->count();
+            $totalJudges = $judges->count();
+
+            return view('admin.evaluation-ranking', compact(
+                'paginated',
+                'judges',
+                'totalCompleted',
+                'totalJudges'
+            ));
+
+        } catch (\Exception $e) {
+            Log::error('평가 순위 페이지 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()->with('error', '순위 페이지 로드 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 평가 순위 Excel 다운로드
+     */
+    public function downloadEvaluationRankingExcel(Request $request)
+    {
+        try {
+            // 관리자만 접근 가능하도록 체크
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return redirect()->route('judge.dashboard')
+                               ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+            }
+
+            // 메모리 및 타임아웃 설정
+            ini_set('memory_limit', '512M');
+            set_time_limit(300);
+
+            // Evaluation 테이블을 기준으로 조회 (순위 페이지와 동일한 로직)
+            $evaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                ->whereHas('videoSubmission');
+
+            // 검색 필터
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $evaluationQuery->whereHas('videoSubmission', function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%");
+                });
+            }
+
+            // 심사위원 필터
+            if ($request->filled('judge_id')) {
+                $evaluationQuery->where('admin_id', $request->judge_id);
+            }
+
+            // 모든 평가 가져오기
+            $evaluations = $evaluationQuery->get();
+
+            // Evaluation을 VideoAssignment 형태로 변환
+            $assignments = $evaluations->map(function($evaluation) {
+                $assignment = VideoAssignment::where('video_submission_id', $evaluation->video_submission_id)
+                    ->where('admin_id', $evaluation->admin_id)
+                    ->with(['videoSubmission', 'admin'])
+                    ->first();
+                
+                if (!$assignment && $evaluation->videoSubmission) {
+                    $assignment = new VideoAssignment();
+                    $assignment->id = 0;
+                    $assignment->video_submission_id = $evaluation->video_submission_id;
+                    $assignment->admin_id = $evaluation->admin_id;
+                    $assignment->status = VideoAssignment::STATUS_COMPLETED;
+                    $assignment->setRelation('videoSubmission', $evaluation->videoSubmission);
+                    $assignment->setRelation('admin', $evaluation->admin);
+                }
+                
+                if ($assignment) {
+                    $assignment->setRelation('evaluation', $evaluation);
+                    return $assignment;
+                }
+                return null;
+            })->filter();
+
+            // 순위 계산: 점수 내림차순, 동점일 경우 접수순
+            $rankedAssignments = $assignments->sort(function($a, $b) {
+                $scoreA = $a->evaluation ? $a->evaluation->total_score : 0;
+                $scoreB = $b->evaluation ? $b->evaluation->total_score : 0;
+                
+                if ($scoreA !== $scoreB) {
+                    return $scoreB <=> $scoreA;
+                }
+                
+                $timeA = $a->videoSubmission ? $a->videoSubmission->created_at : now();
+                $timeB = $b->videoSubmission ? $b->videoSubmission->created_at : now();
+                return $timeA <=> $timeB;
+            })->values();
+
+            // 순위 부여
+            $rankedAssignments = $rankedAssignments->map(function($assignment, $index) {
+                $assignment->rank = $index + 1;
+                return $assignment;
+            });
+
+            if ($rankedAssignments->isEmpty()) {
+                return back()->with('error', '다운로드할 평가 결과가 없습니다.');
+            }
+
+            // PhpSpreadsheet 사용
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('평가 순위');
+
+            // 헤더 설정
+            $headers = [
+                '순위', '접수번호', '학생명(한글)', '학생명(영어)', '기관명', '반명', '학년', '나이', '거주지역',
+                '심사위원', '총점', '발음', '어휘', '유창성', '자신감', '주제연결', '구성흐름', '창의성', '심사코멘트', '접수일시'
+            ];
+
+            // 헤더 스타일 설정
+            $headerStyle = [
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => 'FFFFFF'],
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => '4F46E5'],
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
+            ];
+
+            // 헤더 추가
+            foreach ($headers as $colIndex => $header) {
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
+                $sheet->setCellValue($column . '1', $header);
+                $sheet->getStyle($column . '1')->applyFromArray($headerStyle);
+            }
+
+            // 데이터 추가
+            $rowIndex = 2;
+            foreach ($rankedAssignments as $assignment) {
+                $submission = $assignment->videoSubmission;
+                $evaluation = $assignment->evaluation;
+                
+                if (!$submission || !$evaluation) {
+                    continue;
+                }
+
+                $colIndex = 0;
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $assignment->rank);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->receipt_number);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->student_name_korean);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->student_name_english);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->institution_name);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->class_name);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->grade);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->age);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->region);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $assignment->admin->name ?? '알 수 없음');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->total_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->pronunciation_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->vocabulary_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->fluency_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->confidence_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->topic_connection_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->structure_flow_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->creativity_score);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->comments ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->created_at->format('Y-m-d H:i:s'));
+                
+                $rowIndex++;
+            }
+
+            // 열 너비 자동 조정
+            foreach (range('A', \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers))) as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+
+            // 파일명 생성
+            $filename = 'evaluation_ranking_' . date('Y-m-d_H-i-s') . '.xlsx';
+
+            // Excel 파일 생성
+            $writer = new Xlsx($spreadsheet);
+            
+            // 임시 파일에 저장
+            $tempFile = storage_path('app/temp/' . $filename);
+            if (!file_exists(dirname($tempFile))) {
+                mkdir(dirname($tempFile), 0755, true);
+            }
+            
+            $writer->save($tempFile);
+
+            // 파일 다운로드
+            return response()->download($tempFile, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+
+        } catch (\Exception $e) {
+            Log::error('평가 순위 Excel 다운로드 오류: ' . $e->getMessage(), [
+                'admin_id' => Auth::guard('admin')->id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()->with('error', 'Excel 다운로드 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
 
     /**
      * 기관명 목록 페이지
@@ -1997,7 +2367,15 @@ public function assignVideo(Request $request)
     public function showAiEvaluation($id)
     {
         try {
-            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])->findOrFail($id);
+            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])
+                ->whereHas('videoSubmission')
+                ->whereHas('admin')
+                ->findOrFail($id);
+            
+            // null 체크
+            if (!$aiEvaluation->videoSubmission || !$aiEvaluation->admin) {
+                return back()->with('error', 'AI 평가 결과의 관련 데이터를 찾을 수 없습니다.');
+            }
             
             return view('admin.ai-evaluation-detail', compact('aiEvaluation'));
 
@@ -2057,17 +2435,28 @@ public function assignVideo(Request $request)
     {
         try {
             Log::info('AI 평가 상세 조회 요청', ['id' => $id]);
-            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])->findOrFail($id);
+            $aiEvaluation = AiEvaluation::with(['videoSubmission', 'admin'])
+                ->whereHas('videoSubmission')
+                ->whereHas('admin')
+                ->findOrFail($id);
             Log::info('AI 평가 상세 조회 성공', ['id' => $id, 'status' => $aiEvaluation->processing_status]);
+            
+            // null 체크
+            if (!$aiEvaluation->videoSubmission || !$aiEvaluation->admin) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI 평가 결과의 관련 데이터를 찾을 수 없습니다.'
+                ], 404);
+            }
             
             return response()->json([
                 'success' => true,
                 'data' => [
                     'id' => $aiEvaluation->id,
-                    'student_name' => $aiEvaluation->videoSubmission->student_name_korean,
-                    'student_name_english' => $aiEvaluation->videoSubmission->student_name_english,
-                    'institution' => $aiEvaluation->videoSubmission->institution_name,
-                    'class_name' => $aiEvaluation->videoSubmission->class_name,
+                    'student_name' => $aiEvaluation->videoSubmission->student_name_korean ?? '',
+                    'student_name_english' => $aiEvaluation->videoSubmission->student_name_english ?? '',
+                    'institution' => $aiEvaluation->videoSubmission->institution_name ?? '',
+                    'class_name' => $aiEvaluation->videoSubmission->class_name ?? '',
                     'pronunciation_score' => $aiEvaluation->pronunciation_score,
                     'vocabulary_score' => $aiEvaluation->vocabulary_score,
                     'fluency_score' => $aiEvaluation->fluency_score,
@@ -2123,6 +2512,48 @@ public function assignVideo(Request $request)
         } catch (\Exception $e) {
             Log::error('영상 보기 오류: ' . $e->getMessage());
             return back()->with('error', '영상을 불러오는 중 오류가 발생했습니다.');
+        }
+    }
+
+    /**
+     * 영상 다운로드 (관리자용)
+     */
+    public function downloadVideo($id)
+    {
+        try {
+            $submission = VideoSubmission::findOrFail($id);
+            
+            // S3 또는 로컬 스토리지에 따라 다른 다운로드 방법 사용
+            if ($submission->isStoredOnS3()) {
+                // S3 다운로드 URL 생성 (1시간 유효)
+                $downloadUrl = $submission->getS3DownloadUrl(1);
+                
+                // 한글 파일명으로 인한 오류 발생 시 안전한 방법 시도
+                if (!$downloadUrl) {
+                    $downloadUrl = $submission->getSafeS3DownloadUrl(1);
+                }
+
+                if (!$downloadUrl) {
+                    return back()->with('error', '영상 다운로드 링크를 생성할 수 없습니다.');
+                }
+
+                return redirect($downloadUrl);
+            } else {
+                // 로컬 파일 직접 다운로드
+                $filePath = storage_path('app/public/' . $submission->video_file_path);
+                
+                if (!file_exists($filePath)) {
+                    return back()->with('error', '영상 파일을 찾을 수 없습니다.');
+                }
+
+                return response()->download($filePath, $submission->video_file_name);
+            }
+
+        } catch (ModelNotFoundException $e) {
+            return back()->with('error', '존재하지 않는 영상입니다.');
+        } catch (\Exception $e) {
+            Log::error('영상 다운로드 오류: ' . $e->getMessage());
+            return back()->with('error', '영상 다운로드 중 오류가 발생했습니다.');
         }
     }
 
@@ -2942,16 +3373,21 @@ public function assignVideo(Request $request)
 
             // 최근 처리된 평가들 (최근 10개)
             $recentEvaluations = AiEvaluation::with(['videoSubmission', 'admin'])
+                ->whereHas('videoSubmission')
+                ->whereHas('admin')
                 ->where('processing_status', AiEvaluation::STATUS_COMPLETED)
                 ->orderBy('processed_at', 'desc')
                 ->limit(10)
                 ->get()
+                ->filter(function($evaluation) {
+                    return $evaluation->videoSubmission && $evaluation->admin;
+                })
                 ->map(function($evaluation) {
                     return [
                         'id' => $evaluation->id,
-                        'student_name' => $evaluation->videoSubmission->student_name_korean,
-                        'institution' => $evaluation->videoSubmission->institution_name,
-                        'total_score' => $evaluation->total_score,
+                        'student_name' => $evaluation->videoSubmission->student_name_korean ?? '',
+                        'institution' => $evaluation->videoSubmission->institution_name ?? '',
+                        'total_score' => $evaluation->total_score ?? 0,
                         'processed_at' => $evaluation->processed_at ? $evaluation->processed_at->format('Y-m-d H:i:s') : null,
                         'admin_name' => $evaluation->admin->name ?? '시스템'
                     ];
