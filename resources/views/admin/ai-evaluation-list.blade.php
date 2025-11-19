@@ -201,8 +201,8 @@
                                         <button type="button" 
                                                 class="btn btn-sm btn-outline-warning mt-1 reevaluate-btn"
                                                 data-ai-evaluation-id="{{ $aiEvaluation->id }}"
-                                                title="AI 재채점">
-                                            <i class="bi bi-arrow-clockwise"></i> 재채점
+                                                title="AI 재평가 하기">
+                                            <i class="bi bi-arrow-clockwise"></i> 재평가 하기
                                         </button>
                                     @elseif($aiEvaluation->processing_status === 'failed')
                                         <button type="button" 
