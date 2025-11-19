@@ -207,6 +207,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/ai-evaluation/{id}', [AdminController::class, 'getAiEvaluationDetail'])
             ->name('ai-evaluation.detail');
         
+        Route::post('/ai-evaluation/{id}/reevaluate', [AdminController::class, 'reevaluateAiEvaluation'])
+            ->name('ai-evaluation.reevaluate');
+        
         // 영상 일괄 삭제
         Route::post('/videos/delete', [AdminController::class, 'deleteSelectedVideos'])
             ->name('videos.delete');

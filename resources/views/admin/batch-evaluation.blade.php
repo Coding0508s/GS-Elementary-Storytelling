@@ -918,6 +918,12 @@ document.addEventListener('DOMContentLoaded', function() {
 function toggleTableRefresh() {
     const btn = document.getElementById('table-refresh-btn');
     
+    // 버튼이 존재하지 않으면 함수 종료
+    if (!btn) {
+        console.warn('테이블 새로고침 버튼을 찾을 수 없습니다.');
+        return;
+    }
+    
     if (isTableRefreshEnabled) {
         // 테이블 새로고침 중지
         if (tableRefreshInterval) {

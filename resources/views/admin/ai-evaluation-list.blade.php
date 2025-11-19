@@ -104,6 +104,7 @@
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
+                            <th>접수번호</th>
                             <th>학생명</th>
                             <th>학교/학년</th>
                             <th>평가자</th>
@@ -119,6 +120,9 @@
                     <tbody>
                         @foreach($aiEvaluations as $aiEvaluation)
                         <tr class="evaluation-row" data-status="{{ $aiEvaluation->processing_status }}">
+                            <td>
+                                <code class="text-primary">{{ $aiEvaluation->videoSubmission->receipt_number }}</code>
+                            </td>
                             <td>
                                 <strong>{{ $aiEvaluation->videoSubmission->student_name_korean }}</strong><br>
                                 <small class="text-muted">{{ $aiEvaluation->videoSubmission->student_name_english }}</small>
@@ -194,12 +198,24 @@
                                                 title="AI 평가 상세 보기">
                                             <i class="bi bi-eye"></i> 상세
                                         </button>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-warning mt-1 reevaluate-btn"
+                                                data-ai-evaluation-id="{{ $aiEvaluation->id }}"
+                                                title="AI 재채점">
+                                            <i class="bi bi-arrow-clockwise"></i> 재채점
+                                        </button>
                                     @elseif($aiEvaluation->processing_status === 'failed')
                                         <button type="button" 
                                                 class="btn btn-sm btn-outline-danger view-error-btn"
                                                 data-error-message="{{ $aiEvaluation->error_message }}"
                                                 title="오류 메시지 보기">
                                             <i class="bi bi-exclamation-triangle"></i> 오류
+                                        </button>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-warning mt-1 reevaluate-btn"
+                                                data-ai-evaluation-id="{{ $aiEvaluation->id }}"
+                                                title="AI 재평가 하기">
+                                            <i class="bi bi-arrow-clockwise"></i> 재평가 하기
                                         </button>
                                     @endif
                                     
@@ -457,6 +473,17 @@ document.addEventListener('DOMContentLoaded', function() {
             
             alert('오류 메시지:\n' + errorMessage);
         }
+        
+        // 재채점 버튼 클릭 이벤트
+        if (e.target.closest('.reevaluate-btn')) {
+            e.preventDefault();
+            const button = e.target.closest('.reevaluate-btn');
+            const aiEvaluationId = button.dataset.aiEvaluationId;
+            
+            if (confirm('이 평가를 다시 채점하시겠습니까?\n\n기존 채점 결과가 새로운 결과로 대체됩니다.')) {
+                reevaluateAiEvaluation(aiEvaluationId, button);
+            }
+        }
     });
 
     // AI 평가 상세 모달 표시 함수
@@ -590,6 +617,50 @@ document.addEventListener('DOMContentLoaded', function() {
             default:
                 return '<span class="badge bg-secondary">대기</span>';
         }
+    }
+
+    // AI 재채점 함수
+    function reevaluateAiEvaluation(aiEvaluationId, button) {
+        const originalHtml = button.innerHTML;
+        const originalDisabled = button.disabled;
+        
+        // 버튼 비활성화 및 로딩 상태
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 재채점 중...';
+        
+        fetch(`{{ url('/admin/ai-evaluation') }}/${aiEvaluationId}/reevaluate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ 재채점이 완료되었습니다.\n\n새로운 채점 결과가 반영되었습니다.');
+                
+                // 페이지 새로고침
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                alert('❌ 재채점 실패: ' + (data.message || '알 수 없는 오류가 발생했습니다.'));
+                
+                // 버튼 복원
+                button.disabled = originalDisabled;
+                button.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ 재채점 중 오류가 발생했습니다.');
+            
+            // 버튼 복원
+            button.disabled = originalDisabled;
+            button.innerHTML = originalHtml;
+        });
     }
 
     // AI 채점 결과 초기화 기능

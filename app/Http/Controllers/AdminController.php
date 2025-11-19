@@ -3351,6 +3351,128 @@ public function assignVideo(Request $request)
     }
 
     /**
+     * AI 평가 재채점
+     */
+    public function reevaluateAiEvaluation(Request $request, $aiEvaluationId)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => '관리자만 접근할 수 있습니다.'
+            ], 403);
+        }
+
+        try {
+            // AI 평가 정보 확인
+            $aiEvaluation = AiEvaluation::find($aiEvaluationId);
+            if (!$aiEvaluation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI 평가를 찾을 수 없습니다.'
+                ], 404);
+            }
+
+            // 영상 제출 정보 확인
+            $submission = $aiEvaluation->videoSubmission;
+            if (!$submission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '영상 정보를 찾을 수 없습니다.'
+                ], 404);
+            }
+
+            // 영상 파일 존재 여부 확인
+            if (!$this->checkVideoFileExists($submission)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '영상 파일이 존재하지 않습니다.'
+                ], 400);
+            }
+
+            // 이미 처리 중인지 확인
+            if ($aiEvaluation->processing_status === AiEvaluation::STATUS_PROCESSING) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '이미 처리 중인 평가입니다.'
+                ], 400);
+            }
+
+            // AI 평가 상태를 처리 중으로 변경
+            $aiEvaluation->update([
+                'processing_status' => AiEvaluation::STATUS_PROCESSING,
+                'error_message' => null,
+                'ai_feedback' => '재채점 처리 중입니다. 영상 길이에 따라 5-15분 소요될 수 있습니다.'
+            ]);
+
+            // OpenAI API를 사용한 실제 AI 평가 처리
+            try {
+                $openAiService = new OpenAiService();
+                $result = $openAiService->evaluateVideo($submission->video_file_path);
+
+                // 결과 저장
+                $aiEvaluation->update([
+                    'pronunciation_score' => $result['pronunciation_score'],
+                    'vocabulary_score' => $result['vocabulary_score'],
+                    'fluency_score' => $result['fluency_score'],
+                    'transcription' => $result['transcription'],
+                    'ai_feedback' => $result['ai_feedback'],
+                    'processing_status' => AiEvaluation::STATUS_COMPLETED,
+                    'processed_at' => now()
+                ]);
+
+                // 총점 계산
+                $aiEvaluation->calculateTotalScore();
+                $aiEvaluation->save();
+
+                Log::info('AI 재채점 완료', [
+                    'admin_id' => $admin->id,
+                    'ai_evaluation_id' => $aiEvaluationId,
+                    'submission_id' => $submission->id,
+                    'total_score' => $aiEvaluation->total_score
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'AI 재채점이 성공적으로 완료되었습니다.',
+                    'ai_evaluation_id' => $aiEvaluation->id
+                ]);
+
+            } catch (\Exception $e) {
+                Log::error('AI 재채점 실패', [
+                    'admin_id' => $admin->id,
+                    'ai_evaluation_id' => $aiEvaluationId,
+                    'submission_id' => $submission->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                $aiEvaluation->update([
+                    'processing_status' => AiEvaluation::STATUS_FAILED,
+                    'error_message' => $e->getMessage()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI 재채점 중 오류가 발생했습니다: ' . $e->getMessage()
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('AI 재채점 시작 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'ai_evaluation_id' => $aiEvaluationId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'AI 재채점 시작 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * 영상 파일 존재 여부 확인
      */
     private function checkVideoFileExists($submission)

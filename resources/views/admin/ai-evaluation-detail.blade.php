@@ -6,6 +6,14 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-robot"></i> AI 채점 결과 상세</h1>
     <div class="d-flex gap-2">
+        @if($aiEvaluation->processing_status === 'completed' || $aiEvaluation->processing_status === 'failed')
+        <button type="button" 
+                class="btn btn-warning" 
+                id="reevaluate-btn"
+                data-ai-evaluation-id="{{ $aiEvaluation->id }}">
+            <i class="bi bi-arrow-clockwise"></i> 재채점
+        </button>
+        @endif
         <a href="{{ route('admin.ai.evaluation.list') }}" 
            class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> 목록으로
@@ -264,6 +272,18 @@
 document.addEventListener('DOMContentLoaded', function() {
     const videoId = {{ $aiEvaluation->videoSubmission->id }};
     
+    // 재채점 버튼 이벤트
+    const reevaluateBtn = document.getElementById('reevaluate-btn');
+    if (reevaluateBtn) {
+        reevaluateBtn.addEventListener('click', function() {
+            const aiEvaluationId = this.dataset.aiEvaluationId;
+            
+            if (confirm('이 평가를 다시 채점하시겠습니까?\n\n기존 채점 결과가 새로운 결과로 대체됩니다.')) {
+                reevaluateAiEvaluation(aiEvaluationId, this);
+            }
+        });
+    }
+    
     // 영상 URL 가져오기
     fetch(`/admin/video/${videoId}/stream-url`, {
         method: 'GET',
@@ -327,8 +347,52 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('영상 로드 오류:', error);
         document.getElementById('video-loading').classList.add('d-none');
         document.getElementById('video-error').classList.remove('d-none');
-        document.getElementById('video-error-message').textContent = error.message || '영상을 불러오는 중 오류가 발생했습니다.';
-    });
+            document.getElementById('video-error-message').textContent = error.message || '영상을 불러오는 중 오류가 발생했습니다.';
+        });
+    
+    // AI 재채점 함수
+    function reevaluateAiEvaluation(aiEvaluationId, button) {
+        const originalHtml = button.innerHTML;
+        const originalDisabled = button.disabled;
+        
+        // 버튼 비활성화 및 로딩 상태
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 재채점 중...';
+        
+        fetch(`{{ url('/admin/ai-evaluation') }}/${aiEvaluationId}/reevaluate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ 재채점이 완료되었습니다.\n\n새로운 채점 결과가 반영되었습니다.');
+                
+                // 2초 후 페이지 새로고침
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                alert('❌ 재채점 실패: ' + (data.message || '알 수 없는 오류가 발생했습니다.'));
+                
+                // 버튼 복원
+                button.disabled = originalDisabled;
+                button.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ 재채점 중 오류가 발생했습니다.');
+            
+            // 버튼 복원
+            button.disabled = originalDisabled;
+            button.innerHTML = originalHtml;
+        });
+    }
 });
 </script>
 @endpush
