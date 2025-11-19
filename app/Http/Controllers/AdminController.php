@@ -1937,17 +1937,22 @@ public function assignVideo(Request $request)
                 'request_params' => $request->all()
             ]);
 
+            // soft-deleted되지 않은 video_submission과 admin이 있는 평가만 조회
             $query = AiEvaluation::with(['videoSubmission', 'admin'])
-                ->join('video_submissions', 'ai_evaluations.video_submission_id', '=', 'video_submissions.id')
-                ->select('ai_evaluations.*');
+                ->whereHas('videoSubmission', function($q) {
+                    // soft-deleted되지 않은 video_submission만
+                })
+                ->whereHas('admin', function($q) {
+                    // admin이 존재하는 것만
+                });
 
             // 검색 필터
             if ($request->filled('search')) {
                 $search = $request->search;
-                $query->where(function($q) use ($search) {
-                    $q->where('video_submissions.student_name_korean', 'like', "%{$search}%")
-                      ->orWhere('video_submissions.student_name_english', 'like', "%{$search}%")
-                      ->orWhere('video_submissions.institution_name', 'like', "%{$search}%");
+                $query->whereHas('videoSubmission', function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%");
                 });
             }
 

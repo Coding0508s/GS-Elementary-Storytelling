@@ -119,9 +119,10 @@
                     </thead>
                     <tbody>
                         @foreach($aiEvaluations as $aiEvaluation)
+                        @if($aiEvaluation->videoSubmission && $aiEvaluation->admin)
                         <tr class="evaluation-row" data-status="{{ $aiEvaluation->processing_status }}">
                             <td>
-                                <code class="text-primary">{{ $aiEvaluation->videoSubmission->receipt_number }}</code>
+                                <code class="text-primary">{{ $aiEvaluation->videoSubmission->receipt_number ?? '-' }}</code>
                             </td>
                             <td>
                                 <strong>{{ $aiEvaluation->videoSubmission->student_name_korean }}</strong><br>
@@ -220,15 +221,18 @@
                                     @endif
                                     
                                     <!-- 비디오 보기 버튼 -->
+                                    @if($aiEvaluation->videoSubmission)
                                     <button type="button" 
                                             class="btn btn-sm btn-outline-info mt-1"
                                             onclick="showVideoModal({{ $aiEvaluation->videoSubmission->id }}, {{ json_encode($aiEvaluation->videoSubmission->student_name_korean) }}, {{ json_encode($aiEvaluation->videoSubmission->video_file_name) }})"
                                             title="영상 보기">
                                         <i class="bi bi-play-circle"></i> 영상
                                     </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
+                        @endif
                         @endforeach
                     </tbody>
                 </table>
