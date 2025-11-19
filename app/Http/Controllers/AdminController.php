@@ -2599,9 +2599,14 @@ public function assignVideo(Request $request)
                 'request_params' => $request->all()
             ]);
 
+            // soft-deleted되지 않은 video_submission과 admin이 있는 평가만 조회
             $query = AiEvaluation::with(['videoSubmission', 'admin'])
-                ->join('video_submissions', 'ai_evaluations.video_submission_id', '=', 'video_submissions.id')
-                ->select('ai_evaluations.*');
+                ->whereHas('videoSubmission', function($q) {
+                    // soft-deleted되지 않은 video_submission만
+                })
+                ->whereHas('admin', function($q) {
+                    // admin이 존재하는 것만
+                });
 
             // 완료된 평가만 다운로드
             $query->where('ai_evaluations.processing_status', AiEvaluation::STATUS_COMPLETED);
@@ -2613,10 +2618,10 @@ public function assignVideo(Request $request)
             // 검색 필터 적용
             if ($request->filled('search')) {
                 $search = $request->search;
-                $query->where(function($q) use ($search) {
-                    $q->where('video_submissions.student_name_korean', 'like', "%{$search}%")
-                      ->orWhere('video_submissions.student_name_english', 'like', "%{$search}%")
-                      ->orWhere('video_submissions.institution_name', 'like', "%{$search}%");
+                $query->whereHas('videoSubmission', function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%");
                 });
             }
 
@@ -2680,17 +2685,25 @@ public function assignVideo(Request $request)
             // 데이터 행 추가 (AI가 평가하는 3개 항목만)
             $row = 2;
             foreach ($aiEvaluations as $evaluation) {
+                // videoSubmission과 admin이 없는 경우 건너뛰기
+                if (!$evaluation->videoSubmission || !$evaluation->admin) {
+                    Log::warning('Excel 다운로드: videoSubmission 또는 admin이 없는 평가 건너뜀', [
+                        'evaluation_id' => $evaluation->id
+                    ]);
+                    continue;
+                }
+                
                 $data = [
-                    $evaluation->videoSubmission->id,
-                    $evaluation->videoSubmission->student_name_korean,
-                    $evaluation->videoSubmission->student_name_english,
-                    $evaluation->videoSubmission->institution_name,
-                    $evaluation->videoSubmission->grade,
-                    $evaluation->videoSubmission->age,
-                    $evaluation->pronunciation_score,
-                    $evaluation->vocabulary_score,
-                    $evaluation->fluency_score,
-                    $evaluation->total_score,
+                    $evaluation->videoSubmission->id ?? '',
+                    $evaluation->videoSubmission->student_name_korean ?? '',
+                    $evaluation->videoSubmission->student_name_english ?? '',
+                    $evaluation->videoSubmission->institution_name ?? '',
+                    $evaluation->videoSubmission->grade ?? '',
+                    $evaluation->videoSubmission->age ?? '',
+                    $evaluation->pronunciation_score ?? 0,
+                    $evaluation->vocabulary_score ?? 0,
+                    $evaluation->fluency_score ?? 0,
+                    $evaluation->total_score ?? 0,
                     $evaluation->ai_feedback ?? '',
                     $evaluation->transcription ?? '',
                     $evaluation->processed_at ? $evaluation->processed_at->format('Y-m-d H:i:s') : '',
