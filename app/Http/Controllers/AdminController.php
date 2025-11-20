@@ -2375,6 +2375,7 @@ public function assignVideo(Request $request)
 
         try {
             $judge = Admin::where('role', 'judge')->findOrFail($id);
+            $previousStatus = $judge->is_active;
             
             // 상태 전환
             $judge->update([
@@ -2383,22 +2384,67 @@ public function assignVideo(Request $request)
 
             $status = $judge->is_active ? '활성화' : '비활성화';
             
+            // 비활성화할 때만 평가 데이터 초기화
+            if (!$judge->is_active && $previousStatus) {
+                // 해당 심사위원의 평가 기록(Evaluation) 삭제
+                // AI 채점 기록(AiEvaluation)은 유지
+                $evaluationCount = Evaluation::where('admin_id', $judge->id)->count();
+                Evaluation::where('admin_id', $judge->id)->delete();
+                
+                // 해당 심사위원의 배정(VideoAssignment) 상태 초기화 및 삭제
+                $assignments = VideoAssignment::where('admin_id', $judge->id)->get();
+                $assignmentCount = $assignments->count();
+                
+                foreach ($assignments as $assignment) {
+                    // completed 상태인 경우 상태를 assigned로 초기화
+                    if ($assignment->status === VideoAssignment::STATUS_COMPLETED) {
+                        $assignment->update([
+                            'status' => VideoAssignment::STATUS_ASSIGNED,
+                            'completed_at' => null,
+                            'started_at' => null
+                        ]);
+                    }
+                    // 배정 삭제
+                    $assignment->delete();
+                }
+                
+                Log::info('심사위원 비활성화 및 평가 데이터 초기화', [
+                    'admin_id' => $admin->id,
+                    'admin_name' => $admin->name,
+                    'judge_id' => $judge->id,
+                    'judge_name' => $judge->name,
+                    'evaluations_deleted' => $evaluationCount,
+                    'assignments_deleted' => $assignmentCount,
+                    'timestamp' => now()
+                ]);
+            }
+            
             \Log::info('심사위원 상태 변경', [
                 'admin_id' => $admin->id,
                 'admin_name' => $admin->name,
                 'judge_id' => $judge->id,
                 'judge_name' => $judge->name,
                 'new_status' => $judge->is_active ? 'active' : 'inactive',
+                'previous_status' => $previousStatus ? 'active' : 'inactive',
                 'timestamp' => now()
             ]);
 
-            return back()->with('success', "심사위원 '{$judge->name}'이(가) {$status}되었습니다.");
+            $message = "심사위원 '{$judge->name}'이(가) {$status}되었습니다.";
+            if (!$judge->is_active && $previousStatus) {
+                $message .= " (평가 데이터가 초기화되었습니다.)";
+            }
+
+            return back()->with('success', $message);
 
         } catch (ModelNotFoundException $e) {
             return back()->with('error', '존재하지 않는 심사위원입니다.');
         } catch (\Exception $e) {
-            \Log::error('심사위원 상태 변경 오류: ' . $e->getMessage());
-            return back()->with('error', '심사위원 상태 변경 중 오류가 발생했습니다.');
+            \Log::error('심사위원 상태 변경 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'judge_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return back()->with('error', '심사위원 상태 변경 중 오류가 발생했습니다: ' . $e->getMessage());
         }
     }
 
