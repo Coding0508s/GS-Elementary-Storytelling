@@ -205,9 +205,9 @@
         }
         
         .table-admin th {
-            background: linear-gradient(45deg, #667eea, #764ba2);
+            background:rgb(72, 83, 131);
             color: white;
-            border: none;
+            border: underline rgb(72, 83, 131);
         }
         
         .badge-evaluated {
@@ -255,15 +255,17 @@
         .table th {
             border-top: none;
             font-weight: 600;
-            color: #495057;
-            background-color: #f8f9fa;
+            color:rgb(0, 0, 0);
+            background-color:rgb(218, 227, 238);
             padding: 1rem 0.75rem;
             white-space: nowrap;
+            text-align: center;
         }
         
         .table td {
             padding: 0.75rem;
             vertical-align: middle;
+            text-align: center;
         }
         
         /* 작은 화면에서 테이블 스크롤 개선 */
