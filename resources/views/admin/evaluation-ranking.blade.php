@@ -75,7 +75,7 @@
 
 <!-- 통계 요약 -->
 <div class="row mb-4">
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <div class="display-4 text-primary mb-2">
@@ -86,7 +86,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <div class="display-4 text-success mb-2">
@@ -97,7 +97,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <div class="display-4 text-info mb-2">
@@ -108,17 +108,76 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-warning mb-2">
+                    <i class="bi bi-award"></i>
+                </div>
+                <h3 class="text-warning">{{ number_format($awardStats['jenny'] + $awardStats['cookie'] + $awardStats['marvin']) }}</h3>
+                <p class="card-text text-muted">시상 선정</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 시상별 통계 -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card h-100 border-start border-4 border-warning">
+            <div class="card-body text-center">
+                <div class="display-4 text-warning mb-2">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <h3 class="text-warning" id="award-jenny-count">{{ number_format($awardStats['jenny']) }}</h3>
+                <p class="card-text text-muted">Jenny 상<br><small>(가족 참여상)</small></p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card h-100 border-start border-4 border-info">
+            <div class="card-body text-center">
+                <div class="display-4 text-info mb-2">
+                    <i class="bi bi-lightbulb-fill"></i>
+                </div>
+                <h3 class="text-info" id="award-cookie-count">{{ number_format($awardStats['cookie']) }}</h3>
+                <p class="card-text text-muted">Cookie 상<br><small>(크리에이티브상)</small></p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card h-100 border-start border-4 border-danger">
+            <div class="card-body text-center">
+                <div class="display-4 text-danger mb-2">
+                    <i class="bi bi-fire"></i>
+                </div>
+                <h3 class="text-danger" id="award-marvin-count">{{ number_format($awardStats['marvin']) }}</h3>
+                <p class="card-text text-muted">Marvin 상<br><small>(열정상)</small></p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 순위 목록 -->
 <div class="card admin-card">
     <div class="card-header">
-        <h5 class="mb-0">
-            <i class="bi bi-trophy"></i> 
-            평가 순위 
-            <span class="badge bg-light text-dark ms-2">{{ $paginated->total() }}개</span>
-            <small class="text-muted ms-2">(점수순, 동점 시 접수순)</small>
-        </h5>
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-trophy"></i> 
+                평가 순위 
+                <span class="badge bg-light text-dark ms-2">{{ $paginated->total() }}개</span>
+                <small class="text-muted ms-2">(점수순, 동점 시 접수순)</small>
+            </h5>
+            <div class="form-check form-switch">
+                <input class="form-check-input" 
+                       type="checkbox" 
+                       id="showDetailScores" 
+                       checked>
+                <label class="form-check-label" for="showDetailScores">
+                    상세 점수 표시
+                </label>
+            </div>
+        </div>
     </div>
     <div class="card-body">
         @if($paginated->count() > 0)
@@ -132,6 +191,7 @@
                             <th>기관 정보</th>
                             <th>심사위원</th>
                             <th class="text-center">점수</th>
+                            <th class="text-center">시상</th>
                             <th>접수일시</th>
                             <th width="120">작업</th>
                         </tr>
@@ -183,7 +243,7 @@
                                     <span class="badge bg-primary fs-6 mb-1">
                                         {{ $evaluation->total_score }}/70
                                     </span>
-                                    <small class="text-muted">
+                                    <small class="text-muted detail-scores">
                                         <div class="row g-1 mt-1" style="font-size: 0.75rem;">
                                             <div class="col-6">발음 {{ $evaluation->pronunciation_score }}/10</div>
                                             <div class="col-6">어휘 {{ $evaluation->vocabulary_score }}/10</div>
@@ -195,6 +255,17 @@
                                         </div>
                                     </small>
                                 </div>
+                            </td>
+                            
+                            <td class="text-center">
+                                <select class="form-select form-select-sm award-select" 
+                                        data-evaluation-id="{{ $evaluation->id }}"
+                                        style="min-width: 130px;">
+                                    <option value="">한정판 마그넷</option>
+                                    <option value="Jenny" {{ $evaluation->award === 'Jenny' ? 'selected' : '' }}>Jenny상(가족 참여상)</option>
+                                    <option value="Cookie" {{ $evaluation->award === 'Cookie' ? 'selected' : '' }}>Cookie상(크리에이티브상)</option>
+                                    <option value="Marvin" {{ $evaluation->award === 'Marvin' ? 'selected' : '' }}>Marvin상(열정상)</option>
+                                </select>
                             </td>
                             
                             <td>
@@ -297,6 +368,9 @@
 let autoRefreshInterval = null;
 let isAutoRefreshEnabled = false;
 
+// 상세 점수 표시 관련 변수
+const DETAIL_SCORES_KEY = 'evaluation_ranking_show_detail_scores';
+
 document.addEventListener('DOMContentLoaded', function() {
     // 검색 폼 자동 제출 (디바운스)
     let searchTimeout;
@@ -319,7 +393,45 @@ document.addEventListener('DOMContentLoaded', function() {
             toggleAutoRefresh();
         });
     }
+    
+    // 상세 점수 표시 토글 초기화
+    const showDetailScoresCheckbox = document.getElementById('showDetailScores');
+    if (showDetailScoresCheckbox) {
+        // localStorage에서 저장된 설정 불러오기
+        const savedSetting = localStorage.getItem(DETAIL_SCORES_KEY);
+        const shouldShow = savedSetting !== null ? savedSetting === 'true' : true; // 기본값: true
+        
+        showDetailScoresCheckbox.checked = shouldShow;
+        toggleDetailScores(shouldShow);
+        
+        // 체크박스 변경 이벤트
+        showDetailScoresCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            toggleDetailScores(isChecked);
+            localStorage.setItem(DETAIL_SCORES_KEY, isChecked.toString());
+        });
+    }
+    
+    // 시상 선택 드롭다운 이벤트
+    const awardSelects = document.querySelectorAll('.award-select');
+    awardSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            updateAward(this);
+        });
+    });
 });
+
+// 상세 점수 표시/숨김 토글 함수
+function toggleDetailScores(show) {
+    const detailScoresElements = document.querySelectorAll('.detail-scores');
+    detailScoresElements.forEach(element => {
+        if (show) {
+            element.style.display = '';
+        } else {
+            element.style.display = 'none';
+        }
+    });
+}
 
 // 자동 새로고침 토글 함수
 function toggleAutoRefresh() {
@@ -379,6 +491,21 @@ function refreshRankingData() {
             // 같은 페이지일 때만 업데이트
             if (currentPage === newPage) {
                 currentTableBody.innerHTML = newTableBody.innerHTML;
+                
+                // 시상 선택 드롭다운 이벤트 다시 바인딩
+                const awardSelects = document.querySelectorAll('.award-select');
+                awardSelects.forEach(select => {
+                    select.addEventListener('change', function() {
+                        updateAward(this);
+                    });
+                });
+                
+                // 상세 점수 표시 설정 유지
+                const showDetailScoresCheckbox = document.getElementById('showDetailScores');
+                if (showDetailScoresCheckbox) {
+                    toggleDetailScores(showDetailScoresCheckbox.checked);
+                }
+                
                 console.log('순위 테이블 데이터 새로고침 완료');
             }
         }
@@ -400,6 +527,7 @@ function refreshRankingData() {
 
 // 통계 카드 업데이트 함수
 function updateStatisticsCards(newDoc) {
+    // 기본 통계 카드 업데이트
     const newStatsCards = newDoc.querySelectorAll('.stats-card h3');
     const currentStatsCards = document.querySelectorAll('.stats-card h3');
     
@@ -410,6 +538,55 @@ function updateStatisticsCards(newDoc) {
             }
         });
     }
+    
+    // 시상별 통계 카드 업데이트
+    const awardCounts = {
+        'jenny': newDoc.querySelector('#award-jenny-count'),
+        'cookie': newDoc.querySelector('#award-cookie-count'),
+        'marvin': newDoc.querySelector('#award-marvin-count')
+    };
+    
+    const currentAwardCounts = {
+        'jenny': document.querySelector('#award-jenny-count'),
+        'cookie': document.querySelector('#award-cookie-count'),
+        'marvin': document.querySelector('#award-marvin-count')
+    };
+    
+    Object.keys(awardCounts).forEach(key => {
+        if (awardCounts[key] && currentAwardCounts[key]) {
+            currentAwardCounts[key].textContent = awardCounts[key].textContent;
+        }
+    });
+}
+
+// 시상 통계 표시 업데이트 함수 (서버에서 받은 통계로 업데이트)
+function updateAwardStatisticsDisplay(stats) {
+    const jennyElement = document.querySelector('#award-jenny-count');
+    const cookieElement = document.querySelector('#award-cookie-count');
+    const marvinElement = document.querySelector('#award-marvin-count');
+    
+    if (jennyElement && stats.jenny !== undefined) {
+        jennyElement.textContent = formatNumber(stats.jenny);
+    }
+    if (cookieElement && stats.cookie !== undefined) {
+        cookieElement.textContent = formatNumber(stats.cookie);
+    }
+    if (marvinElement && stats.marvin !== undefined) {
+        marvinElement.textContent = formatNumber(stats.marvin);
+    }
+    
+    // 시상 선정 총합도 업데이트
+    const totalAwarded = (stats.jenny || 0) + (stats.cookie || 0) + (stats.marvin || 0);
+    const totalAwardedElements = document.querySelectorAll('.stats-card h3');
+    // 시상 선정 카드는 4번째 카드 (인덱스 3)
+    if (totalAwardedElements.length > 3 && totalAwardedElements[3]) {
+        totalAwardedElements[3].textContent = formatNumber(totalAwarded);
+    }
+}
+
+// 숫자 포맷팅 함수 (천 단위 구분)
+function formatNumber(num) {
+    return new Intl.NumberFormat('ko-KR').format(num);
 }
 
 // 현재 페이지 번호 가져오기
@@ -450,6 +627,60 @@ window.addEventListener('beforeunload', function() {
         clearInterval(autoRefreshInterval);
     }
 });
+
+// 시상 업데이트 함수
+function updateAward(selectElement) {
+    const evaluationId = selectElement.getAttribute('data-evaluation-id');
+    const award = selectElement.value;
+    
+    // 로딩 상태 표시
+    const originalValue = selectElement.value;
+    selectElement.disabled = true;
+    
+    // 빈 문자열을 null로 변환
+    const awardValue = award && award.trim() !== '' ? award : null;
+    
+    fetch(`/admin/evaluations/${evaluationId}/award`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            award: awardValue
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.error || `서버 오류 (${response.status})`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            console.log('시상 업데이트 완료:', data.award_name);
+            // 시상 통계 실시간 업데이트
+            if (data.award_stats) {
+                updateAwardStatisticsDisplay(data.award_stats);
+            }
+            // 성공 메시지는 선택사항 (필요시 토스트 알림 추가 가능)
+        } else {
+            throw new Error(data.error || '시상 업데이트에 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('시상 업데이트 오류:', error);
+        alert('시상 업데이트 중 오류가 발생했습니다: ' + error.message);
+        // 원래 값으로 복원
+        selectElement.value = originalValue;
+    })
+    .finally(() => {
+        selectElement.disabled = false;
+    });
+}
 
 // 영상 모달 표시 함수
 function showVideoModal(videoId, studentName, fileName) {

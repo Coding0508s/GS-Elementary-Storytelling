@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Validation\ValidationException;
 use App\Models\Admin;
 use App\Models\VideoSubmission;
 use App\Models\Evaluation;
@@ -879,6 +880,16 @@ public function assignVideo(Request $request)
                   ->where('admin_id', $assignment->admin_id)
                   ->delete();
         
+        // 배정 상태를 초기화 (completed 상태를 assigned로 변경)
+        // 이렇게 하면 삭제 전에 상태가 초기화됨
+        if ($assignment->status === VideoAssignment::STATUS_COMPLETED) {
+            $assignment->update([
+                'status' => VideoAssignment::STATUS_ASSIGNED,
+                'completed_at' => null,
+                'started_at' => null
+            ]);
+        }
+        
         // 배정 삭제
         $assignment->delete();
 
@@ -886,7 +897,8 @@ public function assignVideo(Request $request)
             'admin_id' => $admin->id,
             'assignment_id' => $id,
             'video_submission_id' => $assignment->video_submission_id,
-            'judge_id' => $assignment->admin_id
+            'judge_id' => $assignment->admin_id,
+            'previous_status' => $assignment->getOriginal('status')
         ]);
 
         return back()->with('success', '배정이 취소되었습니다.');
@@ -1627,12 +1639,20 @@ public function assignVideo(Request $request)
             // 통계 정보
             $totalCompleted = $rankedAssignments->count();
             $totalJudges = $judges->count();
+            
+            // 시상별 통계 계산
+            $awardStats = [
+                'jenny' => $evaluations->where('award', Evaluation::AWARD_JONNY)->count(),
+                'cookie' => $evaluations->where('award', Evaluation::AWARD_JENNY)->count(),
+                'marvin' => $evaluations->where('award', Evaluation::AWARD_COOKIE)->count(),
+            ];
 
             return view('admin.evaluation-ranking', compact(
                 'paginated',
                 'judges',
                 'totalCompleted',
-                'totalJudges'
+                'totalJudges',
+                'awardStats'
             ));
 
         } catch (\Exception $e) {
@@ -1642,6 +1662,89 @@ public function assignVideo(Request $request)
             ]);
 
             return back()->with('error', '순위 페이지 로드 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 시상 업데이트
+     */
+    public function updateAward(Request $request, $evaluationId)
+    {
+        try {
+            // 관리자만 접근 가능하도록 체크
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '관리자만 접근할 수 있습니다.'
+                ], 403);
+            }
+
+            // 빈 문자열을 null로 변환
+            $award = $request->input('award');
+            if ($award === '' || $award === null) {
+                $award = null;
+            }
+            
+            $request->merge(['award' => $award]);
+            
+            $request->validate([
+                'award' => 'nullable|in:Jenny,Cookie,Marvin'
+            ], [
+                'award.in' => '올바른 시상을 선택해주세요.'
+            ]);
+
+            $evaluation = Evaluation::findOrFail($evaluationId);
+            
+            $evaluation->update([
+                'award' => $award
+            ]);
+
+            // 시상 통계 재계산
+            $evaluations = Evaluation::whereHas('videoSubmission')->get();
+            $awardStats = [
+                'jenny' => $evaluations->where('award', Evaluation::AWARD_JONNY)->count(),
+                'cookie' => $evaluations->where('award', Evaluation::AWARD_JENNY)->count(),
+                'marvin' => $evaluations->where('award', Evaluation::AWARD_COOKIE)->count(),
+            ];
+
+            Log::info('시상 업데이트 완료', [
+                'admin_id' => $admin->id,
+                'evaluation_id' => $evaluationId,
+                'award' => $request->award
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => '시상이 업데이트되었습니다.',
+                'award' => $evaluation->award,
+                'award_name' => $evaluation->award_name,
+                'award_stats' => $awardStats
+            ]);
+
+        } catch (ValidationException $e) {
+            Log::warning('시상 업데이트 유효성 검증 실패', [
+                'admin_id' => $admin->id ?? null,
+                'evaluation_id' => $evaluationId,
+                'errors' => $e->errors()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage() ?: '올바른 시상을 선택해주세요.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('시상 업데이트 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id ?? null,
+                'evaluation_id' => $evaluationId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => '시상 업데이트 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -1740,7 +1843,7 @@ public function assignVideo(Request $request)
             // 헤더 설정
             $headers = [
                 '순위', '접수번호', '학생명(한글)', '학생명(영어)', '기관명', '반명', '학년', '나이', '거주지역',
-                '심사위원', '총점', '발음', '어휘', '유창성', '자신감', '주제연결', '구성흐름', '창의성', '심사코멘트', '접수일시'
+                '심사위원', '총점', '발음', '어휘', '유창성', '자신감', '주제연결', '구성흐름', '창의성', '심사코멘트', '시상', '접수일시'
             ];
 
             // 헤더 스타일 설정
@@ -1833,6 +1936,9 @@ public function assignVideo(Request $request)
                 
                 $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
                 $sheet->setCellValue($column . $rowIndex, $evaluation->comments ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $evaluation->award_name ?? '미선택');
                 
                 $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
                 $sheet->setCellValue($column . $rowIndex, $submission->created_at->format('Y-m-d H:i:s'));

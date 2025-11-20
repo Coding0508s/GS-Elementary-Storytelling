@@ -103,6 +103,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/evaluations/ranking/excel', [AdminController::class, 'downloadEvaluationRankingExcel'])
             ->name('evaluation.ranking.excel');
         
+        // 시상 업데이트
+        Route::post('/evaluations/{id}/award', [AdminController::class, 'updateAward'])
+            ->name('evaluation.update.award');
+        
         Route::get('/evaluations/{id}', [AdminController::class, 'showEvaluation'])
             ->name('evaluation.show');
         
