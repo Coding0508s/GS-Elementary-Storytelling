@@ -644,7 +644,13 @@ class AdminController extends Controller
 
         // 전체 통계
         $totalSubmissions = VideoSubmission::count();
-        $evaluatedSubmissions = VideoSubmission::whereHas('evaluation')->count();
+        // 재평가는 제외하고 일반 평가만 카운트
+        $evaluatedSubmissions = VideoSubmission::whereHas('evaluations', function($q) {
+            $q->where(function($query) {
+                $query->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+            });
+        })->count();
         $assignedSubmissions = VideoSubmission::whereHas('assignment')->count();
         $pendingSubmissions = $totalSubmissions - $assignedSubmissions;
 
@@ -662,60 +668,81 @@ class AdminController extends Controller
                                     ->orderBy('date')
                                     ->get();
 
-        // 평균 점수 통계
-        $averageScores = Evaluation::selectRaw('
-            AVG(pronunciation_score) as avg_pronunciation,
-            AVG(vocabulary_score) as avg_vocabulary,
-            AVG(fluency_score) as avg_fluency,
-            AVG(confidence_score) as avg_confidence,
-            AVG(topic_connection_score) as avg_topic_connection,
-            AVG(structure_flow_score) as avg_structure_flow,
-            AVG(creativity_score) as avg_creativity,
-            AVG(total_score) as avg_total
-        ')->first();
+        // 평균 점수 통계 (재평가 제외)
+        $averageScores = Evaluation::where(function($q) {
+                $q->where('is_reevaluation', false)
+                  ->orWhereNull('is_reevaluation');
+            })
+            ->selectRaw('
+                AVG(pronunciation_score) as avg_pronunciation,
+                AVG(vocabulary_score) as avg_vocabulary,
+                AVG(fluency_score) as avg_fluency,
+                AVG(confidence_score) as avg_confidence,
+                AVG(topic_connection_score) as avg_topic_connection,
+                AVG(structure_flow_score) as avg_structure_flow,
+                AVG(creativity_score) as avg_creativity,
+                AVG(total_score) as avg_total
+            ')->first();
 
-        // 점수 분포 통계
+        // 점수 분포 통계 (재평가 제외)
         $scoreDistribution = collect([]);
         if ($evaluatedSubmissions > 0) {
-            $scoreDistribution = Evaluation::selectRaw('
-                CASE 
-                    WHEN total_score >= 63 THEN "우수 (63-70점)"
-                    WHEN total_score >= 56 THEN "양호 (56-62점)"
-                    WHEN total_score >= 49 THEN "보통 (49-55점)"
-                    WHEN total_score >= 42 THEN "미흡 (42-48점)"
-                    ELSE "매우 미흡 (41점 이하)"
-                END as grade,
-                COUNT(*) as count
-            ')
-            ->groupBy('grade')
-            ->orderByRaw('MIN(total_score) DESC')
-            ->get()
-            ->map(function ($item) {
-                return (object) [
-                    'grade' => $item->grade,
-                    'count' => $item->count
-                ];
-            });
+            $scoreDistribution = Evaluation::where(function($q) {
+                    $q->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+                })
+                ->selectRaw('
+                    CASE 
+                        WHEN total_score >= 63 THEN "우수 (63-70점)"
+                        WHEN total_score >= 56 THEN "양호 (56-62점)"
+                        WHEN total_score >= 49 THEN "보통 (49-55점)"
+                        WHEN total_score >= 42 THEN "미흡 (42-48점)"
+                        ELSE "매우 미흡 (41점 이하)"
+                    END as grade,
+                    COUNT(*) as count
+                ')
+                ->groupBy('grade')
+                ->orderByRaw('MIN(total_score) DESC')
+                ->get()
+                ->map(function ($item) {
+                    return (object) [
+                        'grade' => $item->grade,
+                        'count' => $item->count
+                    ];
+                });
         }
 
-        // 기관별 통계 (제출수 기준 정렬) - 영상별 고유 카운트
-        $institutionStats = VideoSubmission::with(['evaluations'])
+        // 기관별 통계 (제출수 기준 정렬) - 영상별 고유 카운트 (재평가 제외)
+        $institutionStats = VideoSubmission::with(['evaluations' => function($q) {
+                $q->where(function($query) {
+                    $query->where('is_reevaluation', false)
+                          ->orWhereNull('is_reevaluation');
+                });
+            }])
         ->get()
         ->groupBy('institution_name')
         ->map(function ($submissions, $institutionName) {
             $submissionCount = $submissions->count(); // 실제 제출 수
             
-            // 한 심사위원의 평균 점수 계산 (완전히 평가된 영상만)
+            // 한 심사위원의 평균 점수 계산 (완전히 평가된 영상만, 재평가 제외)
             $completedEvaluations = $submissions->filter(function ($submission) {
-                return $submission->evaluations->count() >= 1;
+                $generalEvaluations = $submission->evaluations->filter(function($eval) {
+                    return $eval->is_reevaluation === false || $eval->is_reevaluation === null;
+                });
+                return $generalEvaluations->count() >= 1;
             });
             
             $avgScore = null;
             if ($completedEvaluations->count() > 0) {
                 $totalScores = $completedEvaluations->map(function ($submission) {
-                    return $submission->evaluations->first()->total_score; // 한 심사위원 점수
+                    $generalEval = $submission->evaluations->filter(function($eval) {
+                        return $eval->is_reevaluation === false || $eval->is_reevaluation === null;
+                    })->first();
+                    return $generalEval ? $generalEval->total_score : 0;
+                })->filter(function($score) {
+                    return $score > 0;
                 });
-                $avgScore = $totalScores->avg();
+                $avgScore = $totalScores->count() > 0 ? $totalScores->avg() : null;
             }
             
             return (object) [
@@ -729,7 +756,7 @@ class AdminController extends Controller
         ->sortByDesc('avg_score')
         ->values();
 
-        // 학생 순위 (한 심사위원 점수 기준, 상위 20명)
+        // 학생 순위 (한 심사위원 점수 기준, 상위 20명, 재평가 제외)
         $studentRankings = VideoSubmission::select(
             'video_submissions.id',
             'video_submissions.student_name_korean as student_name',
@@ -738,17 +765,31 @@ class AdminController extends Controller
             'video_submissions.grade',
             'video_submissions.created_at'
         )
-        ->with(['evaluations'])
-        ->whereHas('evaluations')
+        ->with(['evaluations' => function($q) {
+            $q->where(function($query) {
+                $query->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+            });
+        }])
+        ->whereHas('evaluations', function($q) {
+            $q->where(function($query) {
+                $query->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+            });
+        })
         ->get()
         ->map(function ($submission) {
-            // 평가가 1개 있는 경우만 포함 (완전히 평가된 영상)
-            $evaluationCount = $submission->evaluations->count();
+            // 일반 평가만 필터링 (재평가 제외)
+            $generalEvaluations = $submission->evaluations->filter(function($eval) {
+                return $eval->is_reevaluation === false || $eval->is_reevaluation === null;
+            });
+            
+            $evaluationCount = $generalEvaluations->count();
             if ($evaluationCount < 1) {
                 return null; // 평가가 없는 경우 제외
             }
             
-            $evaluation = $submission->evaluations->first();
+            $evaluation = $generalEvaluations->first();
             
             return (object) [
                 'student_name' => $submission->student_name_korean,
@@ -984,6 +1025,8 @@ public function assignVideo(Request $request)
                            ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
         }
 
+        $resetReevaluationCount = 0;
+        
         try {
             \DB::beginTransaction();
 
@@ -995,10 +1038,14 @@ public function assignVideo(Request $request)
             $deletedEvaluations = Evaluation::count();
             Evaluation::query()->delete();
 
-            // 3. 모든 영상 가져오기 (랜덤 순서로)
+            // 3. 재평가 대상 영상 초기화
+            $resetReevaluationCount = VideoSubmission::where('is_reevaluation_target', true)->count();
+            VideoSubmission::where('is_reevaluation_target', true)->update(['is_reevaluation_target' => false]);
+
+            // 4. 모든 영상 가져오기 (랜덤 순서로)
             $allVideos = VideoSubmission::inRandomOrder()->get();
 
-            // 4. 활성 심사위원 가져오기 (랜덤 순서로)
+            // 5. 활성 심사위원 가져오기 (랜덤 순서로)
             $activeAdmins = Admin::where('is_active', true)
                                 ->where('role', 'judge')
                                 ->inRandomOrder()
@@ -1012,7 +1059,7 @@ public function assignVideo(Request $request)
             $assignedCount = 0;
             $adminCount = $activeAdmins->count();
 
-            // 5. 균등 배정 방식으로 모든 영상 재배정 (각 영상당 1명의 심사위원)
+            // 6. 균등 배정 방식으로 모든 영상 재배정 (각 영상당 1명의 심사위원)
             
             // 각 심사위원의 배정 카운트 초기화
             $adminAssignmentCounts = [];
@@ -1063,6 +1110,7 @@ public function assignVideo(Request $request)
             'admin_id' => $admin->id,
             'deleted_assignments' => $deletedAssignments,
             'deleted_evaluations' => $deletedEvaluations,
+            'reset_reevaluation_targets' => $resetReevaluationCount,
             'reassigned_videos' => $assignedCount,
             'judges_count' => $adminCount,
             'timestamp' => now()
@@ -1072,6 +1120,7 @@ public function assignVideo(Request $request)
                           "전체 영상 재배정이 완료되었습니다.\n" .
                           "삭제된 기존 배정: {$deletedAssignments}개\n" .
                           "삭제된 기존 평가: {$deletedEvaluations}개\n" .
+                          "재평가 대상 초기화: {$resetReevaluationCount}개\n" .
                           "새로 배정된 영상: {$assignedCount}개 (각 영상당 1명씩)\n" .
                           "분배 현황: {$distributionInfo}");
     }
@@ -1540,7 +1589,12 @@ public function assignVideo(Request $request)
 
         try {
             // Evaluation 테이블을 기준으로 조회 (더 안전함)
+            // 재평가는 제외하고 일반 평가만 조회 (is_reevaluation = false 또는 null)
             $evaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                ->where(function($q) {
+                    $q->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+                })
                 ->whereHas('videoSubmission'); // soft-deleted되지 않은 videoSubmission만
 
             // 검색 필터
@@ -1708,8 +1762,13 @@ public function assignVideo(Request $request)
                 'award' => $award
             ]);
 
-            // 시상 통계 재계산
-            $evaluations = Evaluation::whereHas('videoSubmission')->get();
+            // 시상 통계 재계산 (재평가 제외)
+            $evaluations = Evaluation::whereHas('videoSubmission')
+                ->where(function($q) {
+                    $q->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+                })
+                ->get();
             $awardStats = [
                 'jenny' => $evaluations->where('award', Evaluation::AWARD_JONNY)->count(),
                 'cookie' => $evaluations->where('award', Evaluation::AWARD_JENNY)->count(),
@@ -1757,6 +1816,359 @@ public function assignVideo(Request $request)
     }
 
     /**
+     * 선택된 영상들을 모든 활성 심사위원에게 배정
+     */
+    public function assignSelectedVideos(Request $request)
+    {
+        try {
+            // 관리자만 접근 가능하도록 체크
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '관리자만 접근할 수 있는 기능입니다.'
+                ], 403);
+            }
+
+            // 유효성 검증
+            $validator = Validator::make($request->all(), [
+                'video_ids' => 'required|array',
+                'video_ids.*' => 'required|exists:video_submissions,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '잘못된 요청입니다.'
+                ], 422);
+            }
+
+            $videoIds = $request->input('video_ids');
+            
+            // 활성 심사위원 가져오기
+            $activeJudges = Admin::where('is_active', true)
+                                ->where('role', 'judge')
+                                ->get();
+
+            if ($activeJudges->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '활성화된 심사위원이 없습니다.'
+                ], 400);
+            }
+
+            $newAssignmentsCount = 0;
+            $existingAssignmentsCount = 0;
+            $errors = [];
+
+            DB::beginTransaction();
+
+            try {
+                foreach ($videoIds as $videoId) {
+                    // 영상 존재 확인
+                    $video = VideoSubmission::find($videoId);
+                    if (!$video) {
+                        $errors[] = "영상 ID {$videoId}를 찾을 수 없습니다.";
+                        continue;
+                    }
+
+                    // 재평가 대상으로 표시 (이미 배정된 영상도 포함)
+                    $video->update(['is_reevaluation_target' => true]);
+
+                    // 각 활성 심사위원에게 배정
+                    foreach ($activeJudges as $judge) {
+                        // 이미 배정되어 있는지 확인
+                        $existingAssignment = VideoAssignment::where('video_submission_id', $videoId)
+                                                            ->where('admin_id', $judge->id)
+                                                            ->first();
+
+                        if (!$existingAssignment) {
+                            // 새로운 배정 생성
+                            VideoAssignment::create([
+                                'video_submission_id' => $videoId,
+                                'admin_id' => $judge->id,
+                                'status' => VideoAssignment::STATUS_ASSIGNED,
+                                'assigned_at' => now()
+                            ]);
+                            $newAssignmentsCount++;
+                        } else {
+                            // 이미 배정된 경우에도 재평가 대상으로 포함
+                            $existingAssignmentsCount++;
+                        }
+                    }
+                }
+
+                DB::commit();
+
+                $totalAssignments = $newAssignmentsCount + $existingAssignmentsCount;
+                $message = "총 {$totalAssignments}개의 배정이 완료되었습니다.";
+                if ($existingAssignmentsCount > 0) {
+                    $message .= " (새로 생성된 배정: {$newAssignmentsCount}개, 기존 배정 포함: {$existingAssignmentsCount}개)";
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'assigned_count' => $totalAssignments,
+                    'new_assignments' => $newAssignmentsCount,
+                    'existing_assignments' => $existingAssignmentsCount,
+                    'message' => $message
+                ]);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+
+        } catch (\Exception $e) {
+            Log::error('선택된 영상 배정 오류: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => '영상 배정 중 오류가 발생했습니다: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 재평가 결과 페이지
+     */
+    public function reevaluationResults(Request $request)
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        try {
+            // 재평가된 평가만 가져오기 (is_reevaluation = true)
+            $reevaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                ->where('is_reevaluation', true)
+                ->whereHas('videoSubmission');
+
+            // 검색 필터
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $reevaluationQuery->whereHas('videoSubmission', function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%");
+                });
+            }
+
+            // 심사위원 필터가 있는 경우 해당 심사위원이 재평가한 영상 ID만 가져오기
+            $filteredVideoIds = null;
+            if ($request->filled('judge_id')) {
+                $filteredVideoIds = $reevaluationQuery->where('admin_id', $request->judge_id)
+                    ->pluck('video_submission_id')
+                    ->unique()
+                    ->toArray();
+                
+                // 해당 영상들의 모든 재평가 가져오기 (다른 심사위원 포함)
+                $reevaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                    ->where('is_reevaluation', true)
+                    ->whereIn('video_submission_id', $filteredVideoIds)
+                    ->whereHas('videoSubmission');
+                
+                // 검색 필터 재적용
+                if ($request->filled('search')) {
+                    $search = $request->search;
+                    $reevaluationQuery->whereHas('videoSubmission', function($q) use ($search) {
+                        $q->where('student_name_korean', 'like', "%{$search}%")
+                          ->orWhere('student_name_english', 'like', "%{$search}%")
+                          ->orWhere('institution_name', 'like', "%{$search}%");
+                    });
+                }
+            }
+
+            // 재평가된 평가 가져오기
+            $reevaluations = $reevaluationQuery->orderBy('created_at', 'desc')->get();
+
+            // 영상별로 그룹화
+            $groupedByVideo = $reevaluations->groupBy('video_submission_id');
+
+            // 각 영상별로 재평가 데이터 구성
+            $videoReevaluationData = $groupedByVideo->map(function($videoReevaluations, $videoSubmissionId) {
+                $videoSubmission = $videoReevaluations->first()->videoSubmission;
+                
+                // 각 심사위원의 재평가 정보 수집
+                $judgeReevaluations = $videoReevaluations->map(function($reevaluation) {
+                    // 원본 평가 가져오기 (is_reevaluation = false, 같은 영상, 같은 심사위원)
+                    $originalEvaluation = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
+                                                   ->where('admin_id', $reevaluation->admin_id)
+                                                   ->where('is_reevaluation', false)
+                                                   ->orderBy('created_at', 'asc')
+                                                   ->first();
+
+                    return (object) [
+                        'reevaluation' => $reevaluation,
+                        'original_evaluation' => $originalEvaluation,
+                        'judge' => $reevaluation->admin,
+                        'score_difference' => $originalEvaluation 
+                            ? $reevaluation->total_score - $originalEvaluation->total_score 
+                            : null
+                    ];
+                });
+
+                // 모든 심사위원의 재평가 점수 합산
+                $totalReevaluationScore = $judgeReevaluations->sum(function($item) {
+                    return $item->reevaluation->total_score ?? 0;
+                });
+
+                return (object) [
+                    'video_submission' => $videoSubmission,
+                    'judge_reevaluations' => $judgeReevaluations,
+                    'total_reevaluation_score' => $totalReevaluationScore,
+                    'judge_count' => $judgeReevaluations->count()
+                ];
+            });
+
+            // 합산 점수 순으로 정렬 (내림차순)
+            $sortedVideoData = $videoReevaluationData->sortByDesc('total_reevaluation_score')->values();
+
+            // 페이지네이션
+            $perPage = $request->get('per_page', 50);
+            if (!in_array($perPage, [20, 50, 100, 200])) {
+                $perPage = 50;
+            }
+
+            $currentPage = $request->get('page', 1);
+            $total = $sortedVideoData->count();
+            $items = $sortedVideoData->forPage($currentPage, $perPage);
+            
+            $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
+                $items,
+                $total,
+                $perPage,
+                $currentPage,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
+
+            // 심사위원 목록 (필터용)
+            $judges = Admin::where('role', 'judge')
+                ->orderBy('name')
+                ->get();
+
+            // 통계 정보 (개별 재평가 기준)
+            $totalReevaluations = $reevaluations->count();
+            $withOriginalCount = $reevaluations->filter(function($reevaluation) {
+                $original = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
+                                     ->where('admin_id', $reevaluation->admin_id)
+                                     ->where('is_reevaluation', false)
+                                     ->first();
+                return $original !== null;
+            })->count();
+            $scoreIncreasedCount = $reevaluations->filter(function($reevaluation) {
+                $original = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
+                                     ->where('admin_id', $reevaluation->admin_id)
+                                     ->where('is_reevaluation', false)
+                                     ->first();
+                if ($original) {
+                    return $reevaluation->total_score > $original->total_score;
+                }
+                return false;
+            })->count();
+            $scoreDecreasedCount = $reevaluations->filter(function($reevaluation) {
+                $original = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
+                                     ->where('admin_id', $reevaluation->admin_id)
+                                     ->where('is_reevaluation', false)
+                                     ->first();
+                if ($original) {
+                    return $reevaluation->total_score < $original->total_score;
+                }
+                return false;
+            })->count();
+
+            return view('admin.reevaluation-results', compact(
+                'paginated',
+                'judges',
+                'totalReevaluations',
+                'withOriginalCount',
+                'scoreIncreasedCount',
+                'scoreDecreasedCount'
+            ));
+
+        } catch (\Exception $e) {
+            Log::error('재평가 결과 조회 오류: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()->with('error', '재평가 결과를 불러오는 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 재평가 영상 배정 초기화
+     */
+    public function resetReevaluationAssignments()
+    {
+        // 관리자만 접근 가능하도록 체크
+        $admin = Auth::guard('admin')->user();
+        if (!$admin || !$admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                           ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        try {
+            \DB::beginTransaction();
+
+            // 재평가 대상 영상 ID 가져오기
+            $reevaluationVideoIds = VideoSubmission::where('is_reevaluation_target', true)
+                ->pluck('id')
+                ->toArray();
+
+            // 재평가 대상 영상들의 배정 삭제
+            $deletedAssignments = VideoAssignment::whereIn('video_submission_id', $reevaluationVideoIds)
+                ->count();
+            
+            VideoAssignment::whereIn('video_submission_id', $reevaluationVideoIds)
+                ->delete();
+
+            // 재평가 결과 삭제 (is_reevaluation = true인 평가)
+            $deletedReevaluations = Evaluation::whereIn('video_submission_id', $reevaluationVideoIds)
+                ->where('is_reevaluation', true)
+                ->count();
+            
+            Evaluation::whereIn('video_submission_id', $reevaluationVideoIds)
+                ->where('is_reevaluation', true)
+                ->delete();
+
+            // 재평가 대상 플래그 초기화
+            $resetCount = VideoSubmission::where('is_reevaluation_target', true)
+                ->update(['is_reevaluation_target' => false]);
+
+            \DB::commit();
+
+            Log::info('재평가 영상 배정 및 결과 초기화 완료', [
+                'admin_id' => $admin->id,
+                'deleted_assignments' => $deletedAssignments,
+                'deleted_reevaluations' => $deletedReevaluations,
+                'reset_videos' => $resetCount,
+                'timestamp' => now()
+            ]);
+
+            return back()->with('success', 
+                "재평가 영상 배정 및 결과가 초기화되었습니다.\n" .
+                "삭제된 배정: {$deletedAssignments}개\n" .
+                "삭제된 재평가 결과: {$deletedReevaluations}개\n" .
+                "초기화된 영상: {$resetCount}개");
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+            Log::error('재평가 영상 배정 초기화 오류: ' . $e->getMessage(), [
+                'admin_id' => $admin->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()->with('error', '재평가 영상 배정 초기화 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * 평가 순위 Excel 다운로드
      */
     public function downloadEvaluationRankingExcel(Request $request)
@@ -1774,7 +2186,12 @@ public function assignVideo(Request $request)
             set_time_limit(300);
 
             // Evaluation 테이블을 기준으로 조회 (순위 페이지와 동일한 로직)
+            // 재평가는 제외하고 일반 평가만 조회 (is_reevaluation = false 또는 null)
             $evaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                ->where(function($q) {
+                    $q->where('is_reevaluation', false)
+                      ->orWhereNull('is_reevaluation');
+                })
                 ->whereHas('videoSubmission');
 
             // 검색 필터

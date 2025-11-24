@@ -197,14 +197,23 @@
                 <span class="badge bg-light text-dark ms-2">{{ $paginated->total() }}개</span>
                 <small class="text-muted ms-2">(점수순, 동점 시 접수순)</small>
             </h5>
-            <div class="form-check form-switch">
-                <input class="form-check-input" 
-                       type="checkbox" 
-                       id="showDetailScores" 
-                       checked>
-                <label class="form-check-label" for="showDetailScores">
-                    상세 점수 표시
-                </label>
+            <div class="d-flex gap-3 align-items-center">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" 
+                           type="checkbox" 
+                           id="showDetailScores" 
+                           checked>
+                    <label class="form-check-label" for="showDetailScores">
+                        상세 점수 표시
+                    </label>
+                </div>
+                <button type="button" 
+                        class="btn btn-primary" 
+                        id="assignSelectedBtn"
+                        disabled>
+                    <i class="bi bi-check-square"></i> 선택된 영상 배정
+                    <span class="badge bg-light text-dark ms-2" id="selectedCount">0</span>
+                </button>
             </div>
         </div>
     </div>
@@ -218,6 +227,9 @@
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
+                            <th width="50" class="text-center">
+                                <input type="checkbox" id="selectAll" title="전체 선택">
+                            </th>
                             @if(!$isFiltered)
                             <th width="80" class="text-center">순위</th>
                             @endif
@@ -239,6 +251,12 @@
                         @endphp
                         @if($submission && $evaluation)
                         <tr>
+                            <td class="text-center">
+                                <input type="checkbox" 
+                                       class="video-checkbox" 
+                                       value="{{ $submission->id }}"
+                                       data-submission-id="{{ $submission->id }}">
+                            </td>
                             @if(!$isFiltered)
                             <td class="text-center">
                                 @if($assignment->rank <= 3)
@@ -480,6 +498,118 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+    
+    // 체크박스 관련 이벤트
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const videoCheckboxes = document.querySelectorAll('.video-checkbox');
+    const assignSelectedBtn = document.getElementById('assignSelectedBtn');
+    const selectedCountBadge = document.getElementById('selectedCount');
+    
+    // 전체 선택/해제
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            videoCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateSelectedCount();
+        });
+    }
+    
+    // 개별 체크박스 변경 시
+    videoCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateSelectAllState();
+            updateSelectedCount();
+        });
+    });
+    
+    // 선택된 영상 배정 버튼 클릭
+    if (assignSelectedBtn) {
+        assignSelectedBtn.addEventListener('click', function() {
+            assignSelectedVideos();
+        });
+    }
+    
+    // 선택된 개수 업데이트
+    function updateSelectedCount() {
+        const selected = document.querySelectorAll('.video-checkbox:checked');
+        const count = selected.length;
+        selectedCountBadge.textContent = count;
+        assignSelectedBtn.disabled = count === 0;
+    }
+    
+    // 전체 선택 체크박스 상태 업데이트
+    function updateSelectAllState() {
+        if (!selectAllCheckbox) return;
+        const allChecked = videoCheckboxes.length > 0 && 
+                          Array.from(videoCheckboxes).every(cb => cb.checked);
+        const someChecked = Array.from(videoCheckboxes).some(cb => cb.checked);
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    }
+    
+    // 선택된 영상 배정 함수
+    function assignSelectedVideos() {
+        const selectedCheckboxes = document.querySelectorAll('.video-checkbox:checked');
+        const videoIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        
+        if (videoIds.length === 0) {
+            alert('배정할 영상을 선택해주세요.');
+            return;
+        }
+        
+        if (!confirm(`선택한 ${videoIds.length}개의 영상을 모든 활성 심사위원에게 배정하시겠습니까?\n\n기존 평가 기록과 AI 평가는 유지됩니다.`)) {
+            return;
+        }
+        
+        // 버튼 비활성화 및 로딩 표시
+        assignSelectedBtn.disabled = true;
+        const originalText = assignSelectedBtn.innerHTML;
+        assignSelectedBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>배정 중...';
+        
+        fetch('/admin/evaluations/assign-selected', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                video_ids: videoIds
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.error || `서버 오류 (${response.status})`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert(`성공적으로 ${data.assigned_count}개의 영상이 배정되었습니다.\n\n${data.message}`);
+                // 체크박스 초기화
+                videoCheckboxes.forEach(cb => cb.checked = false);
+                selectAllCheckbox.checked = false;
+                updateSelectedCount();
+            } else {
+                throw new Error(data.error || '배정에 실패했습니다.');
+            }
+        })
+        .catch(error => {
+            console.error('영상 배정 오류:', error);
+            alert('영상 배정 중 오류가 발생했습니다: ' + error.message);
+        })
+        .finally(() => {
+            assignSelectedBtn.disabled = false;
+            assignSelectedBtn.innerHTML = originalText;
+        });
+    }
+    
+    // 초기 상태 설정
+    updateSelectedCount();
+    updateSelectAllState();
 });
 
 // 시상별 필터링 함수

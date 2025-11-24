@@ -389,6 +389,11 @@
                             <i class="bi bi-trophy"></i> 평가 순위
                         </a>
                         
+                        <a class="nav-link {{ request()->routeIs('admin.evaluation.reevaluation.results') ? 'active' : '' }}" 
+                           href="{{ route('admin.evaluation.reevaluation.results') }}">
+                            <i class="bi bi-arrow-repeat"></i> 재평가 결과
+                        </a>
+                        
                         <a class="nav-link {{ request()->routeIs('admin.ai.evaluation.*') ? 'active' : '' }}" 
                            href="{{ route('admin.ai.evaluation.list') }}">
                             <i class="bi bi-robot"></i> AI 채점 결과
@@ -460,6 +465,11 @@
                         <a class="nav-link {{ request()->routeIs('judge.video.*') || request()->routeIs('judge.evaluation.*') ? 'active' : '' }}" 
                            href="{{ route('judge.video.list') }}">
                             <i class="bi bi-camera-video"></i> 배정된 영상 목록
+                        </a>
+                        
+                        <a class="nav-link {{ request()->routeIs('judge.reevaluation.*') ? 'active' : '' }}" 
+                           href="{{ route('judge.reevaluation.list') }}">
+                            <i class="bi bi-arrow-repeat"></i> 재평가 대상 목록
                         </a>
                         @endif
                         
@@ -563,13 +573,28 @@
             }
         });
         
-        // AI 채점 진행상황 모니터링
+        // AI 채점 진행상황 모니터링 (관리자만)
         let progressCheckInterval = null;
         
         function checkAiEvaluationProgress() {
+            // 관리자가 아닌 경우 API 호출하지 않음
+            @if(!Auth::guard('admin')->check() || !Auth::guard('admin')->user()->isAdmin())
+                return;
+            @endif
+            
             fetch('{{ route("admin.batch.ai.evaluation.progress") }}')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        // 403 등의 오류는 조용히 무시
+                        if (response.status === 403 || response.status === 401) {
+                            return null;
+                        }
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    if (!data) return; // 오류 발생 시 중단
                     if (data.success) {
                         const progressContainer = document.getElementById('ai-evaluation-progress');
                         const progressBar = document.getElementById('progress-bar');
@@ -618,11 +643,13 @@
                 });
         }
         
-        // 페이지 로드 시 진행상황 확인
-        checkAiEvaluationProgress();
-        
-        // 5초마다 진행상황 확인
-        progressCheckInterval = setInterval(checkAiEvaluationProgress, 5000);
+        // 페이지 로드 시 진행상황 확인 (관리자만)
+        @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->isAdmin())
+            checkAiEvaluationProgress();
+            
+            // 5초마다 진행상황 확인
+            progressCheckInterval = setInterval(checkAiEvaluationProgress, 5000);
+        @endif
         
         // 페이지 언로드 시 인터벌 정리
         window.addEventListener('beforeunload', function() {

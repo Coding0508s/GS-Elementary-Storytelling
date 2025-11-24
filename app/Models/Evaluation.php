@@ -22,6 +22,7 @@ class Evaluation extends Model
         'total_score',
         'comments',
         'award',
+        'is_reevaluation',
         // 2차 예선진출 기능이 필요 없어서 주석처리
         // 'qualification_status',
         // 'rank_by_judge',
@@ -37,6 +38,7 @@ class Evaluation extends Model
         'structure_flow_score' => 'integer',
         'creativity_score' => 'integer',
         'total_score' => 'integer',
+        'is_reevaluation' => 'boolean',
         // 2차 예선진출 기능이 필요 없어서 주석처리
         // 'rank_by_judge' => 'integer',
         // 'qualified_at' => 'datetime'

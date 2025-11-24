@@ -27,11 +27,19 @@
     </div>
 @endif
 
-@if(isset($otherEvaluation) && $otherEvaluation)
+@if(isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation))
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
         <i class="bi bi-exclamation-triangle-fill"></i> 
         <strong>주의:</strong> 이 영상은 이미 다른 심사위원에 의해 채점되었습니다. 
         현재 시스템에서는 1개의 영상을 1명의 심사위원만 채점할 수 있습니다.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
+@if(isset($isReevaluation) && $isReevaluation)
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-info-circle-fill"></i> 
+        <strong>재평가 안내:</strong> 이 영상은 재평가 대상입니다. 기존 평가 기록은 유지되며, 새로운 재평가를 진행할 수 있습니다.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
@@ -281,11 +289,38 @@
                 @endphp
                 
                 @foreach($criteria as $field => $info)
+                @php
+                    // AI 평가 항목인지 확인
+                    $isAiField = in_array($field, ['pronunciation_score', 'vocabulary_score', 'fluency_score']);
+                    
+                    // 재평가인 경우 값 설정
+                    if (isset($isReevaluation) && $isReevaluation) {
+                        if ($isAiField && $aiEvaluation) {
+                            // AI 평가 항목은 AI 평가 값 사용
+                            $fieldValue = old($field, $aiEvaluation->$field ?? 0);
+                            $rangeValue = old($field, $aiEvaluation->$field ?? 0);
+                            $isReadOnly = true;
+                        } else {
+                            // 나머지 항목: 슬라이더는 0, 입력 필드는 빈 값
+                            $fieldValue = old($field, '');
+                            $rangeValue = old($field, 0);
+                            $isReadOnly = false;
+                        }
+                    } else {
+                        // 일반 평가인 경우 기존 로직 사용
+                        $fieldValue = old($field, $assignment->evaluation->$field ?? '');
+                        $rangeValue = old($field, $assignment->evaluation->$field ?? 0);
+                        $isReadOnly = false;
+                    }
+                @endphp
                 <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
                     <div class="card h-100">
                         <div class="card-body p-3">
                             <h6 class="card-title">
                                 <i class="{{ $info['icon'] }}"></i> {{ $info['title'] }}
+                                @if(isset($isReevaluation) && $isReevaluation && $isAiField && $aiEvaluation)
+                                    <span class="badge bg-info ms-1" style="font-size: 0.7rem;">AI</span>
+                                @endif
                             </h6>
                             
                             <div class="mb-2">
@@ -296,7 +331,8 @@
                                            min="0" 
                                            max="10" 
                                            step="1"
-                                           value="{{ old($field, $assignment->evaluation->$field ?? 0) }}">
+                                           value="{{ $rangeValue }}"
+                                           {{ $isReadOnly ? 'disabled' : '' }}>
                                     <div class="range-ticks mt-1" style="display: flex; justify-content: space-between; padding: 0 8px; margin-top: 4px;">
                                         @for($i = 0; $i <= 10; $i++)
                                             <span class="tick" style="font-size: 9px; color: #6c757d; font-weight: 500; text-align: center;">{{ $i }}</span>
@@ -304,18 +340,21 @@
                                     </div>
                                 </div>
                                 <input type="number" 
-                                       class="form-control score-input mt-2" 
+                                       class="form-control score-input mt-2 {{ $isReadOnly ? 'bg-light' : '' }}" 
                                        id="{{ $field }}"
                                        name="{{ $field }}"
                                        min="0" 
                                        max="10" 
-                                       value="{{ old($field, $assignment->evaluation->$field ?? '') }}"
+                                       value="{{ $fieldValue }}"
                                        placeholder="0-10"
-                                       required
-                                       {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
+                                       {{ $isReadOnly ? 'readonly' : 'required' }}
+                                       {{ (isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation)) ? 'disabled' : '' }}
+                                       @if($isReadOnly) style="background-color: #e3f2fd; cursor: not-allowed;" title="AI가 평가한 점수입니다. 수정할 수 없습니다." @endif>
                             </div>
                             <div class="text-admin-text" style="font-size: 0.8rem;">
-                                @if(isset($info['description']) && !empty($info['description']))
+                                @if(isset($isReevaluation) && $isReevaluation && $isAiField)
+                                    <span class="text-info"><i class="bi bi-robot"></i> AI가 평가한 점수입니다. 수정할 수 없습니다.</span>
+                                @elseif(isset($info['description']) && !empty($info['description']))
                                     {{ $info['description'] }}
                                 @else
                                     AI가 평가한 점수입니다.
@@ -336,7 +375,13 @@
                 <div class="card-body text-center bg-primary bg-opacity-10">
                     <h5 class="card-title">총점</h5>
                     <div class="display-6 fw-bold text-primary">
-                        <span id="total-score">{{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}</span> / 70점
+                        <span id="total-score">
+                            @if(isset($isReevaluation) && $isReevaluation)
+                                0
+                            @else
+                                {{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}
+                            @endif
+                        </span> / 70점
                     </div>
                 </div>
             </div>
@@ -351,7 +396,7 @@
                           name="comments" 
                           rows="4"
                           placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요..."
-                          {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>{{ old('comments', $assignment->evaluation->comments ?? '') }}</textarea>
+                          {{ (isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation)) ? 'disabled' : '' }}>@if(isset($isReevaluation) && $isReevaluation){{ old('comments', '') }}@else{{ old('comments', $assignment->evaluation->comments ?? '') }}@endif</textarea>
             </div>
             
             <!-- 제출 버튼 -->
@@ -362,9 +407,13 @@
                 </a>
                 <button type="submit" 
                         class="btn btn-admin"
-                        {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
-                    @if(isset($otherEvaluation) && $otherEvaluation)
+                        {{ (isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation)) ? 'disabled' : '' }}>
+                    @if(isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation))
                         <i class="bi bi-lock"></i> 다른 심사위원이 채점 완료
+                    @elseif(isset($isReevaluation) && $isReevaluation && $assignment->evaluation && $assignment->evaluation->is_reevaluation)
+                        <i class="bi bi-pencil"></i> 재평가 수정
+                    @elseif(isset($isReevaluation) && $isReevaluation)
+                        <i class="bi bi-arrow-repeat"></i> 재평가 완료
                     @elseif($assignment->evaluation)
                         <i class="bi bi-pencil"></i> 심사 결과 수정
                     @else
@@ -405,8 +454,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const ranges = document.querySelectorAll('input[type="range"]');
     const totalScoreElement = document.getElementById('total-score');
     
-    // AI 평가 결과 자동 반영
-    @if($aiEvaluation && !$assignment->evaluation)
+    // AI 평가 결과 자동 반영 (재평가가 아닌 경우에만)
+    @if($aiEvaluation && !$assignment->evaluation && (!isset($isReevaluation) || !$isReevaluation))
     const aiScores = {
         pronunciation_score: {{ $aiEvaluation->pronunciation_score ?? 0 }},
         vocabulary_score: {{ $aiEvaluation->vocabulary_score ?? 0 }},

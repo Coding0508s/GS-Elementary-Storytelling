@@ -103,9 +103,21 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/evaluations/ranking/excel', [AdminController::class, 'downloadEvaluationRankingExcel'])
             ->name('evaluation.ranking.excel');
         
+        // 재평가 결과 페이지
+        Route::get('/evaluations/reevaluation-results', [AdminController::class, 'reevaluationResults'])
+            ->name('evaluation.reevaluation.results');
+        
+        // 재평가 영상 배정 초기화
+        Route::post('/evaluations/reevaluation-reset', [AdminController::class, 'resetReevaluationAssignments'])
+            ->name('evaluation.reevaluation.reset');
+        
         // 시상 업데이트
         Route::post('/evaluations/{id}/award', [AdminController::class, 'updateAward'])
             ->name('evaluation.update.award');
+        
+        // 선택된 영상 배정
+        Route::post('/evaluations/assign-selected', [AdminController::class, 'assignSelectedVideos'])
+            ->name('evaluation.assign.selected');
         
         Route::get('/evaluations/{id}', [AdminController::class, 'showEvaluation'])
             ->name('evaluation.show');
@@ -313,6 +325,10 @@ Route::prefix('judge')->name('judge.')->group(function () {
         // 영상 목록
         Route::get('/videos', [JudgeController::class, 'videoList'])
             ->name('video.list');
+        
+        // 재평가 대상 영상 목록
+        Route::get('/reevaluations', [JudgeController::class, 'reevaluationList'])
+            ->name('reevaluation.list');
         
         // 영상 심사
         Route::get('/evaluation/{id}', [JudgeController::class, 'showEvaluation'])

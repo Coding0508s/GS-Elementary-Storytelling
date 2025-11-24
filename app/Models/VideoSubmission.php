@@ -32,7 +32,8 @@ class VideoSubmission extends Model
         'notification_sent_at',
         'status',
         'video_url',
-        'upload_method'
+        'upload_method',
+        'is_reevaluation_target'
     ];
 
     protected $casts = [
@@ -41,7 +42,8 @@ class VideoSubmission extends Model
         'privacy_consent' => 'boolean',
         'notification_sent' => 'boolean',
         'privacy_consent_at' => 'datetime',
-        'notification_sent_at' => 'datetime'
+        'notification_sent_at' => 'datetime',
+        'is_reevaluation_target' => 'boolean'
     ];
 
     // 상태 상수 정의
