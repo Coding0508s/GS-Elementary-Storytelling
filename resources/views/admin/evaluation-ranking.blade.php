@@ -30,6 +30,7 @@
     </div>
     <div class="card-body">
         <form action="{{ route('admin.evaluation.ranking') }}" method="GET" class="row">
+            <input type="hidden" name="award" id="hidden-award" value="{{ request('award') }}">
             <div class="col-md-4 mb-3">
                 <label for="search" class="form-label">검색</label>
                 <input type="text" 
@@ -40,7 +41,7 @@
                        value="{{ request('search') }}">
             </div>
             
-            <div class="col-md-3 mb-3">
+            <div class="col-md-2 mb-3">
                 <label for="judge_id" class="form-label">심사위원</label>
                 <select class="form-control" id="judge_id" name="judge_id">
                     <option value="">전체</option>
@@ -52,7 +53,17 @@
                 </select>
             </div>
             
-            <div class="col-md-3 mb-3">
+            <div class="col-md-2 mb-3">
+                <label for="award" class="form-label">시상</label>
+                <select class="form-control" id="award" name="award">
+                    <option value="">전체</option>
+                    <option value="Jenny" {{ request('award') == 'Jenny' ? 'selected' : '' }}>Jenny 상</option>
+                    <option value="Cookie" {{ request('award') == 'Cookie' ? 'selected' : '' }}>Cookie 상</option>
+                    <option value="Marvin" {{ request('award') == 'Marvin' ? 'selected' : '' }}>Marvin 상</option>
+                </select>
+            </div>
+            
+            <div class="col-md-2 mb-3">
                 <label for="per_page" class="form-label">페이지당 항목 수</label>
                 <select class="form-control" id="per_page" name="per_page">
                     <option value="20" {{ request('per_page') == 20 ? 'selected' : '' }}>20개</option>
@@ -124,35 +135,53 @@
 <!-- 시상별 통계 -->
 <div class="row mb-4">
     <div class="col-md-4 mb-3">
-        <div class="card stats-card h-100 border-start border-4 border-warning">
+        <div class="card stats-card h-100 border-start border-4 border-warning award-filter-card {{ request('award') == 'Jenny' ? 'border-warning border-4 shadow' : '' }}" 
+             data-award="Jenny" 
+             style="cursor: pointer; transition: all 0.3s ease;"
+             title="Jenny 상 대상자 필터링">
             <div class="card-body text-center">
                 <div class="display-4 text-warning mb-2">
                     <i class="bi bi-star-fill"></i>
                 </div>
                 <h3 class="text-warning" id="award-jenny-count">{{ number_format($awardStats['jenny']) }}</h3>
                 <p class="card-text text-muted">Jenny 상<br><small>(가족 참여상)</small></p>
+                @if(request('award') == 'Jenny')
+                    <span class="badge bg-warning text-dark mt-2">필터링 중</span>
+                @endif
             </div>
         </div>
     </div>
     <div class="col-md-4 mb-3">
-        <div class="card stats-card h-100 border-start border-4 border-info">
+        <div class="card stats-card h-100 border-start border-4 border-info award-filter-card {{ request('award') == 'Cookie' ? 'border-info border-4 shadow' : '' }}" 
+             data-award="Cookie" 
+             style="cursor: pointer; transition: all 0.3s ease;"
+             title="Cookie 상 대상자 필터링">
             <div class="card-body text-center">
                 <div class="display-4 text-info mb-2">
                     <i class="bi bi-lightbulb-fill"></i>
                 </div>
                 <h3 class="text-info" id="award-cookie-count">{{ number_format($awardStats['cookie']) }}</h3>
                 <p class="card-text text-muted">Cookie 상<br><small>(크리에이티브상)</small></p>
+                @if(request('award') == 'Cookie')
+                    <span class="badge bg-info text-white mt-2">필터링 중</span>
+                @endif
             </div>
         </div>
     </div>
     <div class="col-md-4 mb-3">
-        <div class="card stats-card h-100 border-start border-4 border-danger">
+        <div class="card stats-card h-100 border-start border-4 border-danger award-filter-card {{ request('award') == 'Marvin' ? 'border-danger border-4 shadow' : '' }}" 
+             data-award="Marvin" 
+             style="cursor: pointer; transition: all 0.3s ease;"
+             title="Marvin 상 대상자 필터링">
             <div class="card-body text-center">
                 <div class="display-4 text-danger mb-2">
                     <i class="bi bi-fire"></i>
                 </div>
                 <h3 class="text-danger" id="award-marvin-count">{{ number_format($awardStats['marvin']) }}</h3>
                 <p class="card-text text-muted">Marvin 상<br><small>(열정상)</small></p>
+                @if(request('award') == 'Marvin')
+                    <span class="badge bg-danger text-white mt-2">필터링 중</span>
+                @endif
             </div>
         </div>
     </div>
@@ -180,12 +209,18 @@
         </div>
     </div>
     <div class="card-body">
+        @php
+            // 필터링이 적용되었는지 확인 (시상, 검색어, 심사위원 중 하나라도 있으면 필터링 적용)
+            $isFiltered = request('award') || request('search') || request('judge_id');
+        @endphp
         @if($paginated->count() > 0)
             <div class="table-responsive">
                 <table class="table table-admin table-hover">
                     <thead>
                         <tr>
+                            @if(!$isFiltered)
                             <th width="80" class="text-center">순위</th>
+                            @endif
                             <th width="100">접수번호</th>
                             <th>학생 정보</th>
                             <th>기관 정보</th>
@@ -204,6 +239,7 @@
                         @endphp
                         @if($submission && $evaluation)
                         <tr>
+                            @if(!$isFiltered)
                             <td class="text-center">
                                 @if($assignment->rank <= 3)
                                     <span class="badge bg-{{ $assignment->rank == 1 ? 'warning' : ($assignment->rank == 2 ? 'secondary' : 'danger') }} fs-6">
@@ -215,6 +251,7 @@
                                     </span>
                                 @endif
                             </td>
+                            @endif
                             
                             <td>
                                 <small class="text-muted">{{ $submission->receipt_number }}</small>
@@ -419,7 +456,49 @@ document.addEventListener('DOMContentLoaded', function() {
             updateAward(this);
         });
     });
+    
+    // 시상 카드 클릭 이벤트 (필터링)
+    const awardFilterCards = document.querySelectorAll('.award-filter-card');
+    awardFilterCards.forEach(card => {
+        card.addEventListener('click', function() {
+            const award = this.dataset.award;
+            filterByAward(award);
+        });
+        
+        // 호버 효과
+        card.addEventListener('mouseenter', function() {
+            if (!this.classList.contains('shadow')) {
+                this.style.transform = 'translateY(-5px)';
+                this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+            }
+        });
+        
+        card.addEventListener('mouseleave', function() {
+            if (!this.classList.contains('shadow')) {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '';
+            }
+        });
+    });
 });
+
+// 시상별 필터링 함수
+function filterByAward(award) {
+    const url = new URL(window.location.href);
+    
+    // 현재 선택된 시상과 같으면 필터 해제
+    if (url.searchParams.get('award') === award) {
+        url.searchParams.delete('award');
+    } else {
+        url.searchParams.set('award', award);
+    }
+    
+    // 페이지 번호 초기화
+    url.searchParams.delete('page');
+    
+    // 필터링된 페이지로 이동
+    window.location.href = url.toString();
+}
 
 // 상세 점수 표시/숨김 토글 함수
 function toggleDetailScores(show) {

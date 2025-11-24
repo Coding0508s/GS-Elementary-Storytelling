@@ -225,7 +225,7 @@
                                     <button type="button" 
                                             class="btn btn-sm btn-outline-info mt-1"
                                             onclick="showVideoModal({{ $aiEvaluation->videoSubmission->id }}, {{ json_encode($aiEvaluation->videoSubmission->student_name_korean) }}, {{ json_encode($aiEvaluation->videoSubmission->video_file_name) }})"
-                                            title="영상 보기">
+                                       title="영상 보기">
                                         <i class="bi bi-play-circle"></i> 영상
                                     </button>
                                     @endif

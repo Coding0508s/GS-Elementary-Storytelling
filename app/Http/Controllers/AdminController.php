@@ -1558,6 +1558,14 @@ public function assignVideo(Request $request)
                 $evaluationQuery->where('admin_id', $request->judge_id);
             }
 
+            // 시상 필터
+            if ($request->filled('award')) {
+                $award = $request->award;
+                if (in_array($award, ['Jenny', 'Cookie', 'Marvin'])) {
+                    $evaluationQuery->where('award', $award);
+                }
+            }
+
             // 모든 평가 가져오기
             $evaluations = $evaluationQuery->get();
 
