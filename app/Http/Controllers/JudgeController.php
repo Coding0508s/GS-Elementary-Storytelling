@@ -363,6 +363,24 @@ class JudgeController extends Controller
         // 재평가 대상인지 확인
         $isReevaluation = $submission->is_reevaluation_target ?? false;
 
+        // 재평가인 경우 AI 평가 값을 가져와서 자동으로 채워주기
+        if ($isReevaluation) {
+            // AI 평가 가져오기 (관리자 일괄 채점 우선, 없으면 현재 심사위원의 AI 평가)
+            $aiEvaluation = $submission->aiEvaluations()
+                ->where('processing_status', 'completed')
+                ->orderBy('admin_id', 'asc') // 관리자(admin_id=1) 일괄 채점 우선
+                ->first();
+            
+            // AI 평가 값이 있으면 자동으로 채워주기
+            if ($aiEvaluation) {
+                $request->merge([
+                    'pronunciation_score' => $request->pronunciation_score ?: $aiEvaluation->pronunciation_score ?? 0,
+                    'vocabulary_score' => $request->vocabulary_score ?: $aiEvaluation->vocabulary_score ?? 0,
+                    'fluency_score' => $request->fluency_score ?: $aiEvaluation->fluency_score ?? 0,
+                ]);
+            }
+        }
+
         // 일반 평가인 경우에만 다른 심사위원 채점 여부 확인
         if (!$isReevaluation) {
             $existingOtherEvaluation = Evaluation::where('video_submission_id', $submission->id)
