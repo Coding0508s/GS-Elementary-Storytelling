@@ -915,21 +915,9 @@ public function assignVideo(Request $request)
 
         $assignment = VideoAssignment::findOrFail($id);
         
-        // 배정 취소 전에 해당 심사위원의 평가 기록(Evaluation)만 삭제
-        // AI 채점 기록(AiEvaluation)은 유지
-        Evaluation::where('video_submission_id', $assignment->video_submission_id)
-                  ->where('admin_id', $assignment->admin_id)
-                  ->delete();
-        
-        // 배정 상태를 초기화 (completed 상태를 assigned로 변경)
-        // 이렇게 하면 삭제 전에 상태가 초기화됨
-        if ($assignment->status === VideoAssignment::STATUS_COMPLETED) {
-            $assignment->update([
-                'status' => VideoAssignment::STATUS_ASSIGNED,
-                'completed_at' => null,
-                'started_at' => null
-            ]);
-        }
+        // 배정 취소 시 평가 기록(Evaluation)은 유지
+        // 재평가 결과 페이지에서 배정이 존재하는 평가만 합산에 포함되므로,
+        // 배정을 취소하면 해당 심사위원의 평가는 자동으로 합산에서 제외됨
         
         // 배정 삭제
         $assignment->delete();
@@ -1988,6 +1976,14 @@ public function assignVideo(Request $request)
             // 재평가된 평가 가져오기
             $reevaluations = $reevaluationQuery->orderBy('created_at', 'desc')->get();
 
+            // 배정이 존재하는 재평가만 필터링 (배정이 취소된 심사위원의 재평가는 제외)
+            $reevaluations = $reevaluations->filter(function($reevaluation) {
+                $assignment = VideoAssignment::where('video_submission_id', $reevaluation->video_submission_id)
+                                             ->where('admin_id', $reevaluation->admin_id)
+                                             ->first();
+                return $assignment !== null;
+            });
+
             // 영상별로 그룹화
             $groupedByVideo = $reevaluations->groupBy('video_submission_id');
 
@@ -2016,10 +2012,19 @@ public function assignVideo(Request $request)
                 });
 
                 // 재평가를 하지 않고 원본 평가만 한 심사위원들 찾기
+                // 배정이 존재하는 심사위원의 원본 평가만 포함
                 $allOriginalEvaluations = Evaluation::where('video_submission_id', $videoSubmissionId)
                                                    ->where('is_reevaluation', false)
                                                    ->with('admin')
                                                    ->get();
+                
+                // 배정이 존재하는 원본 평가만 필터링
+                $allOriginalEvaluations = $allOriginalEvaluations->filter(function($originalEval) use ($videoSubmissionId) {
+                    $assignment = VideoAssignment::where('video_submission_id', $videoSubmissionId)
+                                                 ->where('admin_id', $originalEval->admin_id)
+                                                 ->first();
+                    return $assignment !== null;
+                });
                 
                 // 재평가를 한 심사위원 ID 목록
                 $reevaluationJudgeIds = $reevaluationJudges->pluck('judge_id')->toArray();
@@ -2214,6 +2219,14 @@ public function assignVideo(Request $request)
             // 재평가된 평가 가져오기
             $reevaluations = $reevaluationQuery->orderBy('created_at', 'desc')->get();
 
+            // 배정이 존재하는 재평가만 필터링 (배정이 취소된 심사위원의 재평가는 제외)
+            $reevaluations = $reevaluations->filter(function($reevaluation) {
+                $assignment = VideoAssignment::where('video_submission_id', $reevaluation->video_submission_id)
+                                             ->where('admin_id', $reevaluation->admin_id)
+                                             ->first();
+                return $assignment !== null;
+            });
+
             if ($reevaluations->isEmpty()) {
                 return back()->with('error', '다운로드할 재평가 결과가 없습니다.');
             }
@@ -2246,10 +2259,19 @@ public function assignVideo(Request $request)
                 });
 
                 // 재평가를 하지 않고 원본 평가만 한 심사위원들 찾기
+                // 배정이 존재하는 심사위원의 원본 평가만 포함
                 $allOriginalEvaluations = Evaluation::where('video_submission_id', $videoSubmissionId)
                                                    ->where('is_reevaluation', false)
                                                    ->with('admin')
                                                    ->get();
+                
+                // 배정이 존재하는 원본 평가만 필터링
+                $allOriginalEvaluations = $allOriginalEvaluations->filter(function($originalEval) use ($videoSubmissionId) {
+                    $assignment = VideoAssignment::where('video_submission_id', $videoSubmissionId)
+                                                 ->where('admin_id', $originalEval->admin_id)
+                                                 ->first();
+                    return $assignment !== null;
+                });
                 
                 // 재평가를 한 심사위원 ID 목록
                 $reevaluationJudgeIds = $reevaluationJudges->pluck('judge_id')->toArray();
