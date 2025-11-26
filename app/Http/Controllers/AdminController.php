@@ -2239,13 +2239,25 @@ public function assignVideo(Request $request)
                 $videoSubmission = $videoReevaluations->first()->videoSubmission;
                 
                 // 재평가를 한 심사위원들의 정보 수집
-                $reevaluationJudges = $videoReevaluations->map(function($reevaluation) {
+                $reevaluationJudges = $videoReevaluations->map(function($reevaluation) use ($videoSubmissionId) {
                     // 원본 평가 가져오기 (is_reevaluation = false, 같은 영상, 같은 심사위원)
                     $originalEvaluation = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
                                                    ->where('admin_id', $reevaluation->admin_id)
                                                    ->where('is_reevaluation', false)
                                                    ->orderBy('created_at', 'asc')
                                                    ->first();
+
+                    // 원본 평가가 있을 때 배정이 존재하는지 확인
+                    // (재평가는 이미 배정이 존재하는 것만 필터링되어 있지만, 원본 평가도 확인)
+                    if ($originalEvaluation) {
+                        $assignment = VideoAssignment::where('video_submission_id', $videoSubmissionId)
+                                                   ->where('admin_id', $reevaluation->admin_id)
+                                                   ->first();
+                        // 배정이 없으면 원본 평가를 null로 설정 (합산에서 제외)
+                        if (!$assignment) {
+                            $originalEvaluation = null;
+                        }
+                    }
 
                     return (object) [
                         'reevaluation' => $reevaluation,
