@@ -100,6 +100,52 @@
         <h5 class="mb-0"><i class="bi bi-list-check"></i> 배정된 영상 목록</h5>
     </div>
     <div class="card-body">
+        <!-- 필터 -->
+        <form method="GET" action="{{ route('admin.assignment.list') }}" class="mb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="search" class="form-label">검색</label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="search" 
+                           name="search" 
+                           value="{{ request('search') }}" 
+                           placeholder="학생명, 기관명, 접수번호">
+                </div>
+                <div class="col-md-3">
+                    <label for="judge_id" class="form-label">심사위원</label>
+                    <select class="form-select" id="judge_id" name="judge_id">
+                        <option value="">전체</option>
+                        @foreach($admins as $admin)
+                            <option value="{{ $admin->id }}" {{ request('judge_id') == $admin->id ? 'selected' : '' }}>
+                                {{ $admin->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="status" class="form-label">배정 상태</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">전체</option>
+                        <option value="assigned" {{ request('status') == 'assigned' ? 'selected' : '' }}>배정됨</option>
+                        <option value="in_progress" {{ request('status') == 'in_progress' ? 'selected' : '' }}>심사중</option>
+                        <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>완료</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search"></i> 검색
+                        </button>
+                        <a href="{{ route('admin.assignment.list') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-clockwise"></i> 초기화
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+
         @if($assignedVideos->count() > 0)
             <div class="table-responsive">
                 <table class="table table-admin table-hover">

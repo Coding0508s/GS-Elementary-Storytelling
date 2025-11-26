@@ -834,7 +834,7 @@ class AdminController extends Controller
     /**
      * 영상 배정 목록
      */
-    public function assignmentList()
+    public function assignmentList(Request $request)
     {
         // 관리자만 접근 가능하도록 체크
         $admin = Auth::guard('admin')->user();
@@ -843,19 +843,49 @@ class AdminController extends Controller
                            ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
         }
 
-        // 배정된 영상들 (1명의 심사위원에게 배정된 영상)
-        $assignedVideos = VideoSubmission::with(['assignments.admin', 'evaluation'])
-                                        ->whereHas('assignment')
-                                        ->orderBy('created_at', 'asc')
-                                        ->paginate(10, ['*'], 'assigned');
+        // 배정된 영상들 쿼리 시작
+        $assignedVideosQuery = VideoSubmission::with(['assignments.admin', 'evaluation'])
+                                            ->whereHas('assignment');
+
+        // 심사위원 필터
+        if ($request->filled('judge_id')) {
+            $assignedVideosQuery->whereHas('assignments', function($q) use ($request) {
+                $q->where('admin_id', $request->judge_id);
+            });
+        }
+
+        // 배정 상태 필터
+        if ($request->filled('status')) {
+            $assignedVideosQuery->whereHas('assignments', function($q) use ($request) {
+                $q->where('status', $request->status);
+            });
+        }
+
+        // 검색 필터 (학생명, 기관명, 접수번호)
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $assignedVideosQuery->where(function($q) use ($search) {
+                $q->where('student_name_korean', 'like', "%{$search}%")
+                  ->orWhere('student_name_english', 'like', "%{$search}%")
+                  ->orWhere('institution_name', 'like', "%{$search}%")
+                  ->orWhere('receipt_number', 'like', "%{$search}%");
+            });
+        }
+
+        // 배정된 영상들
+        $assignedVideos = $assignedVideosQuery->orderBy('created_at', 'asc')
+                                            ->paginate(10, ['*'], 'assigned')
+                                            ->appends($request->query());
 
         // 미배정 영상들 (배정이 없는 영상)
         $unassignedVideos = VideoSubmission::whereDoesntHave('assignment')
                                           ->orderBy('created_at', 'asc')
-                                          ->paginate(10, ['*'], 'unassigned');
+                                          ->paginate(10, ['*'], 'unassigned')
+                                          ->appends($request->query());
 
         $admins = Admin::where('is_active', true)
                       ->where('role', 'judge') // 심사위원만 표시
+                      ->orderBy('name')
                       ->get();
 
         return view('admin.assignment-list', compact('assignedVideos', 'unassignedVideos', 'admins'));
@@ -2478,7 +2508,8 @@ public function assignVideo(Request $request)
             }
 
             // 열 너비 자동 조정
-            foreach (range('A', \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers))) as $col) {
+            for ($colIndex = 1; $colIndex <= count($headers); $colIndex++) {
+                $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
                 $sheet->getColumnDimension($col)->setAutoSize(true);
             }
 
@@ -2778,7 +2809,8 @@ public function assignVideo(Request $request)
             }
 
             // 열 너비 자동 조정
-            foreach (range('A', \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers))) as $col) {
+            for ($colIndex = 1; $colIndex <= count($headers); $colIndex++) {
+                $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
                 $sheet->getColumnDimension($col)->setAutoSize(true);
             }
 
