@@ -6,6 +6,10 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-arrow-repeat"></i> 재평가 결과</h1>
     <div class="d-flex gap-2">
+        <a href="{{ route('admin.evaluation.reevaluation.results.excel', request()->query()) }}" 
+           class="btn btn-success">
+            <i class="bi bi-file-earmark-excel"></i> Excel 다운로드
+        </a>
         <form action="{{ route('admin.evaluation.reevaluation.reset') }}" 
               method="POST" 
               class="d-inline"
@@ -179,6 +183,8 @@
                                 <br>
                                 <small class="text-muted">
                                     평균: {{ $judgeCount > 0 ? number_format($totalScore / $judgeCount, 1) : 0 }}/70
+                                    <br>
+                                    <span class="text-info">(재평가 있으면 재평가 점수, 없으면 원본 평가 점수)</span>
                                 </small>
                             </td>
                             
@@ -217,7 +223,6 @@
                                                             $judge = $judgeData->judge ?? null;
                                                             $scoreDiff = $judgeData->score_difference ?? null;
                                                         @endphp
-                                                        @if($reevaluation)
                                                         <tr>
                                                             <td>
                                                                 <strong>{{ $judge->name ?? '알 수 없음' }}</strong>
@@ -236,13 +241,17 @@
                                                                 @endif
                                                             </td>
                                                             <td class="text-center">
-                                                                <span class="badge bg-primary">
-                                                                    {{ $reevaluation->total_score }}/70
-                                                                </span>
-                                                                <br>
-                                                                <small class="text-muted">
-                                                                    {{ $reevaluation->created_at->format('Y-m-d H:i') }}
-                                                                </small>
+                                                                @if($reevaluation)
+                                                                    <span class="badge bg-primary">
+                                                                        {{ $reevaluation->total_score }}/70
+                                                                    </span>
+                                                                    <br>
+                                                                    <small class="text-muted">
+                                                                        {{ $reevaluation->created_at->format('Y-m-d H:i') }}
+                                                                    </small>
+                                                                @else
+                                                                    <span class="text-muted">-</span>
+                                                                @endif
                                                             </td>
                                                             <td class="text-center">
                                                                 @if($scoreDiff !== null)
@@ -264,11 +273,14 @@
                                                                 @endif
                                                             </td>
                                                             <td class="text-center">
-                                                                <small>{{ $reevaluation->created_at->format('Y-m-d') }}</small><br>
-                                                                <small class="text-muted">{{ $reevaluation->created_at->format('H:i') }}</small>
+                                                                @if($reevaluation)
+                                                                    <small>{{ $reevaluation->created_at->format('Y-m-d') }}</small><br>
+                                                                    <small class="text-muted">{{ $reevaluation->created_at->format('H:i') }}</small>
+                                                                @else
+                                                                    <span class="text-muted">-</span>
+                                                                @endif
                                                             </td>
                                                         </tr>
-                                                        @endif
                                                         @endforeach
                                                     </tbody>
                                                 </table>

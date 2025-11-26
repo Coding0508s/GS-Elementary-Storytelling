@@ -11,7 +11,7 @@
             <i class="bi bi-info-circle"></i> <strong>재평가 안내</strong>
             <ul class="mb-0 mt-2">
                 <li>기존 평가 기록과 AI 평가는 유지되며, 새로운 재평가를 진행할 수 있습니다.</li>
-                <li>이미 평가한 영상도 재평가 대상에 포함되며, 재평가는 기존 평가와 별개로 저장됩니다.</li>
+                <li><strong class="text-warning">기존에 평가한 영상은 재평가할 수 없습니다.</strong> 재평가는 기존 평가가 없는 영상에 대해서만 가능합니다.</li>
                 <li>재평가를 완료하면 새로운 평가 결과가 생성되며, 원본 평가는 그대로 유지됩니다.</li>
             </ul>
         </div>
@@ -76,6 +76,7 @@
                             <th>Unit 주제</th>
                             <th>원본 평가</th>
                             <th>재평가 점수</th>
+                            <th>합산 점수</th>
                             <th>AI 점수</th>
                             <th>작업</th>
                         </tr>
@@ -141,6 +142,35 @@
                             </td>
                             <td>
                                 @php
+                                    $originalScore = $assignment->original_evaluation ? $assignment->original_evaluation->total_score : 0;
+                                    $reevaluationScore = $assignment->reevaluation ? $assignment->reevaluation->total_score : 0;
+                                    $totalCombinedScore = $originalScore + $reevaluationScore;
+                                @endphp
+                                @if($assignment->reevaluation || $assignment->original_evaluation)
+                                    <div class="d-flex flex-column align-items-center">
+                                        <span class="badge bg-primary fs-6 mb-1">
+                                            {{ number_format($totalCombinedScore) }}/{{ number_format(($assignment->original_evaluation ? 70 : 0) + ($assignment->reevaluation ? 70 : 0)) }}
+                                        </span>
+                                        @if($assignment->original_evaluation && $assignment->reevaluation)
+                                            <small class="text-muted">
+                                                원본 {{ $originalScore }} + 재평가 {{ $reevaluationScore }}
+                                            </small>
+                                        @elseif($assignment->original_evaluation)
+                                            <small class="text-muted">
+                                                원본 {{ $originalScore }}
+                                            </small>
+                                        @elseif($assignment->reevaluation)
+                                            <small class="text-muted">
+                                                재평가 {{ $reevaluationScore }}
+                                            </small>
+                                        @endif
+                                    </div>
+                                @else
+                                    <span class="text-muted">-</span>
+                                @endif
+                            </td>
+                            <td>
+                                @php
                                     $aiEvaluation = $assignment->admin_ai_evaluation ?? 
                                                    $assignment->videoSubmission->aiEvaluations->where('admin_id', '!=', $judge->id)->first();
                                 @endphp
@@ -158,16 +188,22 @@
                                            class="btn btn-sm btn-outline-success">
                                             <i class="bi bi-pencil"></i> 재평가 수정
                                         </a>
+                                    @elseif($assignment->original_evaluation)
+                                        {{-- 기존 평가가 있는 경우 재평가 불가 --}}
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-secondary" 
+                                                disabled
+                                                title="기존에 평가한 영상은 재평가할 수 없습니다.">
+                                            <i class="bi bi-lock"></i> 재평가 불가
+                                        </button>
+                                        <small class="text-warning mt-1">
+                                            <i class="bi bi-exclamation-triangle"></i> 기존 평가 있음
+                                        </small>
                                     @else
                                         <a href="{{ route('judge.evaluation.show', $assignment->id) }}" 
                                            class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-play-circle"></i> 재평가 시작
                                         </a>
-                                        @if($assignment->original_evaluation)
-                                            <small class="text-info mt-1">
-                                                <i class="bi bi-info-circle"></i> 기존 평가 있음
-                                            </small>
-                                        @endif
                                     @endif
                                     
                                     <!-- 영상 다운로드 버튼 -->

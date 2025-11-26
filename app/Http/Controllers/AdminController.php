@@ -1995,8 +1995,8 @@ public function assignVideo(Request $request)
             $videoReevaluationData = $groupedByVideo->map(function($videoReevaluations, $videoSubmissionId) {
                 $videoSubmission = $videoReevaluations->first()->videoSubmission;
                 
-                // 각 심사위원의 재평가 정보 수집
-                $judgeReevaluations = $videoReevaluations->map(function($reevaluation) {
+                // 재평가를 한 심사위원들의 정보 수집
+                $reevaluationJudges = $videoReevaluations->map(function($reevaluation) {
                     // 원본 평가 가져오기 (is_reevaluation = false, 같은 영상, 같은 심사위원)
                     $originalEvaluation = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
                                                    ->where('admin_id', $reevaluation->admin_id)
@@ -2008,21 +2008,69 @@ public function assignVideo(Request $request)
                         'reevaluation' => $reevaluation,
                         'original_evaluation' => $originalEvaluation,
                         'judge' => $reevaluation->admin,
+                        'judge_id' => $reevaluation->admin_id,
                         'score_difference' => $originalEvaluation 
                             ? $reevaluation->total_score - $originalEvaluation->total_score 
                             : null
                     ];
                 });
 
-                // 모든 심사위원의 재평가 점수 합산
+                // 재평가를 하지 않고 원본 평가만 한 심사위원들 찾기
+                $allOriginalEvaluations = Evaluation::where('video_submission_id', $videoSubmissionId)
+                                                   ->where('is_reevaluation', false)
+                                                   ->with('admin')
+                                                   ->get();
+                
+                // 재평가를 한 심사위원 ID 목록
+                $reevaluationJudgeIds = $reevaluationJudges->pluck('judge_id')->toArray();
+                
+                // 원본 평가만 한 심사위원들 추가
+                $originalOnlyJudges = $allOriginalEvaluations->filter(function($originalEval) use ($reevaluationJudgeIds) {
+                    return !in_array($originalEval->admin_id, $reevaluationJudgeIds);
+                })->map(function($originalEval) {
+                    return (object) [
+                        'reevaluation' => null,
+                        'original_evaluation' => $originalEval,
+                        'judge' => $originalEval->admin,
+                        'judge_id' => $originalEval->admin_id,
+                        'score_difference' => null
+                    ];
+                });
+
+                // 재평가를 한 심사위원과 원본 평가만 한 심사위원 합치기
+                $judgeReevaluations = $reevaluationJudges->concat($originalOnlyJudges);
+
+                // 합산 점수 계산: 재평가를 한 심사위원은 재평가 점수만, 원본 평가만 한 심사위원은 원본 평가 점수만
+                // (재평가를 한 심사위원의 원본 평가 점수는 중복으로 더하지 않음)
+                $totalCombinedScore = $judgeReevaluations->sum(function($item) {
+                    // 재평가를 한 심사위원: 재평가 점수만 사용
+                    if ($item->reevaluation) {
+                        return $item->reevaluation->total_score ?? 0;
+                    }
+                    // 원본 평가만 한 심사위원: 원본 평가 점수만 사용
+                    return $item->original_evaluation->total_score ?? 0;
+                });
+
+                // 참고용: 재평가 점수 합산
                 $totalReevaluationScore = $judgeReevaluations->sum(function($item) {
                     return $item->reevaluation->total_score ?? 0;
+                });
+
+                // 참고용: 원본 평가만 한 심사위원의 원본 평가 점수 합산
+                $totalOriginalScore = $judgeReevaluations->sum(function($item) {
+                    // 재평가를 한 심사위원은 원본 평가 점수 제외
+                    if ($item->reevaluation) {
+                        return 0;
+                    }
+                    // 원본 평가만 한 심사위원만 원본 평가 점수 포함
+                    return $item->original_evaluation->total_score ?? 0;
                 });
 
                 return (object) [
                     'video_submission' => $videoSubmission,
                     'judge_reevaluations' => $judgeReevaluations,
-                    'total_reevaluation_score' => $totalReevaluationScore,
+                    'total_reevaluation_score' => $totalCombinedScore, // 재평가 점수 또는 원본 평가 점수 (중복 없음)
+                    'total_original_score' => $totalOriginalScore, // 원본 평가만 한 심사위원의 원본 평가 점수 (참고용)
                     'judge_count' => $judgeReevaluations->count()
                 ];
             });
@@ -2098,6 +2146,330 @@ public function assignVideo(Request $request)
             ]);
 
             return back()->with('error', '재평가 결과를 불러오는 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 재평가 결과 Excel 다운로드
+     */
+    public function downloadReevaluationResultsExcel(Request $request)
+    {
+        try {
+            // 관리자만 접근 가능하도록 체크
+            $admin = Auth::guard('admin')->user();
+            if (!$admin || !$admin->isAdmin()) {
+                return redirect()->route('judge.dashboard')
+                               ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+            }
+
+            // 메모리 및 타임아웃 설정
+            ini_set('memory_limit', '512M');
+            set_time_limit(300);
+
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+
+            // 재평가된 평가만 가져오기 (is_reevaluation = true)
+            $reevaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                ->where('is_reevaluation', true)
+                ->whereHas('videoSubmission');
+
+            // 검색 필터
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $reevaluationQuery->whereHas('videoSubmission', function($q) use ($search) {
+                    $q->where('student_name_korean', 'like', "%{$search}%")
+                      ->orWhere('student_name_english', 'like', "%{$search}%")
+                      ->orWhere('institution_name', 'like', "%{$search}%");
+                });
+            }
+
+            // 심사위원 필터가 있는 경우 해당 심사위원이 재평가한 영상 ID만 가져오기
+            $filteredVideoIds = null;
+            if ($request->filled('judge_id')) {
+                $filteredVideoIds = Evaluation::where('is_reevaluation', true)
+                    ->where('admin_id', $request->judge_id)
+                    ->pluck('video_submission_id')
+                    ->unique()
+                    ->toArray();
+                
+                // 해당 영상들의 모든 재평가 가져오기 (다른 심사위원 포함)
+                $reevaluationQuery = Evaluation::with(['videoSubmission', 'admin'])
+                    ->where('is_reevaluation', true)
+                    ->whereIn('video_submission_id', $filteredVideoIds)
+                    ->whereHas('videoSubmission');
+                
+                // 검색 필터 재적용
+                if ($request->filled('search')) {
+                    $search = $request->search;
+                    $reevaluationQuery->whereHas('videoSubmission', function($q) use ($search) {
+                        $q->where('student_name_korean', 'like', "%{$search}%")
+                          ->orWhere('student_name_english', 'like', "%{$search}%")
+                          ->orWhere('institution_name', 'like', "%{$search}%");
+                    });
+                }
+            }
+
+            // 재평가된 평가 가져오기
+            $reevaluations = $reevaluationQuery->orderBy('created_at', 'desc')->get();
+
+            if ($reevaluations->isEmpty()) {
+                return back()->with('error', '다운로드할 재평가 결과가 없습니다.');
+            }
+
+            // 영상별로 그룹화
+            $groupedByVideo = $reevaluations->groupBy('video_submission_id');
+
+            // 각 영상별로 재평가 데이터 구성
+            $videoReevaluationData = $groupedByVideo->map(function($videoReevaluations, $videoSubmissionId) {
+                $videoSubmission = $videoReevaluations->first()->videoSubmission;
+                
+                // 재평가를 한 심사위원들의 정보 수집
+                $reevaluationJudges = $videoReevaluations->map(function($reevaluation) {
+                    // 원본 평가 가져오기 (is_reevaluation = false, 같은 영상, 같은 심사위원)
+                    $originalEvaluation = Evaluation::where('video_submission_id', $reevaluation->video_submission_id)
+                                                   ->where('admin_id', $reevaluation->admin_id)
+                                                   ->where('is_reevaluation', false)
+                                                   ->orderBy('created_at', 'asc')
+                                                   ->first();
+
+                    return (object) [
+                        'reevaluation' => $reevaluation,
+                        'original_evaluation' => $originalEvaluation,
+                        'judge' => $reevaluation->admin,
+                        'judge_id' => $reevaluation->admin_id,
+                        'score_difference' => $originalEvaluation 
+                            ? $reevaluation->total_score - $originalEvaluation->total_score 
+                            : null
+                    ];
+                });
+
+                // 재평가를 하지 않고 원본 평가만 한 심사위원들 찾기
+                $allOriginalEvaluations = Evaluation::where('video_submission_id', $videoSubmissionId)
+                                                   ->where('is_reevaluation', false)
+                                                   ->with('admin')
+                                                   ->get();
+                
+                // 재평가를 한 심사위원 ID 목록
+                $reevaluationJudgeIds = $reevaluationJudges->pluck('judge_id')->toArray();
+                
+                // 원본 평가만 한 심사위원들 추가
+                $originalOnlyJudges = $allOriginalEvaluations->filter(function($originalEval) use ($reevaluationJudgeIds) {
+                    return !in_array($originalEval->admin_id, $reevaluationJudgeIds);
+                })->map(function($originalEval) {
+                    return (object) [
+                        'reevaluation' => null,
+                        'original_evaluation' => $originalEval,
+                        'judge' => $originalEval->admin,
+                        'judge_id' => $originalEval->admin_id,
+                        'score_difference' => null
+                    ];
+                });
+
+                // 재평가를 한 심사위원과 원본 평가만 한 심사위원 합치기
+                $judgeReevaluations = $reevaluationJudges->concat($originalOnlyJudges);
+
+                // 합산 점수 계산: 재평가를 한 심사위원은 재평가 점수만, 원본 평가만 한 심사위원은 원본 평가 점수만
+                // (재평가를 한 심사위원의 원본 평가 점수는 중복으로 더하지 않음)
+                $totalCombinedScore = $judgeReevaluations->sum(function($item) {
+                    // 재평가를 한 심사위원: 재평가 점수만 사용
+                    if ($item->reevaluation) {
+                        return $item->reevaluation->total_score ?? 0;
+                    }
+                    // 원본 평가만 한 심사위원: 원본 평가 점수만 사용
+                    return $item->original_evaluation->total_score ?? 0;
+                });
+
+                // 참고용: 재평가 점수 합산
+                $totalReevaluationScore = $judgeReevaluations->sum(function($item) {
+                    return $item->reevaluation->total_score ?? 0;
+                });
+
+                // 참고용: 원본 평가만 한 심사위원의 원본 평가 점수 합산
+                $totalOriginalScore = $judgeReevaluations->sum(function($item) {
+                    // 재평가를 한 심사위원은 원본 평가 점수 제외
+                    if ($item->reevaluation) {
+                        return 0;
+                    }
+                    // 원본 평가만 한 심사위원만 원본 평가 점수 포함
+                    return $item->original_evaluation->total_score ?? 0;
+                });
+
+                return (object) [
+                    'video_submission' => $videoSubmission,
+                    'judge_reevaluations' => $judgeReevaluations,
+                    'total_reevaluation_score' => $totalCombinedScore, // 재평가 점수 또는 원본 평가 점수 (중복 없음)
+                    'total_original_score' => $totalOriginalScore, // 원본 평가만 한 심사위원의 원본 평가 점수 (참고용)
+                    'judge_count' => $judgeReevaluations->count()
+                ];
+            });
+
+            // 합산 점수 순으로 정렬 (내림차순)
+            $sortedVideoData = $videoReevaluationData->sortByDesc('total_reevaluation_score')->values();
+
+            // PhpSpreadsheet 사용
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('재평가 결과');
+
+            // 헤더 설정
+            $headers = [
+                '순위', '접수번호', '학생명(한글)', '학생명(영어)', '기관명', '반명', '학년', '나이', '거주지역',
+                '합산 점수', '평균 점수', '심사위원 수', '원본 평가 심사위원',
+                '심사위원1', '재평가점수1', '재평가일시1',
+                '심사위원2', '재평가점수2', '재평가일시2',
+                '심사위원3', '재평가점수3', '재평가일시3',
+                '심사위원4', '재평가점수4', '재평가일시4',
+                '심사위원5', '재평가점수5', '재평가일시5'
+            ];
+
+            // 헤더 스타일 설정
+            $headerStyle = [
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => 'FFFFFF'],
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => '4F46E5'],
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
+            ];
+
+            // 헤더 추가
+            foreach ($headers as $colIndex => $header) {
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
+                $sheet->setCellValue($column . '1', $header);
+                $sheet->getStyle($column . '1')->applyFromArray($headerStyle);
+            }
+
+            // 데이터 추가
+            $rowIndex = 2;
+            $rank = 1;
+            foreach ($sortedVideoData as $videoData) {
+                $submission = $videoData->video_submission;
+                $judgeReevaluations = $videoData->judge_reevaluations;
+                $totalScore = $videoData->total_reevaluation_score;
+                $judgeCount = $videoData->judge_count;
+                $averageScore = $judgeCount > 0 ? round($totalScore / $judgeCount, 1) : 0;
+
+                if (!$submission) {
+                    continue;
+                }
+
+                $colIndex = 0;
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $rank++);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->receipt_number ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->student_name_korean ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->student_name_english ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->institution_name ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->class_name ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->grade ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->age ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $submission->region ?? '');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $totalScore);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $averageScore);
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $judgeCount);
+
+                // 원본 평가를 한 심사위원 정보 (이름과 점수)
+                $originalEvaluators = $judgeReevaluations->filter(function($item) {
+                    return $item->original_evaluation !== null;
+                })->map(function($item) {
+                    $judgeName = $item->judge->name ?? '알 수 없음';
+                    $score = $item->original_evaluation->total_score ?? 0;
+                    return "{$judgeName}: {$score}점";
+                })->implode(', ');
+                
+                $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                $sheet->setCellValue($column . $rowIndex, $originalEvaluators ?: '-');
+
+                // 심사위원별 정보 (최대 5명)
+                $judgeIndex = 0;
+                foreach ($judgeReevaluations->take(5) as $judgeData) {
+                    $reevaluation = $judgeData->reevaluation;
+                    $judge = $judgeData->judge;
+
+                    $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                    $sheet->setCellValue($column . $rowIndex, $judge->name ?? '알 수 없음');
+                    
+                    $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                    $sheet->setCellValue($column . $rowIndex, $reevaluation ? $reevaluation->total_score : '-');
+                    
+                    $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                    $sheet->setCellValue($column . $rowIndex, $reevaluation ? $reevaluation->created_at->format('Y-m-d H:i:s') : '');
+                    
+                    $judgeIndex++;
+                }
+
+                // 심사위원이 5명 미만인 경우 빈 셀 채우기 (각 심사위원당 3개 컬럼: 이름, 재평가점수, 재평가일시)
+                while ($judgeIndex < 5) {
+                    // 빈 심사위원 정보 3개 컬럼 채우기
+                    $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                    $sheet->setCellValue($column . $rowIndex, ''); // 심사위원명
+                    $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                    $sheet->setCellValue($column . $rowIndex, ''); // 재평가점수
+                    $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(++$colIndex);
+                    $sheet->setCellValue($column . $rowIndex, ''); // 재평가일시
+                    $judgeIndex++;
+                }
+
+                $rowIndex++;
+            }
+
+            // 열 너비 자동 조정
+            foreach (range('A', \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers))) as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+
+            // Excel 파일 생성
+            $filename = 'reevaluation_results_' . date('Y-m-d_H-i-s') . '.xlsx';
+            $writer = new Xlsx($spreadsheet);
+            
+            $tempFile = storage_path('app/temp/' . $filename);
+            if (!file_exists(dirname($tempFile))) {
+                mkdir(dirname($tempFile), 0755, true);
+            }
+            
+            $writer->save($tempFile);
+
+            // 파일 다운로드
+            return response()->download($tempFile, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ])->deleteFileAfterSend(true);
+
+        } catch (\Exception $e) {
+            Log::error('재평가 결과 Excel 다운로드 오류: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return back()->with('error', 'Excel 다운로드 중 오류가 발생했습니다: ' . $e->getMessage());
         }
     }
 

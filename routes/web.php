@@ -107,6 +107,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/evaluations/reevaluation-results', [AdminController::class, 'reevaluationResults'])
             ->name('evaluation.reevaluation.results');
         
+        // 재평가 결과 Excel 다운로드
+        Route::get('/evaluations/reevaluation-results/excel', [AdminController::class, 'downloadReevaluationResultsExcel'])
+            ->name('evaluation.reevaluation.results.excel');
+        
         // 재평가 영상 배정 초기화
         Route::post('/evaluations/reevaluation-reset', [AdminController::class, 'resetReevaluationAssignments'])
             ->name('evaluation.reevaluation.reset');

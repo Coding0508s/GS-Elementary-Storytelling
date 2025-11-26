@@ -302,6 +302,18 @@ class JudgeController extends Controller
         // 재평가 대상인지 확인
         $isReevaluation = $submission->is_reevaluation_target ?? false;
         
+        // 현재 심사위원의 기존 평가 확인 (is_reevaluation = false)
+        $originalEvaluation = Evaluation::where('video_submission_id', $submission->id)
+                                       ->where('admin_id', $judge->id)
+                                       ->where('is_reevaluation', false)
+                                       ->first();
+        
+        // 재평가 대상이고 기존 평가가 있는 경우 재평가 차단
+        if ($isReevaluation && $originalEvaluation) {
+            return redirect()->route('judge.reevaluation.list')
+                            ->with('error', '기존에 평가한 영상은 재평가할 수 없습니다.');
+        }
+        
         // 현재 심사위원의 평가 가져오기
         if ($isReevaluation) {
             // 재평가인 경우: 평가를 null로 설정하여 초기화 상태로 표시
@@ -309,10 +321,7 @@ class JudgeController extends Controller
             $currentEvaluation = null;
         } else {
             // 일반 평가인 경우: 기존 평가만 가져오기 (다른 심사위원 점수 숨김)
-            $currentEvaluation = Evaluation::where('video_submission_id', $submission->id)
-                                         ->where('admin_id', $judge->id)
-                                         ->where('is_reevaluation', false)
-                                         ->first();
+            $currentEvaluation = $originalEvaluation;
         }
         
         // assignment에 현재 심사위원의 evaluation만 설정
@@ -490,22 +499,65 @@ class JudgeController extends Controller
         $assignment->completeEvaluation();
 
         // 다음 배정된 영상 확인 (videoSubmission이 존재하는 것만)
-        $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
-                                        ->where('status', VideoAssignment::STATUS_ASSIGNED)
-                                        ->where('id', '!=', $assignmentId)
-                                        ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
-                                        ->with('videoSubmission')
-                                        ->orderBy('created_at', 'asc')
-                                        ->first();
+        if ($isReevaluation) {
+            // 재평가인 경우: 기존 평가가 없는 영상만 찾기
+            $nextAssignment = null;
+            $allAssignments = VideoAssignment::where('admin_id', $judge->id)
+                                            ->where('status', VideoAssignment::STATUS_ASSIGNED)
+                                            ->where('id', '!=', $assignmentId)
+                                            ->whereHas('videoSubmission', function($query) {
+                                                $query->where('is_reevaluation_target', true);
+                                            })
+                                            ->with('videoSubmission')
+                                            ->orderBy('created_at', 'asc')
+                                            ->get();
+            
+            // 기존 평가가 없는 첫 번째 영상 찾기
+            foreach ($allAssignments as $assignment) {
+                if (!$assignment->videoSubmission) {
+                    continue;
+                }
+                
+                // 기존 평가 확인 (is_reevaluation = false)
+                $originalEvaluation = Evaluation::where('video_submission_id', $assignment->video_submission_id)
+                                               ->where('admin_id', $judge->id)
+                                               ->where('is_reevaluation', false)
+                                               ->first();
+                
+                // 기존 평가가 없으면 이 영상을 다음 영상으로 선택
+                if (!$originalEvaluation) {
+                    $nextAssignment = $assignment;
+                    break;
+                }
+            }
+        } else {
+            // 일반 평가인 경우: 기존 로직 유지
+            $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
+                                            ->where('status', VideoAssignment::STATUS_ASSIGNED)
+                                            ->where('id', '!=', $assignmentId)
+                                            ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
+                                            ->with('videoSubmission')
+                                            ->orderBy('created_at', 'asc')
+                                            ->first();
+        }
 
         if ($nextAssignment && $nextAssignment->videoSubmission) {
             // 다음 영상이 있으면 바로 심사 페이지로 이동
+            $message = $isReevaluation 
+                ? '재평가가 완료되었습니다. 다음 영상을 재평가해주세요.' 
+                : '심사가 완료되었습니다. 다음 영상을 심사해주세요.';
             return redirect()->route('judge.evaluation.show', $nextAssignment->id)
-                            ->with('success', '심사가 완료되었습니다. 다음 영상을 심사해주세요.');
+                            ->with('success', $message);
         } else {
             // 더 이상 배정된 영상이 없으면 목록 페이지로 이동
-            return redirect()->route('judge.video.list')
-                            ->with('success', '모든 배정된 영상의 심사가 완료되었습니다.');
+            $message = $isReevaluation
+                ? '모든 재평가 대상 영상의 심사가 완료되었습니다.'
+                : '모든 배정된 영상의 심사가 완료되었습니다.';
+            $redirectRoute = $isReevaluation 
+                ? 'judge.reevaluation.list' 
+                : 'judge.video.list';
+            return redirect()->route($redirectRoute)
+                            ->with('success', $message);
         }
     }
 
@@ -649,23 +701,69 @@ class JudgeController extends Controller
         // 총점이 자동으로 계산되도록 refresh
         $evaluation->refresh();
 
+        // 재평가 대상인지 확인
+        $isReevaluation = $submission->is_reevaluation_target ?? false;
+
         // 다음 배정된 영상 확인 (videoSubmission이 존재하는 것만)
-        $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
-                                        ->where('status', VideoAssignment::STATUS_ASSIGNED)
-                                        ->where('id', '!=', $assignmentId)
-                                        ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
-                                        ->with('videoSubmission')
-                                        ->orderBy('created_at', 'asc')
-                                        ->first();
+        if ($isReevaluation) {
+            // 재평가인 경우: 기존 평가가 없는 영상만 찾기
+            $nextAssignment = null;
+            $allAssignments = VideoAssignment::where('admin_id', $judge->id)
+                                            ->where('status', VideoAssignment::STATUS_ASSIGNED)
+                                            ->where('id', '!=', $assignmentId)
+                                            ->whereHas('videoSubmission', function($query) {
+                                                $query->where('is_reevaluation_target', true);
+                                            })
+                                            ->with('videoSubmission')
+                                            ->orderBy('created_at', 'asc')
+                                            ->get();
+            
+            // 기존 평가가 없는 첫 번째 영상 찾기
+            foreach ($allAssignments as $assignment) {
+                if (!$assignment->videoSubmission) {
+                    continue;
+                }
+                
+                // 기존 평가 확인 (is_reevaluation = false)
+                $originalEvaluation = Evaluation::where('video_submission_id', $assignment->video_submission_id)
+                                               ->where('admin_id', $judge->id)
+                                               ->where('is_reevaluation', false)
+                                               ->first();
+                
+                // 기존 평가가 없으면 이 영상을 다음 영상으로 선택
+                if (!$originalEvaluation) {
+                    $nextAssignment = $assignment;
+                    break;
+                }
+            }
+        } else {
+            // 일반 평가인 경우: 기존 로직 유지
+            $nextAssignment = VideoAssignment::where('admin_id', $judge->id)
+                                            ->where('status', VideoAssignment::STATUS_ASSIGNED)
+                                            ->where('id', '!=', $assignmentId)
+                                            ->whereHas('videoSubmission') // soft delete되지 않은 videoSubmission만
+                                            ->with('videoSubmission')
+                                            ->orderBy('created_at', 'asc')
+                                            ->first();
+        }
 
         if ($nextAssignment && $nextAssignment->videoSubmission) {
             // 다음 영상이 있으면 바로 심사 페이지로 이동
+            $message = $isReevaluation 
+                ? '재평가 결과가 수정되었습니다. 다음 영상을 재평가해주세요.' 
+                : '심사 결과가 수정되었습니다. 다음 영상을 심사해주세요.';
             return redirect()->route('judge.evaluation.show', $nextAssignment->id)
-                            ->with('success', '심사 결과가 수정되었습니다. 다음 영상을 심사해주세요.');
+                            ->with('success', $message);
         } else {
             // 더 이상 배정된 영상이 없으면 목록 페이지로 이동
-            return redirect()->route('judge.video.list')
-                            ->with('success', '심사 결과가 수정되었습니다.');
+            $message = $isReevaluation
+                ? '재평가 결과가 수정되었습니다.'
+                : '심사 결과가 수정되었습니다.';
+            $redirectRoute = $isReevaluation 
+                ? 'judge.reevaluation.list' 
+                : 'judge.video.list';
+            return redirect()->route($redirectRoute)
+                            ->with('success', $message);
         }
     }
 
