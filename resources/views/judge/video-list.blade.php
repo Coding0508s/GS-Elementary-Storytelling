@@ -197,29 +197,39 @@
                                     </a>
                                     
                                     <!-- AI 평가 버튼 -->
-                                    @php
-                                        $aiEval = $assignment->videoSubmission->aiEvaluations->where('admin_id', $judge->id)->first();
-                                    @endphp
-                                    @if(!$aiEval || $aiEval->processing_status === 'failed')
+                                    @if($assignment->admin_ai_evaluation)
                                         <button type="button" 
-                                                class="btn btn-sm btn-outline-info mt-1 ai-evaluate-btn"
-                                                data-assignment-id="{{ $assignment->id }}"
-                                                title="AI로 평가하기">
+                                                class="btn btn-sm btn-outline-secondary mt-1" 
+                                                disabled
+                                                title="관리자가 AI 일괄 채점을 완료했습니다.">
                                             <i class="bi bi-robot"></i> AI 평가
                                         </button>
-                                    @elseif($aiEval->processing_status === 'processing')
-                                        <button type="button" 
-                                                class="btn btn-sm btn-warning mt-1" 
-                                                disabled>
-                                            <i class="bi bi-arrow-clockwise"></i> 처리중...
-                                        </button>
-                                    @elseif($aiEval->processing_status === 'completed')
-                                        <button type="button" 
-                                                class="btn btn-sm btn-success mt-1 view-ai-result-btn"
-                                                data-ai-evaluation-id="{{ $aiEval->id }}"
-                                                title="AI 평가 결과 보기">
-                                            <i class="bi bi-check-circle"></i> 결과 보기
-                                        </button>
+                                        <small class="text-muted d-block mt-1">관리자 채점완료</small>
+                                    @else
+                                        @php
+                                            $aiEval = $assignment->videoSubmission->aiEvaluations->where('admin_id', $judge->id)->first();
+                                        @endphp
+                                        @if(!$aiEval || $aiEval->processing_status === 'failed')
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-info mt-1 ai-evaluate-btn"
+                                                    data-assignment-id="{{ $assignment->id }}"
+                                                    title="AI로 평가하기">
+                                                <i class="bi bi-robot"></i> AI 평가
+                                            </button>
+                                        @elseif($aiEval->processing_status === 'processing')
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-warning mt-1" 
+                                                    disabled>
+                                                <i class="bi bi-arrow-clockwise"></i> 처리중...
+                                            </button>
+                                        @elseif($aiEval->processing_status === 'completed')
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-success mt-1 view-ai-result-btn"
+                                                    data-ai-evaluation-id="{{ $aiEval->id }}"
+                                                    title="AI 평가 결과 보기">
+                                                <i class="bi bi-check-circle"></i> 결과 보기
+                                            </button>
+                                        @endif
                                     @endif
                                 </div>
                             </td>

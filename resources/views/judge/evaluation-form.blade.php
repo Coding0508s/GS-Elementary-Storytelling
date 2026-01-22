@@ -27,11 +27,19 @@
     </div>
 @endif
 
-@if(isset($otherEvaluation) && $otherEvaluation)
+@if(isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation))
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
         <i class="bi bi-exclamation-triangle-fill"></i> 
         <strong>주의:</strong> 이 영상은 이미 다른 심사위원에 의해 채점되었습니다. 
         현재 시스템에서는 1개의 영상을 1명의 심사위원만 채점할 수 있습니다.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
+
+@if(isset($isReevaluation) && $isReevaluation)
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-info-circle-fill"></i> 
+        <strong>재평가 안내:</strong> 이 영상은 재평가 대상입니다. 기존 평가 기록은 유지되며, 새로운 재평가를 진행할 수 있습니다.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
@@ -156,41 +164,62 @@
                                 @php
                                     // auth('admin')->id()가 문자열을 반환하는 경우 숫자 ID로 변환
                                     $currentAdminId = auth('admin')->user()->id ?? auth('admin')->id();
-                                    $aiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
+                                    
+                                    // 관리자가 일괄 채점한 AI 평가가 있는지 확인 (우선순위)
+                                    $batchAiEval = $submission->aiEvaluations->where('processing_status', 'completed')->first();
+                                    
+                                    // 현재 심사위원의 AI 평가
+                                    $currentAiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
                                     
                                     // 디버깅용 - 브라우저 콘솔에서 확인 가능
                                     echo "<script>console.log('=== PHP 디버깅 ===');</script>";
                                     echo "<script>console.log('PHP currentAdminId: " . $currentAdminId . "');</script>";
-                                    echo "<script>console.log('PHP aiEval: " . ($aiEval ? 'exists' : 'null') . "');</script>";
-                                    if ($aiEval) {
-                                        echo "<script>console.log('PHP aiEval status: " . $aiEval->processing_status . "');</script>";
-                                        echo "<script>console.log('PHP aiEval id: " . $aiEval->id . "');</script>";
-                                    }
-                                    echo "<script>console.log('PHP 조건 결과: " . (!$aiEval || $aiEval->processing_status === 'failed' ? 'AI 평가 버튼' : ($aiEval->processing_status === 'processing' ? '처리중 버튼' : ($aiEval->processing_status === 'completed' ? '결과 보기 버튼' : '알 수 없음'))) . "');</script>";
+                                    echo "<script>console.log('PHP batchAiEval: " . ($batchAiEval ? 'exists' : 'null') . "');</script>";
+                                    echo "<script>console.log('PHP currentAiEval: " . ($currentAiEval ? 'exists' : 'null') . "');</script>";
                                 @endphp
-                                <div class="btn-group mt-1" role="group">
-                                    @if(!$aiEval || $aiEval->processing_status === 'failed')
-                                        <button type="button" 
-                                                class="btn btn-outline-info btn-sm ai-evaluate-btn"
-                                                data-assignment-id="{{ $assignment->id }}"
-                                                title="AI로 평가하기">
-                                            <i class="bi bi-robot"></i> AI 평가
-                                        </button>
-                                    @elseif($aiEval->processing_status === 'processing')
-                                        <button type="button" 
-                                                class="btn btn-warning btn-sm" 
-                                                disabled>
-                                            <i class="bi bi-arrow-clockwise"></i> 처리중...
-                                        </button>
-                                    @elseif($aiEval->processing_status === 'completed')
+                                
+                                @if($batchAiEval)
+                                    <!-- 관리자 일괄 채점 결과가 있는 경우 -->
+                                    <div class="btn-group mt-1" role="group">
                                         <button type="button" 
                                                 class="btn btn-success btn-sm view-ai-result-btn"
-                                                data-ai-evaluation-id="{{ $aiEval->id }}"
-                                                title="AI 평가 결과 보기">
-                                            <i class="bi bi-check-circle"></i> 결과 보기
+                                                data-ai-evaluation-id="{{ $batchAiEval->id }}"
+                                                title="관리자 일괄 채점 AI 평가 결과 보기">
+                                            <i class="bi bi-robot"></i> AI 평가 결과
                                         </button>
-                                    @endif
-                                </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle"></i> 
+                                            관리자가 일괄 채점한 AI 평가 결과가 자동으로 반영됩니다.
+                                        </small>
+                                    </div>
+                                @else
+                                    <!-- 관리자 일괄 채점 결과가 없는 경우 기존 로직 -->
+                                    <div class="btn-group mt-1" role="group">
+                                        @if(!$currentAiEval || $currentAiEval->processing_status === 'failed')
+                                            <button type="button" 
+                                                    class="btn btn-outline-info btn-sm ai-evaluate-btn"
+                                                    data-assignment-id="{{ $assignment->id }}"
+                                                    title="AI로 평가하기">
+                                                <i class="bi bi-robot"></i> AI 평가
+                                            </button>
+                                        @elseif($currentAiEval->processing_status === 'processing')
+                                            <button type="button" 
+                                                    class="btn btn-warning btn-sm" 
+                                                    disabled>
+                                                <i class="bi bi-arrow-clockwise"></i> 처리중...
+                                            </button>
+                                        @elseif($currentAiEval->processing_status === 'completed')
+                                            <button type="button" 
+                                                    class="btn btn-success btn-sm view-ai-result-btn"
+                                                    data-ai-evaluation-id="{{ $currentAiEval->id }}"
+                                                    title="AI 평가 결과 보기">
+                                                <i class="bi bi-check-circle"></i> 결과 보기
+                                            </button>
+                                        @endif
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -249,22 +278,49 @@
             <div class="row mb-4">
                 @php
                     $criteria = [
-                        'pronunciation_score' => ['title' => '발음·억양', 'icon' => 'bi-mic'],
-                        'vocabulary_score' => ['title' => '어휘·표현', 'icon' => 'bi-book'],
-                        'fluency_score' => ['title' => '유창성', 'icon' => 'bi-chat-dots'],
-                        'confidence_score' => ['title' => '자신감', 'icon' => 'bi-emoji-smile'],
-                        'topic_connection_score' => ['title' => '주제연결성', 'icon' => 'bi-link-45deg'],
-                        'structure_flow_score' => ['title' => '구성·흐름', 'icon' => 'bi-arrow-down-up'],
-                        'creativity_score' => ['title' => '창의성', 'icon' => 'bi-lightbulb']
+                        'pronunciation_score' => ['title' => '발음·억양', 'icon' => 'bi-mic', 'description' => 'AI가 평가한 점수입니다.'],
+                        'vocabulary_score' => ['title' => '어휘·표현', 'icon' => 'bi-book', 'description' => 'AI가 평가한 점수입니다.'],
+                        'fluency_score' => ['title' => '유창성', 'icon' => 'bi-chat-dots', 'description' => 'AI가 평가한 점수입니다.'],
+                        'confidence_score' => ['title' => '자신감, 긍정적이고 밝은 태도', 'icon' => 'bi-emoji-smile', 'description' => '☞심사 가이드 : 자신있고 명확히 들리는 목소리로 표현하는 지 여부'],
+                        'topic_connection_score' => ['title' => '주제와 발표 내용과의 연결성', 'icon' => 'bi-link-45deg', 'description' => '☞심사 가이드: 원 story 그대로의 문장과 단어를 정확히 전달했는 지 여부'],
+                        'structure_flow_score' => ['title' => '자연스러운 구성과 흐름', 'icon' => 'bi-arrow-down-up', 'description' => '☞심사 가이드: 말할 때 흐름이 끊기지 않고 자연스러운 흐름과 목소리 톤으로 표현했는 지 여부'],
+                        'creativity_score' => ['title' => '창의적 내용', 'icon' => 'bi-lightbulb', 'description' => '심사 가이드: 소품이나 visual aid, 율동 및 몸짓 등으로 사용 하여 말하는 내용의 이해와 집중을 도운 경우']
                     ];
                 @endphp
                 
                 @foreach($criteria as $field => $info)
+                @php
+                    // AI 평가 항목인지 확인
+                    $isAiField = in_array($field, ['pronunciation_score', 'vocabulary_score', 'fluency_score']);
+                    
+                    // 재평가인 경우 값 설정
+                    if (isset($isReevaluation) && $isReevaluation) {
+                        if ($isAiField && $aiEvaluation) {
+                            // AI 평가 항목은 AI 평가 값 사용
+                            $fieldValue = old($field, $aiEvaluation->$field ?? 0);
+                            $rangeValue = old($field, $aiEvaluation->$field ?? 0);
+                            $isReadOnly = true;
+                        } else {
+                            // 나머지 항목: 슬라이더는 0, 입력 필드는 빈 값
+                            $fieldValue = old($field, '');
+                            $rangeValue = old($field, 0);
+                            $isReadOnly = false;
+                        }
+                    } else {
+                        // 일반 평가인 경우 기존 로직 사용
+                        $fieldValue = old($field, $assignment->evaluation->$field ?? '');
+                        $rangeValue = old($field, $assignment->evaluation->$field ?? 0);
+                        $isReadOnly = false;
+                    }
+                @endphp
                 <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
                     <div class="card h-100">
                         <div class="card-body p-3">
                             <h6 class="card-title">
                                 <i class="{{ $info['icon'] }}"></i> {{ $info['title'] }}
+                                @if(isset($isReevaluation) && $isReevaluation && $isAiField && $aiEvaluation)
+                                    <span class="badge bg-info ms-1" style="font-size: 0.7rem;">AI</span>
+                                @endif
                             </h6>
                             
                             <div class="mb-2">
@@ -275,7 +331,8 @@
                                            min="0" 
                                            max="10" 
                                            step="1"
-                                           value="{{ old($field, $assignment->evaluation->$field ?? 0) }}">
+                                           value="{{ $rangeValue }}"
+                                           {{ $isReadOnly ? 'disabled' : '' }}>
                                     <div class="range-ticks mt-1" style="display: flex; justify-content: space-between; padding: 0 8px; margin-top: 4px;">
                                         @for($i = 0; $i <= 10; $i++)
                                             <span class="tick" style="font-size: 9px; color: #6c757d; font-weight: 500; text-align: center;">{{ $i }}</span>
@@ -283,21 +340,30 @@
                                     </div>
                                 </div>
                                 <input type="number" 
-                                       class="form-control score-input mt-2" 
+                                       class="form-control score-input mt-2 {{ $isReadOnly ? 'bg-light' : '' }}" 
                                        id="{{ $field }}"
                                        name="{{ $field }}"
                                        min="0" 
                                        max="10" 
-                                       value="{{ old($field, $assignment->evaluation->$field ?? '') }}"
+                                       value="{{ $fieldValue }}"
                                        placeholder="0-10"
-                                       required
-                                       {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
+                                       {{ $isReadOnly ? 'readonly' : 'required' }}
+                                       {{ (isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation)) ? 'disabled' : '' }}
+                                       @if($isReadOnly) style="background-color: #e3f2fd; cursor: not-allowed;" title="AI가 평가한 점수입니다. 수정할 수 없습니다." @endif>
                             </div>
-                            
+                            <div class="text-admin-text" style="font-size: 0.8rem;">
+                                @if(isset($isReevaluation) && $isReevaluation && $isAiField)
+                                    <span class="text-info"><i class="bi bi-robot"></i> AI가 평가한 점수입니다. 수정할 수 없습니다.</span>
+                                @elseif(isset($info['description']) && !empty($info['description']))
+                                    {{ $info['description'] }}
+                                @else
+                                    AI가 평가한 점수입니다.
+                                @endif
+                            </div>
                             <!-- 점수 가이드 -->
-                            <div class="text-muted" style="font-size: 0.7rem;">
+                            <!-- <div class="text-muted" style="font-size: 0.7rem;">
                                 각 항목별 0-10점으로 평가해주세요
-                            </div>
+                            </div> -->
                         </div>
                     </div>
                 </div>
@@ -309,7 +375,13 @@
                 <div class="card-body text-center bg-primary bg-opacity-10">
                     <h5 class="card-title">총점</h5>
                     <div class="display-6 fw-bold text-primary">
-                        <span id="total-score">{{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}</span> / 70점
+                        <span id="total-score">
+                            @if(isset($isReevaluation) && $isReevaluation)
+                                0
+                            @else
+                                {{ $assignment->evaluation ? $assignment->evaluation->total_score : 0 }}
+                            @endif
+                        </span> / 70점
                     </div>
                 </div>
             </div>
@@ -324,7 +396,7 @@
                           name="comments" 
                           rows="4"
                           placeholder="학생의 발표에 대한 구체적인 피드백을 입력해주세요..."
-                          {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>{{ old('comments', $assignment->evaluation->comments ?? '') }}</textarea>
+                          {{ (isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation)) ? 'disabled' : '' }}>@if(isset($isReevaluation) && $isReevaluation){{ old('comments', '') }}@else{{ old('comments', $assignment->evaluation->comments ?? '') }}@endif</textarea>
             </div>
             
             <!-- 제출 버튼 -->
@@ -335,9 +407,13 @@
                 </a>
                 <button type="submit" 
                         class="btn btn-admin"
-                        {{ (isset($otherEvaluation) && $otherEvaluation) ? 'disabled' : '' }}>
-                    @if(isset($otherEvaluation) && $otherEvaluation)
+                        {{ (isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation)) ? 'disabled' : '' }}>
+                    @if(isset($otherEvaluation) && $otherEvaluation && (!isset($isReevaluation) || !$isReevaluation))
                         <i class="bi bi-lock"></i> 다른 심사위원이 채점 완료
+                    @elseif(isset($isReevaluation) && $isReevaluation && $assignment->evaluation && $assignment->evaluation->is_reevaluation)
+                        <i class="bi bi-pencil"></i> 재평가 수정
+                    @elseif(isset($isReevaluation) && $isReevaluation)
+                        <i class="bi bi-arrow-repeat"></i> 재평가 완료
                     @elseif($assignment->evaluation)
                         <i class="bi bi-pencil"></i> 심사 결과 수정
                     @else
@@ -378,8 +454,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const ranges = document.querySelectorAll('input[type="range"]');
     const totalScoreElement = document.getElementById('total-score');
     
-    // AI 평가 결과 자동 반영
-    @if($aiEvaluation && !$assignment->evaluation)
+    // AI 평가 결과 자동 반영 (재평가가 아닌 경우에만)
+    @if($aiEvaluation && !$assignment->evaluation && (!isset($isReevaluation) || !$isReevaluation))
     const aiScores = {
         pronunciation_score: {{ $aiEvaluation->pronunciation_score ?? 0 }},
         vocabulary_score: {{ $aiEvaluation->vocabulary_score ?? 0 }},
@@ -410,9 +486,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // AI 점수 자동 반영 알림 표시
     const aiNotification = document.createElement('div');
     aiNotification.className = 'alert alert-info alert-dismissible fade show mt-3';
+    
+    // AI 평가가 관리자에 의해 일괄 채점되었는지 확인
+    const isBatchEvaluation = {{ $aiEvaluation->admin_id == 1 ? 'true' : 'false' }};
+    const evaluationSource = isBatchEvaluation ? '관리자 일괄 채점' : 'AI 개별 평가';
+    
     aiNotification.innerHTML = `
         <i class="bi bi-robot"></i> 
         <strong>AI 평가 결과가 자동 반영되었습니다!</strong><br>
+        <small class="text-muted">출처: ${evaluationSource}</small><br>
         발음(${aiScores.pronunciation_score}점), 어휘(${aiScores.vocabulary_score}점), 유창성(${aiScores.fluency_score}점)이 설정되었습니다. 필요시 수정 가능합니다.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
@@ -555,11 +637,13 @@ document.addEventListener('DOMContentLoaded', function() {
     @php
         $currentAdminId = auth('admin')->user()->id ?? auth('admin')->id();
         $currentAiEval = $submission->aiEvaluations->where('admin_id', $currentAdminId)->first();
+        $batchAiEval = $submission->aiEvaluations->where('processing_status', 'completed')->first();
     @endphp
     
     const currentAdminId = {{ $currentAdminId ?? 'null' }};
     const assignmentId = {{ $assignment->id }};
     const hasAiEvaluation = {{ $currentAiEval ? 'true' : 'false' }};
+    const hasBatchAiEvaluation = {{ $batchAiEval ? 'true' : 'false' }};
     const aiEvaluateUrl = '{{ url("/judge/ai-evaluate") }}';
     
     // 디버깅 정보 출력
@@ -567,6 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('currentAdminId:', currentAdminId);
     console.log('assignmentId:', assignmentId);
     console.log('hasAiEvaluation:', hasAiEvaluation);
+    console.log('hasBatchAiEvaluation:', hasBatchAiEvaluation);
     console.log('aiEvaluateUrl:', aiEvaluateUrl);
     console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'));
     
@@ -642,6 +727,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         if (e.target.closest('.ai-evaluate-btn')) {
             e.preventDefault();
+            
+            // 관리자 일괄 채점 결과가 있는 경우 AI 평가 실행 방지
+            if (hasBatchAiEvaluation) {
+                alert('관리자가 이미 일괄 채점한 AI 평가 결과가 있습니다. AI 평가를 다시 실행할 수 없습니다.');
+                return;
+            }
+            
             const button = e.target.closest('.ai-evaluate-btn');
             const assignmentId = button.dataset.assignmentId;
             

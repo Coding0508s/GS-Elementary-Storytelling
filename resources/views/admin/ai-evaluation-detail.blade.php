@@ -6,6 +6,14 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-robot"></i> AI 채점 결과 상세</h1>
     <div class="d-flex gap-2">
+        @if($aiEvaluation->processing_status === 'completed' || $aiEvaluation->processing_status === 'failed')
+        <button type="button" 
+                class="btn btn-warning" 
+                id="reevaluate-btn"
+                data-ai-evaluation-id="{{ $aiEvaluation->id }}">
+            <i class="bi bi-arrow-clockwise"></i> 재채점
+        </button>
+        @endif
         <a href="{{ route('admin.ai.evaluation.list') }}" 
            class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> 목록으로
@@ -196,6 +204,42 @@
 
 @endif
 
+<!-- 영상 재생 -->
+<div class="card admin-card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-camera-video"></i> 영상 재생</h5>
+    </div>
+    <div class="card-body">
+        <div id="video-loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">로딩 중...</span>
+            </div>
+            <p class="mt-3 text-muted">영상을 불러오는 중...</p>
+        </div>
+        <div id="video-error" class="alert alert-danger d-none" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span id="video-error-message"></span>
+        </div>
+        <div id="video-container" class="d-none">
+            <div class="mb-3">
+                <h6 class="mb-1">{{ $aiEvaluation->videoSubmission->student_name_korean }}</h6>
+                <small class="text-muted">{{ $aiEvaluation->videoSubmission->video_file_name }}</small>
+            </div>
+            <div class="ratio ratio-16x9 bg-dark rounded">
+                <video id="video-player" 
+                       controls 
+                       preload="metadata" 
+                       class="w-100 h-100"
+                       style="object-fit: contain;"
+                       crossorigin="anonymous">
+                    <source id="video-source" src="" type="">
+                    영상을 재생할 수 없습니다. 브라우저가 이 형식을 지원하지 않습니다.
+                </video>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 평가 기준 안내 -->
 <div class="card admin-card">
     <div class="card-header">
@@ -222,5 +266,135 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const videoId = {{ $aiEvaluation->videoSubmission->id }};
+    
+    // 재채점 버튼 이벤트
+    const reevaluateBtn = document.getElementById('reevaluate-btn');
+    if (reevaluateBtn) {
+        reevaluateBtn.addEventListener('click', function() {
+            const aiEvaluationId = this.dataset.aiEvaluationId;
+            
+            if (confirm('이 평가를 다시 채점하시겠습니까?\n\n기존 채점 결과가 새로운 결과로 대체됩니다.')) {
+                reevaluateAiEvaluation(aiEvaluationId, this);
+            }
+        });
+    }
+    
+    // 영상 URL 가져오기
+    fetch(`/admin/video/${videoId}/stream-url`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => {
+        console.log('API 응답 상태:', response.status);
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.error || '영상 URL을 가져올 수 없습니다.');
+            }).catch(() => {
+                throw new Error(`서버 오류 (${response.status}): 영상 URL을 가져올 수 없습니다.`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('영상 데이터:', data);
+        if (data.success && data.video_url) {
+            // 로딩 숨기기
+            document.getElementById('video-loading').classList.add('d-none');
+            
+            // 영상 컨테이너 표시
+            document.getElementById('video-container').classList.remove('d-none');
+            
+            // 비디오 소스 설정
+            const videoPlayer = document.getElementById('video-player');
+            const videoSource = document.getElementById('video-source');
+            const videoType = data.video_type || 'mp4';
+            
+            videoSource.src = data.video_url;
+            videoSource.type = `video/${videoType}`;
+            
+            // 비디오 플레이어에 직접 src 설정 (fallback)
+            videoPlayer.src = data.video_url;
+            
+            // 비디오 로드 시도
+            videoPlayer.load();
+            
+            // 비디오 로드 오류 처리
+            videoPlayer.addEventListener('error', function(e) {
+                console.error('비디오 로드 오류:', e);
+                console.error('비디오 URL:', data.video_url);
+                console.error('비디오 타입:', videoType);
+                document.getElementById('video-error').classList.remove('d-none');
+                document.getElementById('video-error-message').textContent = '영상을 재생할 수 없습니다. URL을 확인해주세요.';
+            }, { once: true });
+            
+            // 비디오 로드 성공 확인
+            videoPlayer.addEventListener('loadedmetadata', function() {
+                console.log('비디오 메타데이터 로드 완료');
+            }, { once: true });
+        } else {
+            throw new Error(data.error || '영상 URL을 가져올 수 없습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('영상 로드 오류:', error);
+        document.getElementById('video-loading').classList.add('d-none');
+        document.getElementById('video-error').classList.remove('d-none');
+            document.getElementById('video-error-message').textContent = error.message || '영상을 불러오는 중 오류가 발생했습니다.';
+        });
+    
+    // AI 재채점 함수
+    function reevaluateAiEvaluation(aiEvaluationId, button) {
+        const originalHtml = button.innerHTML;
+        const originalDisabled = button.disabled;
+        
+        // 버튼 비활성화 및 로딩 상태
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 재채점 중...';
+        
+        fetch(`{{ url('/admin/ai-evaluation') }}/${aiEvaluationId}/reevaluate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ 재채점이 완료되었습니다.\n\n새로운 채점 결과가 반영되었습니다.');
+                
+                // 2초 후 페이지 새로고침
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                alert('❌ 재채점 실패: ' + (data.message || '알 수 없는 오류가 발생했습니다.'));
+                
+                // 버튼 복원
+                button.disabled = originalDisabled;
+                button.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ 재채점 중 오류가 발생했습니다.');
+            
+            // 버튼 복원
+            button.disabled = originalDisabled;
+            button.innerHTML = originalHtml;
+        });
+    }
+});
+</script>
+@endpush
 
 @endsection

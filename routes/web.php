@@ -75,6 +75,10 @@ Route::get('/admin/login', [AdminController::class, 'showLogin'])
 Route::post('/admin/login', [AdminController::class, 'login'])
     ->name('admin.login.process');
 
+// CSRF 토큰 엔드포인트 (인증 없이 접근 가능)
+Route::get('/admin/csrf-token', [AdminController::class, 'getCsrfToken'])
+    ->name('admin.csrf-token');
+
 // 관리자 인증이 필요한 라우트들
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('auth:admin')->group(function () {
@@ -86,9 +90,38 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/logout', [AdminController::class, 'logout'])
             ->name('logout');
         
+        
         // 심사 관련
         Route::get('/evaluations', [AdminController::class, 'evaluationList'])
             ->name('evaluation.list');
+        
+        // 평가 순위 페이지 (구체적인 라우트를 먼저 정의)
+        Route::get('/evaluations/ranking', [AdminController::class, 'evaluationRanking'])
+            ->name('evaluation.ranking');
+        
+        // 평가 순위 Excel 다운로드
+        Route::get('/evaluations/ranking/excel', [AdminController::class, 'downloadEvaluationRankingExcel'])
+            ->name('evaluation.ranking.excel');
+        
+        // 재평가 결과 페이지
+        Route::get('/evaluations/reevaluation-results', [AdminController::class, 'reevaluationResults'])
+            ->name('evaluation.reevaluation.results');
+        
+        // 재평가 결과 Excel 다운로드
+        Route::get('/evaluations/reevaluation-results/excel', [AdminController::class, 'downloadReevaluationResultsExcel'])
+            ->name('evaluation.reevaluation.results.excel');
+        
+        // 재평가 영상 배정 초기화
+        Route::post('/evaluations/reevaluation-reset', [AdminController::class, 'resetReevaluationAssignments'])
+            ->name('evaluation.reevaluation.reset');
+        
+        // 시상 업데이트
+        Route::post('/evaluations/{id}/award', [AdminController::class, 'updateAward'])
+            ->name('evaluation.update.award');
+        
+        // 선택된 영상 배정
+        Route::post('/evaluations/assign-selected', [AdminController::class, 'assignSelectedVideos'])
+            ->name('evaluation.assign.selected');
         
         Route::get('/evaluations/{id}', [AdminController::class, 'showEvaluation'])
             ->name('evaluation.show');
@@ -147,6 +180,28 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/password-reset', [AdminController::class, 'showPasswordReset'])
             ->name('password.reset');
         
+        // 일괄 AI 채점 관련
+        Route::post('/batch-ai-evaluation/start', [AdminController::class, 'startBatchAiEvaluation'])
+            ->name('batch.ai.evaluation.start');
+        
+        Route::get('/batch-ai-evaluation/progress', [AdminController::class, 'getBatchAiEvaluationProgress'])
+            ->name('batch.ai.evaluation.progress');
+        
+        Route::post('/batch-ai-evaluation/cancel', [AdminController::class, 'cancelBatchAiEvaluation'])
+            ->name('batch.ai.evaluation.cancel');
+        
+        Route::post('/batch-ai-evaluation/retry', [AdminController::class, 'retryFailedAiEvaluations'])
+            ->name('batch.ai.evaluation.retry');
+        
+        // 영상 일괄 채점 페이지
+        Route::get('/batch-evaluation', [AdminController::class, 'batchEvaluationList'])
+            ->name('batch.evaluation.list');
+        
+        // 개별 영상 AI 채점
+        Route::post('/batch-evaluation/start-single/{submissionId}', [AdminController::class, 'startSingleAiEvaluation'])
+            ->name('batch.evaluation.start.single');
+        
+        
         Route::post('/password-reset', [AdminController::class, 'resetPassword'])
             ->name('password.reset.execute');
         
@@ -180,9 +235,51 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/ai-evaluation/{id}', [AdminController::class, 'getAiEvaluationDetail'])
             ->name('ai-evaluation.detail');
         
+        Route::post('/ai-evaluation/{id}/reevaluate', [AdminController::class, 'reevaluateAiEvaluation'])
+            ->name('ai-evaluation.reevaluate');
+        
+        // 영상 일괄 삭제
+        Route::post('/videos/delete', [AdminController::class, 'deleteSelectedVideos'])
+            ->name('videos.delete');
+        
+        // 휴지통 관리
+        Route::get('/trash', [AdminController::class, 'trashList'])
+            ->name('trash.list');
+        
+        Route::post('/trash/restore/{id}', [AdminController::class, 'restoreVideo'])
+            ->name('trash.restore');
+        
+        Route::post('/trash/restore-selected', [AdminController::class, 'restoreSelectedVideos'])
+            ->name('trash.restore.selected');
+        
+        Route::delete('/trash/force-delete/{id}', [AdminController::class, 'forceDeleteVideo'])
+            ->name('trash.force.delete');
+        
+        Route::post('/trash/force-delete-selected', [AdminController::class, 'forceDeleteSelectedVideos'])
+            ->name('trash.force.delete.selected');
+        
+        // 대회 활성화 상태 토글
+        Route::post('/contest/toggle', [AdminController::class, 'toggleContestStatus'])
+            ->name('contest.toggle');
+        
         // 영상 보기
         Route::get('/video/{id}/view', [AdminController::class, 'viewVideo'])
             ->name('video.view');
+        
+        // 영상 다운로드
+        Route::get('/video/{id}/download', [AdminController::class, 'downloadVideo'])
+            ->name('video.download');
+        
+        // 영상 스트리밍 URL 가져오기 (AJAX)
+        Route::get('/video/{id}/stream-url', [AdminController::class, 'getVideoStreamUrl'])
+            ->name('video.stream.url');
+        
+        // 접수 정보 수정
+        Route::get('/submissions/{id}/edit', [AdminController::class, 'getSubmissionForEdit'])
+            ->name('submission.edit');
+        
+        Route::put('/submissions/{id}', [AdminController::class, 'updateSubmission'])
+            ->name('submission.update');
         
         // AI 설정 관리
         Route::get('/ai-settings', [AdminController::class, 'aiSettings'])
@@ -233,6 +330,10 @@ Route::prefix('judge')->name('judge.')->group(function () {
         Route::get('/videos', [JudgeController::class, 'videoList'])
             ->name('video.list');
         
+        // 재평가 대상 영상 목록
+        Route::get('/reevaluations', [JudgeController::class, 'reevaluationList'])
+            ->name('reevaluation.list');
+        
         // 영상 심사
         Route::get('/evaluation/{id}', [JudgeController::class, 'showEvaluation'])
             ->name('evaluation.show');
@@ -265,7 +366,7 @@ Route::prefix('judge')->name('judge.')->group(function () {
         Route::get('/ai-evaluation/{id}/result', [JudgeController::class, 'showAiEvaluation'])
             ->name('ai.evaluation.result');
         
-        Route::get('/ai-result/{id}', [JudgeController::class, 'showAiResult'])
+        Route::get('/ai-result/{id}', [JudgeController::class, 'getAiResult'])
             ->name('ai.result.show');
     });
 });

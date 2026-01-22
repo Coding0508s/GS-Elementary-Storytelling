@@ -383,6 +383,7 @@ async function refreshDashboard() {
         if (usersData.success) {
             updateConcurrentUsers(usersData.data);
         }
+        console.log(concurrentUsers);
 
         // 오류율 조회
         const errorMetrics = await fetch('/admin/monitoring/error-metrics');

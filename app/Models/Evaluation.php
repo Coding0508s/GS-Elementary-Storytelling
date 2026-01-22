@@ -21,6 +21,8 @@ class Evaluation extends Model
         'creativity_score',
         'total_score',
         'comments',
+        'award',
+        'is_reevaluation',
         // 2차 예선진출 기능이 필요 없어서 주석처리
         // 'qualification_status',
         // 'rank_by_judge',
@@ -36,10 +38,16 @@ class Evaluation extends Model
         'structure_flow_score' => 'integer',
         'creativity_score' => 'integer',
         'total_score' => 'integer',
+        'is_reevaluation' => 'boolean',
         // 2차 예선진출 기능이 필요 없어서 주석처리
         // 'rank_by_judge' => 'integer',
         // 'qualified_at' => 'datetime'
     ];
+
+    // 시상 상수 정의
+    const AWARD_JONNY = 'Jenny';
+    const AWARD_JENNY = 'Cookie';
+    const AWARD_COOKIE = 'Marvin';
 
     // 자격 상태 상수 정의 (2차 예선진출 기능이 필요 없어서 주석처리)
     /*
@@ -232,5 +240,27 @@ class Evaluation extends Model
             '7-8' => '양호',
             '9-10' => '우수'
         ];
+    }
+
+    /**
+     * 시상 옵션 목록
+     */
+    public static function getAwardOptions()
+    {
+        return [
+            '' => '한정판 마그넷',
+            self::AWARD_JONNY => 'Jenny 상(가족 참여상)',
+            self::AWARD_JENNY => 'Cookie 상(크리에이티브상)',
+            self::AWARD_COOKIE => 'Marvin 상(열정상)',
+        ];
+    }
+
+    /**
+     * 시상 이름 가져오기
+     */
+    public function getAwardNameAttribute()
+    {
+        $options = self::getAwardOptions();
+        return $options[$this->award] ?? '한정판 마그넷';
     }
 }
