@@ -1176,6 +1176,11 @@ class JudgeController extends Controller
     public function logout()
     {
         Auth::guard('admin')->logout();
+        
+        // 세션 재생성하여 새로운 CSRF 토큰 생성
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
+        
         return redirect()->route('admin.login')
                         ->with('success', '성공적으로 로그아웃되었습니다.');
     }
