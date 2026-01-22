@@ -1,245 +1,210 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html class="light" lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">   
-    <title>관리자 로그인 - GS Elementary Speech Contest</title>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>관리자 로그인 - GrapeSEED Staff Portal</title>
     <link rel="icon" type="image/x-icon" href="{{ asset('images/favicon.png') }}">
-    <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{{ asset('images/favicon.png') }}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon.png') }}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/favicon.png') }}">
-    <link rel="apple-touch-icon" href="{{ asset('images/favicon.png') }}">
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Work Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
     <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            font-family: 'Noto Sans KR', sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .login-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-            padding: 3rem;
-            max-width: 450px;
-            width: 90%;
-        }
-        
-        .login-header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
-        .logo-container {
-            margin-bottom: 1.5rem;
-        }
-        
-        .logo-container img {
-            max-height: 80px;
-            width: auto;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-        }
-        
-        .login-header h1 {
-            color: #2c3e50;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-            font-size: 1.8rem;
-        }
-        
-        .login-header p {
-            color: #6c757d;
-            margin-bottom: 0;
-            font-size: 1rem;
-        }
-        
-        .form-control {
-            border-radius: 10px;
-            border: 2px solid #e9ecef;
-            padding: 12px 15px;
-            transition: all 0.3s ease;
+        /* 에러 메시지 스타일 */
+        .alert-error {
+            background-color: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
             margin-bottom: 1rem;
         }
-        
-        .form-control:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        .alert-success {
+            background-color: #d1fae5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
         }
-        
-        .input-group {
-            margin-bottom: 1.2rem;
-        }
-        
-        .input-group-text {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 10px 0 0 10px;
-            height: 52px;
-            
-        }
-        
-        .btn-login {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            border: none;
-            border-radius: 25px;
-            padding: 12px 30px;
+        .alert-close {
+            float: right;
             font-weight: bold;
-            transition: all 0.3s ease;
-            width: 100%;
-            margin-top: 1rem;
-        }
-        
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-        
-        .alert {
-            border-radius: 10px;
+            cursor: pointer;
             border: none;
-            margin-bottom: 1.5rem;
-        }
-        
-        .back-link {
-            text-align: center;
-            margin-top: 2rem;
-        }
-        
-        .back-link a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        
-        .back-link a:hover {
-            color: #764ba2;
-        }
-        
-        .admin-icon {
-            font-size: 2rem;
-            color: #667eea;
-            margin-bottom: 0.5rem;
-        }
-        
-        .contest-title {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-weight: 700;
+            background: none;
+            font-size: 1.25rem;
+            line-height: 1;
         }
     </style>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="login-container">
-        <div class="login-header">
-            <div class="logo-container">
-                <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
-            </div>
-            <h1><i class="bi bi-shield-lock admin-icon"></i> <span class="contest-title">관리자 로그인</span></h1>
-            <p>Storytelling 관리자/심사위원 페이지 접속</p>
-        </div>
-        
-        @if(session('success'))
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                <i class="bi bi-check-circle"></i> {{ session('success') }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
-        
-        @if(session('error'))
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <i class="bi bi-exclamation-triangle"></i> {{ session('error') }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
-        
-        @if($errors->any())
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <i class="bi bi-exclamation-triangle"></i>
-                <ul class="mb-0">
-                    @foreach($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
-        
-        <form action="{{ route('admin.login.process') }}" method="POST">
-            @csrf
-            
-            <div class="input-group">
-                <span class="input-group-text">
-                    <i class="bi bi-person"></i>
-                </span>
-                <input type="text" 
-                       class="form-control" 
-                       name="username" 
-                       placeholder="관리자 아이디"
-                       value="{{ old('username') }}"
-                       required autocomplete="username"
-                       autofocus>
-            </div>
-            
-            <div class="input-group">
-                <span class="input-group-text">
-                    <i class="bi bi-lock"></i>
-                </span>
-                <input type="password" 
-                       class="form-control" 
-                       name="password" 
-                       placeholder="비밀번호"
-                       autocomplete="current-password"
-                       required>
-            </div>
-            
-            <div class="input-group">
-                <span class="input-group-text">
-                    <i class="bi bi-person-badge"></i>
-                </span>
-                <select class="form-control" name="role" required>
-                    <option value="">역할을 선택하세요</option>
-                    <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>관리자</option>
-                    <option value="judge" {{ old('role') == 'judge' ? 'selected' : '' }}>심사위원</option>
-                </select>
-            </div>
-            
-            <button type="submit" class="btn btn-primary btn-login">
-                <i class="bi bi-box-arrow-in-right"></i> 로그인
-            </button>
-        </form>
-        
-        <div class="back-link">
-            <a href="{{ url('/') }}">
-                <i class="bi bi-arrow-left"></i> 대회 페이지로 돌아가기
-            </a>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white h-screen overflow-hidden">
+<div class="flex h-full w-full flex-col md:flex-row">
+    <div class="relative hidden md:block md:w-1/2 lg:w-1/2 h-full bg-slate-200">
+        <img alt="GrapeSEED Education" class="absolute inset-0 h-full w-full object-cover" src="{{ asset('images/KakaoTalk_20210105_143627244.png') }}" onerror="this.style.display='none'; this.parentElement.style.background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)';"/>
+        <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+        <div class="absolute bottom-12 left-12 text-white max-w-md">
+            <p class="text-lg font-medium tracking-wide mb-2 opacity-90">Empowering Education</p>
+            <h2 class="text-3xl font-bold leading-tight">Bringing English teaching materials to every school.</h2>
         </div>
     </div>
-    
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <script>
-        // 폼 제출 시 버튼 비활성화
-        document.querySelector('form').addEventListener('submit', function() {
-            const submitBtn = document.querySelector('.btn-login');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 로그인 중...';
-        });
-    </script>
+    <div class="flex w-full md:w-1/2 lg:w-1/2 h-full flex-col justify-center items-center bg-white dark:bg-background-dark p-6 md:p-12 lg:p-24 relative overflow-y-auto">
+        <div class="absolute top-6 right-6 flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm font-medium cursor-pointer hover:text-primary transition-colors">
+            <span class="material-symbols-outlined text-[20px]">language</span>
+            <span>English / 한국어</span>
+        </div>
+        <div class="w-full max-w-sm flex flex-col gap-8">
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2 mb-2 text-primary">
+                    <span class="material-symbols-outlined text-4xl">school</span>
+                    <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">GrapeSEED English Education</span>
+                </div>
+                <h1 class="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">
+                    Staff Portal
+                </h1>
+                <p class="text-slate-500 dark:text-slate-400 text-base font-normal">
+                    관리자/심사위원 페이지에 접속하세요.
+                </p>
+            </div>
+
+            <!-- 에러 메시지 표시 -->
+            @if(session('error'))
+                <div class="alert-error">
+                    <button type="button" class="alert-close" onclick="this.parentElement.style.display='none'">&times;</button>
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1rem;">error</span>
+                    {{ session('error') }}
+                </div>
+            @endif
+
+            @if(session('success'))
+                <div class="alert-success">
+                    <button type="button" class="alert-close" onclick="this.parentElement.style.display='none'">&times;</button>
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1rem;">check_circle</span>
+                    {{ session('success') }}
+                </div>
+            @endif
+
+            @if($errors->any())
+                <div class="alert-error">
+                    <button type="button" class="alert-close" onclick="this.parentElement.style.display='none'">&times;</button>
+                    <ul class="list-disc list-inside">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <form action="{{ route('admin.login.process') }}" method="POST" id="loginForm" class="flex flex-col gap-5">
+                @csrf
+                
+                <label class="flex flex-col gap-1.5">
+                    <span class="text-slate-900 dark:text-slate-200 text-sm font-medium leading-normal">Admin ID</span>
+                    <div class="relative flex items-center">
+                        <span class="absolute left-4 text-slate-400 material-symbols-outlined text-[20px]">badge</span>
+                        <input 
+                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/20 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-primary h-12 placeholder:text-slate-400 pl-11 pr-4 text-base font-normal leading-normal transition-all duration-200" 
+                            placeholder="admin.id" 
+                            type="text"
+                            name="username"
+                            value="{{ old('username') }}"
+                            required 
+                            autocomplete="username"
+                            autofocus/>
+                    </div>
+                </label>
+                
+                <label class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-900 dark:text-slate-200 text-sm font-medium leading-normal">Password</span>
+                    </div>
+                    <div class="relative flex items-center">
+                        <span class="absolute left-4 text-slate-400 material-symbols-outlined text-[20px]">lock</span>
+                        <input 
+                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/20 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-primary h-12 placeholder:text-slate-400 pl-11 pr-4 text-base font-normal leading-normal transition-all duration-200" 
+                            placeholder="••••••••••••" 
+                            type="password"
+                            name="password"
+                            required
+                            autocomplete="current-password"/>
+                    </div>
+                </label>
+
+                <label class="flex flex-col gap-1.5">
+                    <span class="text-slate-900 dark:text-slate-200 text-sm font-medium leading-normal">Role (역할)</span>
+                    <div class="relative flex items-center">
+                        <span class="absolute left-4 text-slate-400 material-symbols-outlined text-[20px]">person</span>
+                        <select 
+                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/20 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-primary h-12 pl-11 pr-4 text-base font-normal leading-normal transition-all duration-200 appearance-none cursor-pointer" 
+                            name="role"
+                            required>
+                            <option value="">역할을 선택하세요</option>
+                            <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>관리자</option>
+                            <option value="judge" {{ old('role') == 'judge' ? 'selected' : '' }}>심사위원</option>
+                        </select>
+                        <span class="absolute right-4 text-slate-400 material-symbols-outlined text-[20px] pointer-events-none">arrow_drop_down</span>
+                    </div>
+                </label>
+                
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 cursor-pointer group">
+                        <div class="relative flex items-center">
+                            <input class="peer h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-primary focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer" type="checkbox" name="remember"/>
+                        </div>
+                        <span class="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors">Keep me logged in</span>
+                    </label>
+                    <a class="text-sm font-semibold text-primary hover:text-blue-700 transition-colors" href="#">
+                        Forgot password?
+                    </a>
+                </div>
+                
+                <button type="submit" id="loginButton" class="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary hover:bg-blue-600 active:scale-[0.99] transition-all text-white text-base font-bold leading-normal tracking-[0.015em] shadow-sm">
+                    <span class="truncate">Login</span>
+                </button>
+            </form>
+            
+            <div class="flex flex-col gap-4 mt-4 border-t border-slate-100 dark:border-slate-800 pt-6">
+                <p class="text-center text-sm text-slate-500 dark:text-slate-400">
+                    Having trouble? <a class="font-medium text-slate-700 dark:text-slate-200 underline hover:text-primary transition-colors" href="{{ url('/') }}">대회 페이지로 돌아가기</a>
+                </p>
+                <div class="flex items-center justify-center gap-1 text-xs text-slate-400 dark:text-slate-600">
+                    <span class="material-symbols-outlined text-[14px]">lock</span>
+                    <span>Secure Connection | 256-bit SSL Encrypted</span>
+                </div>
+                <p class="text-center text-xs text-slate-300 dark:text-slate-700 mt-2">
+                    © 2024 Education Korea Inc. All rights reserved.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 폼 제출 시 버튼 비활성화
+    document.getElementById('loginForm').addEventListener('submit', function() {
+        const submitBtn = document.getElementById('loginButton');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="truncate">로그인 중...</span>';
+        submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+    });
+</script>
 </body>
 </html>

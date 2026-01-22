@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Branded Staff Portal Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Work Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white h-screen overflow-hidden">
+<div class="flex h-full w-full flex-col md:flex-row">
+<div class="relative hidden md:block md:w-1/2 lg:w-1/2 h-full bg-slate-200">
+<img alt="Plush toy characters at a miniature classroom desk with books and pencils" class="absolute inset-0 h-full w-full object-cover" data-alt="A carefully composed still-life photograph of plush toy characters seated together at a miniature classroom desk, featuring tiny books, pencils, and a miniature chalkboard to convey warmth and collaborative learning." src="img/KakaoTalk_20210105_143627244.png"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+<div class="absolute bottom-12 left-12 text-white max-w-md">
+<p class="text-lg font-medium tracking-wide mb-2 opacity-90">Empowering Education</p>
+<h2 class="text-3xl font-bold leading-tight">Bringing English teaching materials to every school.</h2>
+</div>
+</div>
+<div class="flex w-full md:w-1/2 lg:w-1/2 h-full flex-col justify-center items-center bg-white dark:bg-background-dark p-6 md:p-12 lg:p-24 relative overflow-y-auto">
+<div class="absolute top-6 right-6 flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm font-medium cursor-pointer hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">language</span>
+<span>English / 한국어</span>
+</div>
+<div class="w-full max-w-sm flex flex-col gap-8">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2 mb-2 text-primary">
+<span class="material-symbols-outlined text-4xl">school</span>GrapeSEED<span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">English Education</span>
+</div>
+<h1 class="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">
+                        Staff Portal
+                    </h1>
+<p class="text-slate-500 dark:text-slate-400 text-base font-normal">
+                        Please sign in to access the administration dashboard.
+                    </p>
+</div>
+<div class="flex flex-col gap-5">
+<label class="flex flex-col gap-1.5">
+<span class="text-slate-900 dark:text-slate-200 text-sm font-medium leading-normal">Admin ID</span>
+<div class="relative flex items-center">
+<span class="absolute left-4 text-slate-400 material-symbols-outlined text-[20px]">badge</span>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/20 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-primary h-12 placeholder:text-slate-400 pl-11 pr-4 text-base font-normal leading-normal transition-all duration-200" placeholder="admin.id" type="text"/>
+</div>
+</label>
+<label class="flex flex-col gap-1.5">
+<div class="flex justify-between items-center">
+<span class="text-slate-900 dark:text-slate-200 text-sm font-medium leading-normal">Password</span>
+</div>
+<div class="relative flex items-center">
+<span class="absolute left-4 text-slate-400 material-symbols-outlined text-[20px]">lock</span>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/20 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-primary h-12 placeholder:text-slate-400 pl-11 pr-4 text-base font-normal leading-normal transition-all duration-200" placeholder="••••••••••••" type="password"/>
+</div>
+</label>
+<div class="flex items-center justify-between">
+<label class="flex items-center gap-2 cursor-pointer group">
+<div class="relative flex items-center">
+<input class="peer h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-primary focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer" type="checkbox"/>
+</div>
+<span class="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors">Keep me logged in</span>
+</label>
+<a class="text-sm font-semibold text-primary hover:text-blue-700 transition-colors" href="#">
+                            Forgot password?
+                        </a>
+</div>
+<button class="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary hover:bg-blue-600 active:scale-[0.99] transition-all text-white text-base font-bold leading-normal tracking-[0.015em] shadow-sm">
+<span class="truncate">Login</span>
+</button>
+</div>
+<div class="flex flex-col gap-4 mt-4 border-t border-slate-100 dark:border-slate-800 pt-6">
+<p class="text-center text-sm text-slate-500 dark:text-slate-400">
+                        Having trouble? <a class="font-medium text-slate-700 dark:text-slate-200 underline hover:text-primary transition-colors" href="#">Contact Support</a>
+</p>
+<div class="flex items-center justify-center gap-1 text-xs text-slate-400 dark:text-slate-600">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>Secure Connection | 256-bit SSL Encrypted</span>
+</div>
+<p class="text-center text-xs text-slate-300 dark:text-slate-700 mt-2">
+                        © 2024 Education Korea Inc. All rights reserved.
+                    </p>
+</div>
+</div>
+</div>
+</div>
+
+</body></html>
