@@ -336,7 +336,6 @@ class VideoSubmissionController extends Controller
             'grade' => 'required|string|in:'.$gradeOptions,
             'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
-            'attendance_day' => 'required|string|in:'.implode(',', array_keys(VideoSubmission::ATTENDANCE_OPTIONS)),
             'question_day1' => 'nullable|string|max:2000',
             'question_day2' => 'nullable|string|max:2000',
         ], [
@@ -347,8 +346,6 @@ class VideoSubmissionController extends Controller
             'grade.in' => '학년 또는 연령을 다시 선택해주세요.',
             'parent_name.required' => '학부모 성함을 입력해주세요.',
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
-            'attendance_day.required' => '참석 일자를 선택해주세요.',
-            'attendance_day.in' => '참석 일자를 다시 선택해주세요.',
             'question_day1.max' => 'Day 1 질문은 2000자 이하로 입력해주세요.',
             'question_day2.max' => 'Day 2 질문은 2000자 이하로 입력해주세요.',
         ]);
@@ -419,14 +416,11 @@ class VideoSubmissionController extends Controller
                 $attributes['marketing_consent_at'] = $agreed ? now() : null;
             }
         }
-        $attendance = $request->input('attendance_day');
-        $day1 = $attendance === 'day2' ? null : $request->input('question_day1');
-        $day2 = $attendance === 'day1' ? null : $request->input('question_day2');
-        $day1 = filled($day1) ? $day1 : null;
-        $day2 = filled($day2) ? $day2 : null;
+        $day1 = filled($request->input('question_day1')) ? $request->input('question_day1') : null;
+        $day2 = filled($request->input('question_day2')) ? $request->input('question_day2') : null;
 
         if ($columns->has('attendance_day')) {
-            $attributes['attendance_day'] = $attendance;
+            $attributes['attendance_day'] = 'all';
         }
         if ($columns->has('question_day1')) {
             $attributes['question_day1'] = $day1;

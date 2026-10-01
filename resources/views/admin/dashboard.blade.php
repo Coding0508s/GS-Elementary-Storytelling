@@ -665,22 +665,9 @@
 
                     <div class="card mb-3">
                         <div class="card-header bg-light">
-                            <h6 class="mb-0">참석 일자</h6>
+                            <h6 class="mb-0">강사님께 궁금한 점</h6>
                         </div>
                         <div class="card-body">
-                            <div class="d-flex flex-wrap gap-3 mb-3">
-                                @foreach(\App\Models\VideoSubmission::ATTENDANCE_OPTIONS as $value => $label)
-                                    <label class="mb-0">
-                                        <input type="radio" name="attendance_day" value="{{ $value }}" class="edit-attendance-day">
-                                        {{ $label }}
-                                        @if($value === 'day1')
-                                            <span class="text-muted small">김상균 교수님</span>
-                                        @elseif($value === 'day2')
-                                            <span class="text-muted small">윤윤구 강사님</span>
-                                        @endif
-                                    </label>
-                                @endforeach
-                            </div>
                             <div class="row g-2">
                                 <div class="col-md-6" id="edit-question-day1-wrap">
                                     <label for="edit-question_day1" class="form-label">Day 1 · 김상균 교수님 <span class="text-muted small">(선택)</span></label>
@@ -757,16 +744,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function syncEditAttendance() {
-    const attendance = document.querySelector('.edit-attendance-day:checked')?.value || '';
-    document.getElementById('edit-question-day1-wrap').classList.toggle('d-none', attendance === 'day2');
-    document.getElementById('edit-question-day2-wrap').classList.toggle('d-none', attendance === 'day1');
-}
-
-document.querySelectorAll('.edit-attendance-day').forEach(input => {
-    input.addEventListener('change', syncEditAttendance);
-});
-
 // 접수 정보 수정 모달 표시 함수
 function showEditModal(submissionId) {
     const modal = new bootstrap.Modal(document.getElementById('editModal'));
@@ -817,13 +794,9 @@ function showEditModal(submissionId) {
             gradeSelect.value = grade;
             document.getElementById('edit-parent_name').value = sub.parent_name || '';
             document.getElementById('edit-parent_phone').value = sub.parent_phone || '';
-            document.querySelectorAll('.edit-attendance-day').forEach(input => {
-                input.checked = input.value === (sub.attendance_day || '');
-            });
             document.getElementById('edit-question_day1').value = sub.question_day1 || '';
             document.getElementById('edit-question_day2').value = sub.question_day2 || '';
             document.getElementById('edit-marketing_consent').checked = !!sub.marketing_consent;
-            syncEditAttendance();
             
             // 기존 지역 값이 있으면 먼저 설정
             if (sub.region) {
@@ -1082,13 +1055,6 @@ function saveEdit() {
         return;
     }
     
-    // JSON 데이터 준비
-    const attendance = document.querySelector('.edit-attendance-day:checked')?.value || '';
-    if (!attendance) {
-        alert('참석 일자를 선택해주세요.');
-        return;
-    }
-
     const data = {
         region: region,
         institution_name: document.getElementById('edit-institution_name').value,
@@ -1096,9 +1062,8 @@ function saveEdit() {
         grade: document.getElementById('edit-grade').value,
         parent_name: document.getElementById('edit-parent_name').value,
         parent_phone: document.getElementById('edit-parent_phone').value,
-        attendance_day: attendance,
-        question_day1: attendance === 'day2' ? '' : document.getElementById('edit-question_day1').value,
-        question_day2: attendance === 'day1' ? '' : document.getElementById('edit-question_day2').value,
+        question_day1: document.getElementById('edit-question_day1').value,
+        question_day2: document.getElementById('edit-question_day2').value,
         marketing_consent: document.getElementById('edit-marketing_consent').checked
     };
     

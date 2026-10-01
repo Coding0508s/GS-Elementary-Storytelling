@@ -232,13 +232,13 @@ class AdminController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('접수 내역');
 
-        $headers = ['접수번호', '접수일시', '학생 이름', '학년', '기관명', '거주지역', '학부모 성함', '전화번호', '참석 일자', 'Day 1 김상균 교수님', 'Day 2 윤윤구 강사님', '마케팅 수신 동의'];
+        $headers = ['접수번호', '접수일시', '학생 이름', '학년', '기관명', '거주지역', '학부모 성함', '전화번호', 'Day 1 김상균 교수님', 'Day 2 윤윤구 강사님', '마케팅 수신 동의'];
         foreach ($headers as $index => $header) {
             $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue($column.'1', $header);
         }
 
-        $sheet->getStyle('A1:L1')->applyFromArray([
+        $sheet->getStyle('A1:K1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -267,14 +267,13 @@ class AdminController extends Controller
                 (string) $application->parent_phone,
                 \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
             );
-            $sheet->setCellValue('I'.$rowIndex, $application->attendanceLabel());
-            $sheet->setCellValue('J'.$rowIndex, $application->instructorQuestion('day1'));
-            $sheet->setCellValue('K'.$rowIndex, $application->instructorQuestion('day2'));
-            $sheet->setCellValue('L'.$rowIndex, $application->marketing_consent ? '동의' : '미동의');
+            $sheet->setCellValue('I'.$rowIndex, $application->instructorQuestion('day1'));
+            $sheet->setCellValue('J'.$rowIndex, $application->instructorQuestion('day2'));
+            $sheet->setCellValue('K'.$rowIndex, $application->marketing_consent ? '동의' : '미동의');
             $rowIndex++;
         }
 
-        foreach (range('A', 'L') as $column) {
+        foreach (range('A', 'K') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -3975,7 +3974,6 @@ public function assignVideo(Request $request)
                 'grade' => 'required|string|max:50',
                 'parent_name' => 'required|string|max:255',
                 'parent_phone' => 'required|string|max:20',
-                'attendance_day' => 'required|in:all,day1,day2',
                 'question_day1' => 'nullable|string|max:2000',
                 'question_day2' => 'nullable|string|max:2000',
                 'marketing_consent' => 'nullable|boolean',
@@ -3986,7 +3984,6 @@ public function assignVideo(Request $request)
                 'grade.required' => '학년을 입력해주세요.',
                 'parent_name.required' => '학부모 성함을 입력해주세요.',
                 'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
-                'attendance_day.required' => '참석 일자를 선택해주세요.',
             ]);
 
             if ($validator->fails()) {
@@ -4016,7 +4013,6 @@ public function assignVideo(Request $request)
             }
 
             // 업데이트할 데이터 준비
-            $attendance = $request->input('attendance_day');
             $updateData = [
                 'region' => $request->region,
                 'institution_name' => $request->institution_name,
@@ -4024,9 +4020,9 @@ public function assignVideo(Request $request)
                 'grade' => $request->grade,
                 'parent_name' => $request->parent_name,
                 'parent_phone' => $request->parent_phone,
-                'attendance_day' => $attendance,
-                'question_day1' => $attendance === 'day2' ? null : ($request->input('question_day1') ?: null),
-                'question_day2' => $attendance === 'day1' ? null : ($request->input('question_day2') ?: null),
+                'attendance_day' => 'all',
+                'question_day1' => $request->input('question_day1') ?: null,
+                'question_day2' => $request->input('question_day2') ?: null,
                 'marketing_consent' => $request->boolean('marketing_consent'),
             ];
             if ($request->boolean('marketing_consent')) {

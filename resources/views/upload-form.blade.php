@@ -194,34 +194,12 @@
             </div>
 
             <div class="card mb-3">
+                <div class="card-header">
+                    <h3 class="h5 mb-0"><i class="bi bi-chat-left-text"></i> 강사님께 궁금한 점</h3>
+                </div>
                 <div class="card-body">
-                    <p id="attendance-label" class="form-label mb-2">참석 일자 <span class="text-danger">*</span></p>
-                    <div class="row g-2" role="radiogroup" aria-labelledby="attendance-label">
-                        @foreach(\App\Models\VideoSubmission::ATTENDANCE_OPTIONS as $value => $label)
-                            <div class="col-12 col-md-4">
-                                <label class="border rounded p-3 w-100 h-100 d-flex align-items-center gap-2 mb-0">
-                                    <input type="radio"
-                                           name="attendance_day"
-                                           value="{{ $value }}"
-                                           @checked(old('attendance_day') === $value)
-                                           @if($loop->first) required @endif>
-                                    <span>
-                                        <strong>{{ $label }}</strong>
-                                        @if($value === 'all')
-                                            <span class="d-block text-muted small">Day 1 · Day 2</span>
-                                        @elseif($value === 'day1')
-                                            <span class="d-block text-muted small">김상균 교수님</span>
-                                        @else
-                                            <span class="d-block text-muted small">윤윤구 강사님</span>
-                                        @endif
-                                    </span>
-                                </label>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    <div id="instructor-questions" class="row g-2 mt-1 @if(!old('attendance_day')) d-none @endif">
-                        <div id="question-day1-wrap" class="col-12 col-md-6 @if(old('attendance_day') === 'day2') d-none @endif">
+                    <div id="instructor-questions" class="row g-2">
+                        <div id="question-day1-wrap" class="col-12 col-md-6">
                             <label for="question_day1" class="form-label">Day 1 · 김상균 교수님 <span class="text-muted small">(선택)</span></label>
                             <textarea class="form-control"
                                       id="question_day1"
@@ -230,7 +208,7 @@
                                       maxlength="2000"
                                       placeholder="김상균 교수님께 궁금한 점을 적어 주세요.">{{ old('question_day1') }}</textarea>
                         </div>
-                        <div id="question-day2-wrap" class="col-12 col-md-6 @if(old('attendance_day') === 'day1') d-none @endif">
+                        <div id="question-day2-wrap" class="col-12 col-md-6">
                             <label for="question_day2" class="form-label">Day 2 · 윤윤구 강사님 <span class="text-muted small">(선택)</span></label>
                             <textarea class="form-control"
                                       id="question_day2"
@@ -522,37 +500,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     applicationForm.addEventListener('input', clearFieldError);
     applicationForm.addEventListener('change', clearFieldError);
-
-    const attendanceInputs = document.querySelectorAll('input[name="attendance_day"]');
-    const instructorQuestions = document.getElementById('instructor-questions');
-    const questionDay1 = document.getElementById('question-day1-wrap');
-    const questionDay2 = document.getElementById('question-day2-wrap');
-
-    function syncInstructorQuestions() {
-        const selected = document.querySelector('input[name="attendance_day"]:checked');
-        if (!selected) {
-            instructorQuestions.classList.add('d-none');
-            return;
-        }
-
-        instructorQuestions.classList.remove('d-none');
-        const showDay1 = selected.value === 'all' || selected.value === 'day1';
-        const showDay2 = selected.value === 'all' || selected.value === 'day2';
-        questionDay1.classList.toggle('d-none', !showDay1);
-        questionDay2.classList.toggle('d-none', !showDay2);
-        questionDay1.classList.toggle('col-md-6', showDay1 && showDay2);
-        questionDay2.classList.toggle('col-md-6', showDay1 && showDay2);
-
-        const day1Input = questionDay1.querySelector('textarea');
-        const day2Input = questionDay2.querySelector('textarea');
-        day1Input.disabled = !showDay1;
-        day2Input.disabled = !showDay2;
-        if (!showDay1) day1Input.value = '';
-        if (!showDay2) day2Input.value = '';
-    }
-
-    attendanceInputs.forEach((input) => input.addEventListener('change', syncInstructorQuestions));
-    syncInstructorQuestions();
 
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
         e.preventDefault();

@@ -59,7 +59,6 @@
                         <th>학년 / 연령</th>
                         <th>기관 / 지역</th>
                         <th>학부모</th>
-                        <th>참석 일자</th>
                         <th>Day 1 · 김상균 교수님</th>
                         <th>Day 2 · 윤윤구 강사님</th>
                         <th>마케팅 수신</th>
@@ -81,7 +80,6 @@
                                 {{ $application->parent_name }}<br>
                                 <small class="text-muted">{{ $application->parent_phone }}</small>
                             </td>
-                            <td>{{ $application->attendanceLabel() ?: '-' }}</td>
                             <td style="min-width: 180px;">
                                 @php $day1Question = $application->instructorQuestion('day1'); @endphp
                                 @if($day1Question !== '')
@@ -112,7 +110,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="11" class="text-center text-muted py-5">
+                            <td colspan="10" class="text-center text-muted py-5">
                                 @if($searchQuery !== '')
                                     검색 결과가 없습니다.
                                 @else

@@ -38,27 +38,20 @@ class SeminarPresentationTest extends TestCase
         $html = view('privacy-consent', ['errors' => new \Illuminate\Support\ViewErrorBag()])->render();
         $this->assertStringContainsString('웨비나 신청 접수', $html);
         $this->assertStringContainsString('180일간 보관', $html);
-        $this->assertStringContainsString('참석 일자', $html);
-        $this->assertStringContainsString('마케팅 정보 수신 동의 (선택)', $html);
-        $this->assertStringContainsString('동의하지 않아도 웨비나 신청에 아무런 제한이 없습니다.', $html);
+        $this->assertStringNotContainsString('참석 일자', $html);
+        $this->assertStringContainsString('마케팅 정보 수신 동의', $html);
+        $this->assertStringContainsString('선택 항목에 동의하지 않아도 웨비나 신청이 가능합니다.', $html);
         $this->assertStringContainsString('강사님께 궁금한 점 (선택 입력)', $html);
         $this->assertStringNotContainsString('제출영상', $html);
         $this->assertStringNotContainsString('초상권', $html);
     }
 
-    public function test_attendance_choice_shows_only_the_selected_instructor_question(): void
+    public function test_instructor_questions_are_always_shown_for_both_days(): void
     {
-        $submission = new VideoSubmission();
-        $submission->attendance_day = 'day1';
-        $submission->question_day1 = 'Day 1 질문';
-        $submission->question_day2 = '숨겨진 질문';
-
-        $this->assertSame('Day 1', $submission->attendanceLabel());
-        $this->assertSame('Day 1 질문', $submission->instructorQuestion('day1'));
-        $this->assertSame('숨겨진 질문', $submission->instructorQuestion('day2'));
-
         $html = view('upload-form', ['errors' => new \Illuminate\Support\ViewErrorBag()])->render();
-        $this->assertStringContainsString('name="attendance_day"', $html);
+        $this->assertStringNotContainsString('참석 일자', $html);
+        $this->assertStringNotContainsString('name="attendance_day"', $html);
+        $this->assertStringContainsString('강사님께 궁금한 점', $html);
         $this->assertStringContainsString('김상균 교수님', $html);
         $this->assertStringContainsString('윤윤구 강사님', $html);
         $this->assertStringContainsString('id="instructor-questions"', $html);
