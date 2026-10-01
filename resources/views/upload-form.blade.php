@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '웨비나 신청 - GrapeSEED')
+@section('title', '연사 초청 웨비나 신청 - GrapeSEED')
 
 @section('content')
 @include('partials.application-progress', ['currentStep' => 2])
@@ -8,8 +8,8 @@
 <div class="row justify-content-center">
     <div class="col-12 col-lg-10">
         <div class="text-center mb-2">
-            <h2><i class="bi bi-pencil-square"></i> 웨비나 신청</h2>
-            <p class="application-intro text-muted"><span>학생과 학부모 정보를 입력해주세요.</span> <span class="small">* 표시는 필수 항목입니다.</span></p>
+           <!--  <h2><i class="bi bi-pencil-square"></i> 연사 초청 웨비나 신청</h2> -->
+            <h4 class="application-intro"><span>학생과 학부모 정보를 입력해주세요.</span> <span class="small">* 표시는 필수 항목입니다.</span></h4>
         </div>
 
         <form id="upload-form">

@@ -51,6 +51,8 @@ class SeminarPresentationTest extends TestCase
         $html = view('upload-form', ['errors' => new \Illuminate\Support\ViewErrorBag()])->render();
         $this->assertStringNotContainsString('참석 일자', $html);
         $this->assertStringNotContainsString('name="attendance_day"', $html);
+        $this->assertStringContainsString('연사 초청 웨비나 신청', $html);
+        $this->assertStringNotContainsString('> 웨비나 신청</h2>', $html);
         $this->assertStringContainsString('강사님께 궁금한 점', $html);
         $this->assertStringContainsString('김상균 교수님', $html);
         $this->assertStringContainsString('윤윤구 강사님', $html);

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', '연사 초청 웨비나 - GrapeSEED')</title>
+    <title>@yield('title', '연사 초청 웨비나 신청 - GrapeSEED')</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="{{ asset('images/favicon.png') }}">
@@ -21,11 +21,7 @@
     <div class="container">
         <div class="contest-container">
             <div class="header-section">
-                <div class="logo-container">
-                    <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="grape-seed-logo">
-                </div>
-                <h1><span class="contest-title">연사 초청 웨비나</span></h1>
-                <!-- <p>GrapeSEED 학생들의 특별한 2025 Speech Contest</p> -->
+                <h1><span class="contest-title">연사 초청 웨비나 신청</span></h1>
             </div>
             
             @if(session('success'))
@@ -60,6 +56,7 @@
             
             <div class="footer-section">
                 <p>&copy; {{ now()->year }} GrapeSEED English for Children. All rights reserved.</p>
+                <img src="{{ asset('images/grape-seed-logo.png') }}" alt="GrapeSEED English for Children" class="footer-logo">
             </div>
         </div>
     </div>
