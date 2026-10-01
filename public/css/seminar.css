@@ -147,8 +147,6 @@ h2 { color: var(--gs-text-brand); font-size: 32px; font-weight: 700; line-height
 @media (max-width: 575.98px) {
     .contest-container { margin: 12px auto; padding: 16px; border-radius: 20px; }
     .header-section h1 { font-size: 28px; }
-    .application-intro { font-size: 16px; }
-    .application-intro .small { font-size: 12px; }
     .footer-logo { height: 28px; }
     h2 { font-size: 24px; }
     .card-header h3 { font-size: 18px; }
@@ -160,8 +158,12 @@ h2 { color: var(--gs-text-brand); font-size: 32px; font-weight: 700; line-height
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-.application-intro { display: flex; justify-content: center; align-items: baseline; gap: 8px; flex-wrap: nowrap; color: var(--gs-text-brand); font-size: 22px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.application-intro { display: flex; justify-content: center; align-items: baseline; gap: 8px; flex-wrap: nowrap; margin: 0; color: var(--gs-text-brand); font-size: 22px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
 .application-intro .small { color: var(--text-gray); font-size: 14px; font-weight: 400; }
+@media (max-width: 575.98px) {
+    .application-intro { flex-wrap: wrap; font-size: 18px; white-space: normal; row-gap: 2px; }
+    .application-intro .small { font-size: 13px; }
+}
 .verification-notice { color: var(--text-dark); background: var(--pale-purple); border-color: var(--light-purple); }
 .verification-notice h4 { color: var(--gs-purple); }
 .verification-success { color: var(--text-dark); background: var(--light-gray); border-color: var(--gs-green); }
