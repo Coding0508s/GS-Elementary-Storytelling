@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\VideoSubmission;
 use App\Services\NotificationService;
-use App\Services\TwilioSmsService;
+use App\Services\SolapiSmsService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -98,7 +98,7 @@ class VideoSubmissionController extends Controller
         // 개인정보 동의 확인
         if (!$request->session()->has('privacy_consent') || !$request->session()->get('privacy_consent')) {
             return redirect()->route('privacy.consent')
-                           ->with('error', '개인정보 수집 및 이용에 동의해야 업로드가 가능합니다.');
+                           ->with('error', '개인정보 수집 및 이용에 동의해야 세미나 신청이 가능합니다.');
         }
 
         // 업로드 폼 진입 시 이전 OTP 세션 정리 (CSRF 토큰 보존)
@@ -157,11 +157,11 @@ class VideoSubmissionController extends Controller
         $request->session()->put('otp_attempts', 0);
         $request->session()->put('otp_sent_at', now()); // OTP 발송 시간 기록
 
-        $message = "[Storytelling 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
+        $message = "[GrapeSEED 세미나 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
 
         try {
-            $twilio = new TwilioSmsService();
-            $result = $twilio->sendSms($phone, $message);
+            $sms = new SolapiSmsService();
+            $result = $sms->sendSms($phone, $message);
             if (!$result['success']) {
                 return response()->json(['success' => false, 'message' => '인증번호 전송 실패: ' . ($result['error'] ?? 'Unknown')], 500);
             }
@@ -260,7 +260,7 @@ class VideoSubmissionController extends Controller
         $request->session()->put('privacy_consent_time', now());
 
         return redirect()->route('upload.form')
-                        ->with('success', '개인정보 수집 및 이용에 동의해주셔서 감사합니다. 이제 영상을 업로드할 수 있습니다.');
+                        ->with('success', '동의 완료. 신청 정보를 입력해주세요.');
     }
 
     /**
@@ -280,11 +280,131 @@ class VideoSubmissionController extends Controller
         $isS3DirectUpload = $request->has('s3_key') && $request->has('s3_url');
         
         if ($isS3DirectUpload) {
-            // S3 직접 업로드 처리
             return $this->handleS3DirectUpload($request);
-        } else {
-            // 기존 서버 업로드 처리
-            return $this->handleServerUpload($request);
+        }
+
+        if (! $request->hasFile('video_file')) {
+            return $this->handleApplicationForm($request);
+        }
+
+        return $this->handleServerUpload($request);
+    }
+
+    /**
+     * 영상 없이 참가 정보만 저장합니다.
+     */
+    private function handleApplicationForm(Request $request)
+    {
+        $gradeOptions = implode(',', VideoSubmission::GRADE_OPTIONS);
+
+        $validator = Validator::make($request->all(), [
+            'region' => ['required', 'string', function ($attribute, $value, $fail) {
+                $parts = explode(' ', $value, 2);
+                if (count($parts) < 2) {
+                    $fail('올바른 지역 형식을 선택해주세요.');
+                    return;
+                }
+
+                $province = $parts[0];
+                $city = $parts[1];
+
+                if (! array_key_exists($province, VideoSubmission::REGIONS)) {
+                    $fail('올바른 시/도를 선택해주세요.');
+                    return;
+                }
+
+                if (! in_array($city, VideoSubmission::REGIONS[$province])) {
+                    $fail('올바른 시/군/구를 선택해주세요.');
+                    return;
+                }
+            }],
+            'institution_name' => 'required|string|max:255',
+            'student_name_korean' => 'required|string|max:255',
+            'grade' => 'required|string|in:'.$gradeOptions,
+            'parent_name' => 'required|string|max:255',
+            'parent_phone' => 'required|string|max:20',
+            'teacher_question' => 'nullable|string|max:2000',
+        ], [
+            'region.required' => '거주 지역을 선택해주세요.',
+            'institution_name.required' => '기관명을 입력해주세요.',
+            'student_name_korean.required' => '학생 한글 이름을 입력해주세요.',
+            'grade.required' => '학년 또는 연령을 선택해주세요.',
+            'grade.in' => '학년 또는 연령을 다시 선택해주세요.',
+            'parent_name.required' => '학부모 성함을 입력해주세요.',
+            'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
+            'teacher_question.max' => '강사님께 궁금한 점은 2000자 이하로 입력해주세요.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => '입력 데이터가 유효하지 않습니다.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        if (! $request->session()->get('otp_verified')) {
+            return response()->json([
+                'success' => false,
+                'message' => '휴대폰 인증이 필요합니다.',
+            ], 403);
+        }
+
+        try {
+            $submission = new VideoSubmission();
+            $submission->fill([
+                'region' => $request->region,
+                'institution_name' => $request->institution_name,
+                'student_name_korean' => $request->student_name_korean,
+                'grade' => $request->grade,
+                'parent_name' => $request->parent_name,
+                'parent_phone' => $request->parent_phone,
+                'teacher_question' => $request->teacher_question,
+                'privacy_consent' => true,
+                'privacy_consent_at' => now(),
+                'status' => VideoSubmission::STATUS_UPLOADED,
+            ]);
+            $submission->save();
+
+            session(['submission_id' => $submission->id]);
+            $this->notifySubmissionBySms($submission);
+            $this->clearAllOtpSessions($request);
+
+            return response()->json([
+                'success' => true,
+                'redirect_url' => route('upload.success'),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('참가 신청 저장 실패', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => '신청 처리 중 오류가 발생했습니다.',
+            ], 500);
+        }
+    }
+
+    /**
+     * 접수 완료 문자를 보냅니다. 실패해도 접수는 유지합니다.
+     */
+    private function notifySubmissionBySms($submission): void
+    {
+        try {
+            if (config('services.solapi.api_key') && config('services.solapi.from_number')) {
+                if (config('services.solapi.sync')) {
+                    $smsService = app(\App\Services\SolapiSmsService::class);
+                    $smsService->sendUploadCompletionNotification($submission);
+                } else {
+                    \App\Jobs\SendSmsJob::dispatch($submission);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('SMS 발송 예외 발생', [
+                'submission_id' => $submission->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -415,21 +535,18 @@ class VideoSubmissionController extends Controller
             // ⚡ SMS 알림 발송 (설정에 따라 동기식 또는 Queue)
             $smsStartTime = microtime(true);
             try {
-                // Twilio 설정이 있는지 확인
-                if (config('services.twilio.account_sid')) {
-                    // 환경변수로 SMS 발송 방식 제어 (기본값: 동기식)
-                    $useSyncSms = env('SMS_SYNC_MODE', true);
-                    
+                if (config('services.solapi.api_key') && config('services.solapi.from_number')) {
+                    $useSyncSms = config('services.solapi.sync');
+
                     if ($useSyncSms) {
-                        // 동기식 즉시 발송
-                        $twilioService = app(\App\Services\TwilioSmsService::class);
-                        $smsResult = $twilioService->sendUploadCompletionNotification($submission);
-                        
+                        $smsService = app(\App\Services\SolapiSmsService::class);
+                        $smsResult = $smsService->sendUploadCompletionNotification($submission);
+
                         if ($smsResult['success']) {
                             Log::info('SMS 즉시 발송 성공', [
                                 'submission_id' => $submission->id,
                                 'phone' => $submission->parent_phone,
-                                'message_sid' => $smsResult['message_sid']
+                                'group_id' => $smsResult['group_id'] ?? null
                             ]);
                         } else {
                             Log::error('SMS 즉시 발송 실패', [
@@ -445,7 +562,7 @@ class VideoSubmissionController extends Controller
                         ]);
                     }
                 } else {
-                    Log::info('Twilio 설정이 없어 SMS 발송 건너뜀', [
+                    Log::info('Solapi 설정이 없어 SMS 발송 건너뜀', [
                         'submission_id' => $submission->id
                     ]);
                 }
@@ -732,19 +849,19 @@ class VideoSubmissionController extends Controller
     }
 
     /**
-     * Twilio SMS 알림 전송
+     * Solapi SMS 알림 전송
      */
     private function sendSmsNotification($submission)
     {
         try {
-            $twilioService = new TwilioSmsService();
-            $result = $twilioService->sendUploadCompletionNotification($submission);
-            
+            $smsService = new SolapiSmsService();
+            $result = $smsService->sendUploadCompletionNotification($submission);
+
             if ($result['success']) {
                 Log::info('SMS 알림 전송 성공', [
                     'submission_id' => $submission->id,
                     'phone' => $submission->parent_phone,
-                    'message_sid' => $result['message_sid']
+                    'group_id' => $result['group_id'] ?? null
                 ]);
             } else {
                 Log::error('SMS 알림 전송 실패', [

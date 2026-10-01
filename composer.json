@@ -13,6 +13,7 @@
         "laravel/tinker": "^2.10.1",
         "league/flysystem-aws-s3-v3": "^3.29",
         "phpoffice/phpspreadsheet": "^5.2",
+        "solapi/sdk": "^5.1",
         "twilio/sdk": "^8.7"
     },
     "require-dev": {

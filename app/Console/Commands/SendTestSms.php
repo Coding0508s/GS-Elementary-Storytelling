@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Services\TwilioSmsService;
+use App\Services\SolapiSmsService;
 use App\Services\ReliableSmsService;
 use App\Models\VideoSubmission;
 
@@ -35,7 +35,7 @@ class SendTestSms extends Command
         $this->info("전화번호: {$phone}");
 
         try {
-            $smsService = new TwilioSmsService();
+            $smsService = new SolapiSmsService();
             $reliableService = new ReliableSmsService();
 
             if ($submissionId) {
@@ -63,7 +63,7 @@ class SendTestSms extends Command
 
             if ($result['success']) {
                 $this->info("✅ SMS 발송 성공!");
-                $this->info("Message SID: {$result['message_sid']}");
+                $this->info("Group ID: {$result['group_id']}");
                 $this->info("Status: {$result['status']}");
             } else {
                 $this->error("❌ SMS 발송 실패!");

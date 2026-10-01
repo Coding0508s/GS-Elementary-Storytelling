@@ -1,0 +1,24 @@
+/* GrapeSEED brand tokens — grapeseed-design-guide2026v1.html (*1) */
+
+:root {
+    --gs-purple: #541b86;
+    --gs-purple-hover: #3f186a;
+    --gs-green: #90c31f;
+    --gs-green-hover: #6d9516;
+    --pale-purple: #ede8f2;
+    --light-gray: #f2f2f2;
+    --light-purple: #cbbada;
+    --white: #ffffff;
+    /* Figma semantic text (color/text/*) */
+    --gs-text-brand: #541b86;
+    --gs-text-on-brand: #ffffff;
+    --text-dark: #333333;
+    --text-gray: #697683;
+    --littleseed-primary: #c59ac5;
+    --gs-radius-card: 30px;
+    --gs-shadow-elevation-1: 0 8px 10px rgba(84, 27, 134, 0.08);
+    --gs-shadow-elevation-2: 0 12px 24px rgba(84, 27, 134, 0.14);
+    --gs-shadow-elevation-2-green: 0 12px 24px rgba(109, 149, 22, 0.22);
+    --content-max: 1280px;
+    --header-h: 72px;
+}

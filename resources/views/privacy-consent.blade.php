@@ -1,53 +1,43 @@
 @extends('layouts.app')
 
-@section('title', '개인정보 수집 및 이용 동의 - 예비 초등 Storytelling Contest')
+@section('title', '개인정보 동의 - GrapeSEED 세미나')
 
 @section('content')
-<div class="progress-indicator">
-    <div class="progress-step active">1</div>
-    <div class="progress-line"></div>
-    <div class="progress-step inactive">2</div>
-    <div class="progress-line"></div>
-    <div class="progress-step inactive">3</div>
-</div>
+@include('partials.application-progress', ['currentStep' => 1])
 
 <div class="row justify-content-center">
     <div class="col-md-10">
         <div class="text-center mb-4">
             <h2><i class="bi bi-shield-check"></i> 개인정보 수집 및 이용 동의</h2>
-            <p class="text-muted">영상 업로드를 시작하기 전에 개인정보 처리 방침에 동의해주세요.</p>
+            <p class="text-muted">세미나 신청을 위해 개인정보 수집 및 이용 내용을 확인해주세요.</p>
         </div>
 
         <div class="card mb-4">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="bi bi-info-circle"></i> 개인정보 수집 및 이용 안내</h5>
+            <div class="card-header">
+                <h3 class="h5 mb-0"><i class="bi bi-info-circle"></i> 개인정보 수집 및 이용 안내</h3>
             </div>
             <div class="card-body">
-                <div class="privacy-content" style="max-height: 300px; overflow-y: auto; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
-                    <h6><strong>[개인정보 수집 및 이용 동의]</strong></h6>
+                <div role="region" aria-label="개인정보 수집 및 이용 상세 안내" class="privacy-content">
+                    <h4 class="h6"><strong>[개인정보 수집 및 이용 동의]</strong></h4>
                     <p>
-                    그레이프시드코리아㈜는 본 대회 운영을 위해 다음과 같이 참가자의 개인정보를 수집 및 이용하고자 합니다.<br>
+                    그레이프시드코리아㈜는 본 세미나 운영을 위해 다음과 같이 참가자의 개인정보를 수집 및 이용하고자 합니다.<br>
                     만 14세 미만 자녀(학생)의 개인정보는 법정대리인(학부모)의 동의하에 다음 항목을 수집 및 이용합니다.<br>
-                    &nbsp;&nbsp;- 수집 및 이용 목적 : 참가자 심사, 시상, 마케팅 및 홍보<br>
-                    &nbsp;&nbsp;- 수집 항목 : 자녀(학생)의 기관명, 반이름, 학년/나이, 이름(한글/영어), 제출영상<br>
-                    &nbsp;&nbsp;- 법적대리인(학부모)의 이름, 연락처(전화번호)<br>
-                    상기 개인정보 수집 및 이용에 동의합니다.
+                    &nbsp;&nbsp;- 수집 및 이용 목적 : 세미나 신청 접수, 참가자 확인 및 접수 안내<br>
+                    &nbsp;&nbsp;- 수집 항목 : 거주 지역, 자녀(학생)의 기관명, 학년/연령, 한글 이름<br>
+                    &nbsp;&nbsp;- 법정대리인(학부모)의 이름, 연락처(전화번호)<br>
+                    &nbsp;&nbsp;- 강사님께 궁금한 점 (선택 입력)
                    
                     </p>
 
-                    <h6><strong>[참가 동의 및 제출영상의 초상권 활용에 대한 동의]</strong></h6>
-                    <p>본인은 위 학생의 학부모로서, 본 대회 참가에 동의하며, 제출하는 영상물의 전체 또는 일부가 그레이프시드코리아(주)의 심사, 마케팅 및 홍보 목적으로 활용되는 것에 동의합니다.<br>
-                    상기 참가 및 초상권 활용에 동의합니다.</p>
-
-                    <h6><strong>[개인정보 보유 및 이용 기간]</strong></h6>
+                    <h4 class="h6"><strong>[개인정보 보유 및 이용 기간]</strong></h4>
                     <p>보유 및 이용기간 : 행사 종료 후 6개월까지 보관하며, 이후 즉시 파기<br>
                     </p>
 
-                    <h6><strong>[개인정보 제3자 제공]</strong></h6>
+                    <h4 class="h6"><strong>[개인정보 제3자 제공]</strong></h4>
                     <p>&nbsp;&nbsp;- 수집된 개인정보는 제3자에게 제공되지 않습니다.<br>
                        &nbsp;&nbsp;- 법령에 의해 요구되는 경우 예외적으로 제공될 수 있습니다.</p>
 
-                    <h6><strong>[개인정보 보호책임자]</strong></h6>
+                    <h4 class="h6"><strong>[개인정보 보호책임자]</strong></h4>
                     <p>문의사항이 있으시면 아래 연락처로 문의해주세요.<br>
                        &nbsp;&nbsp;- 이메일: kr-elementary@grapeseed.com<br>
                        &nbsp;&nbsp;- 전화: 1544-9055</p>
@@ -82,7 +72,7 @@
 
                     <p class="text-muted mt-3 small">
                         <i class="bi bi-info-circle"></i> 
-                        개인정보 수집 및 이용에 동의해야 영상 업로드가 가능합니다.
+                        개인정보 수집 및 이용에 동의해야 세미나 신청이 가능합니다.
                     </p>
                 </div>
             </div>
@@ -94,39 +84,15 @@
 @section('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 페이지 로드 시 페이드인 효과
-    document.body.style.opacity = '0';
-    document.body.style.transition = 'opacity 0.5s ease-in';
-    
-    setTimeout(function() {
-        document.body.style.opacity = '1';
-    }, 100);
-    
     const checkbox = document.getElementById('privacy_consent');
     const submitBtn = document.getElementById('submit-btn');
     
     checkbox.addEventListener('change', function() {
         submitBtn.disabled = !this.checked;
-        if (this.checked) {
-            submitBtn.classList.remove('btn-secondary');
-            submitBtn.classList.add('btn-primary');
-        } else {
-            submitBtn.classList.remove('btn-primary');
-            submitBtn.classList.add('btn-secondary');
-        }
+
     });
     
-    // 동의 후 계속하기 버튼 클릭 시 부드러운 전환
-    const form = document.querySelector('form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            if (checkbox.checked) {
-                // 페이지 페이드아웃 효과
-                document.body.style.transition = 'opacity 0.3s ease-out';
-                document.body.style.opacity = '0.7';
-            }
-        });
-    }
+
 });
 </script>
 @endsection 

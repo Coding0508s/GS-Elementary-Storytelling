@@ -8,7 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\VideoSubmission;
-use App\Services\TwilioSmsService;
+use App\Services\SolapiSmsService;
 use Illuminate\Support\Facades\Log;
 
 class SendSmsJob implements ShouldQueue
@@ -35,20 +35,20 @@ class SendSmsJob implements ShouldQueue
      */
     public function handle()
     {
-        if (!config('services.twilio.account_sid')) {
-            Log::info('Twilio service is not configured. Skipping SMS.');
+        if (! config('services.solapi.api_key') || ! config('services.solapi.from_number')) {
+            Log::info('Solapi service is not configured. Skipping SMS.');
             return;
         }
 
         try {
-            $twilioService = new TwilioSmsService();
-            $result = $twilioService->sendUploadCompletionNotification($this->submission);
+            $smsService = new SolapiSmsService();
+            $result = $smsService->sendUploadCompletionNotification($this->submission);
 
             if ($result['success']) {
                 Log::info('SMS notification job sent successfully.', [
                     'submission_id' => $this->submission->id,
                     'phone' => $this->submission->parent_phone,
-                    'message_sid' => $result['message_sid']
+                    'group_id' => $result['group_id'] ?? null,
                 ]);
             } else {
                 Log::error('SMS notification job failed.', [

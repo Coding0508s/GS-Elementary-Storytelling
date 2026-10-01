@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\VideoSubmission;
 use App\Services\NotificationService;
-use App\Services\TwilioSmsService;
+use App\Services\SolapiSmsService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
@@ -298,19 +298,19 @@ class VideoSubmissionController extends Controller
     }
 
     /**
-     * Twilio SMS 알림 전송
+     * Solapi SMS 알림 전송
      */
     private function sendSmsNotification($submission)
     {
         try {
-            $twilioService = new TwilioSmsService();
-            $result = $twilioService->sendUploadCompletionNotification($submission);
-            
+            $smsService = new SolapiSmsService();
+            $result = $smsService->sendUploadCompletionNotification($submission);
+
             if ($result['success']) {
                 Log::info('SMS 알림 전송 성공', [
                     'submission_id' => $submission->id,
                     'phone' => $submission->parent_phone,
-                    'message_sid' => $result['message_sid']
+                    'group_id' => $result['group_id'] ?? null
                 ]);
             } else {
                 Log::error('SMS 알림 전송 실패', [

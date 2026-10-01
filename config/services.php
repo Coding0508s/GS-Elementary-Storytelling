@@ -35,10 +35,12 @@ return [
         ],
     ],
 
-    'twilio' => [
-        'account_sid' => env('TWILIO_ACCOUNT_SID'),
-        'auth_token' => env('TWILIO_AUTH_TOKEN'),
-        'from_number' => env('TWILIO_FROM_NUMBER'),
+    'solapi' => [
+        'api_key' => env('SOLAPI_API_KEY'),
+        'api_secret' => env('SOLAPI_API_SECRET'),
+        'from_number' => env('SOLAPI_FROM_NUMBER'),
+        // 컨트롤러에서 env()를 직접 부르지 않도록 발송 방식도 여기서 읽습니다.
+        'sync' => env('SMS_SYNC_MODE', true),
     ],
 
     'openai' => [

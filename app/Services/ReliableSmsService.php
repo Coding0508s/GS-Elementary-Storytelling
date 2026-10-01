@@ -3,17 +3,17 @@
 namespace App\Services;
 
 use App\Jobs\SendSmsJob;
-use App\Services\TwilioSmsService;
+use App\Services\SolapiSmsService;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
 class ReliableSmsService
 {
-    private $twilioService;
+    private $smsService;
 
     public function __construct()
     {
-        $this->twilioService = new TwilioSmsService();
+        $this->smsService = new SolapiSmsService();
     }
 
     /**
@@ -67,16 +67,16 @@ class ReliableSmsService
     public function sendImmediateSms($submission)
     {
         try {
-            $result = $this->twilioService->sendUploadCompletionNotification($submission);
-            
+            $result = $this->smsService->sendUploadCompletionNotification($submission);
+
             if ($result['success']) {
                 Log::info('SMS 즉시 발송 성공', [
                     'submission_id' => $submission->id,
                     'phone' => $submission->parent_phone,
-                    'message_sid' => $result['message_sid'],
+                    'group_id' => $result['group_id'] ?? null,
                     'method' => 'immediate'
                 ]);
-                return ['success' => true, 'method' => 'immediate', 'message_sid' => $result['message_sid']];
+                return ['success' => true, 'method' => 'immediate', 'group_id' => $result['group_id'] ?? null];
             } else {
                 Log::error('SMS 즉시 발송 실패', [
                     'submission_id' => $submission->id,
@@ -110,12 +110,12 @@ class ReliableSmsService
     public function sendTestSms($phoneNumber, $message)
     {
         try {
-            $result = $this->twilioService->sendSms($phoneNumber, $message);
-            
+            $result = $this->smsService->sendSms($phoneNumber, $message);
+
             Log::info('테스트 SMS 발송', [
                 'phone' => $phoneNumber,
                 'success' => $result['success'],
-                'message_sid' => $result['message_sid'] ?? null
+                'group_id' => $result['group_id'] ?? null
             ]);
             
             return $result;

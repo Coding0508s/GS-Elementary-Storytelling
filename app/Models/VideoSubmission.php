@@ -26,6 +26,7 @@ class VideoSubmission extends Model
         'video_file_type',
         'video_file_size',
         'unit_topic',
+        'teacher_question',
         'privacy_consent',
         'privacy_consent_at',
         'notification_sent',
@@ -47,6 +48,13 @@ class VideoSubmission extends Model
     ];
 
     // 상태 상수 정의
+    const GRADE_OPTIONS = [
+        '만 3세',
+        '만 4세',
+        '만 5세',
+        '초 1~6학년',
+    ];
+
     const STATUS_UPLOADED = 'uploaded';
     const STATUS_PROCESSING = 'processing';
     const STATUS_COMPLETED = 'completed';
