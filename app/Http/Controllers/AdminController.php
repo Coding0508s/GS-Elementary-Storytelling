@@ -1383,27 +1383,6 @@ public function assignVideo(Request $request)
                 Log::error('로컬 파일 삭제 오류: ' . $e->getMessage());
             }
 
-            // 6. ID 시퀀스 초기화 (테이블 ID 재시작)
-            try {
-                $driver = \DB::getDriverName();
-                if ($driver === 'mysql') {
-                    \DB::statement('ALTER TABLE evaluations AUTO_INCREMENT = 1');
-                    \DB::statement('ALTER TABLE video_assignments AUTO_INCREMENT = 1');
-                    \DB::statement('ALTER TABLE video_submissions AUTO_INCREMENT = 1');
-                } elseif ($driver === 'sqlite') {
-                    // sqlite은 시퀀스가 sqlite_sequence 테이블에 저장됨
-                    \DB::statement("DELETE FROM sqlite_sequence WHERE name IN ('evaluations','video_assignments','video_submissions')");
-                } elseif ($driver === 'pgsql') {
-                    // PostgreSQL 시퀀스 이름은 기본 규칙을 따름: {table}_{column}_seq
-                    \DB::statement('ALTER SEQUENCE evaluations_id_seq RESTART WITH 1');
-                    \DB::statement('ALTER SEQUENCE video_assignments_id_seq RESTART WITH 1');
-                    \DB::statement('ALTER SEQUENCE video_submissions_id_seq RESTART WITH 1');
-                }
-            } catch (\Exception $e) {
-                Log::warning('ID 시퀀스 초기화 경고: ' . $e->getMessage());
-            }
-
-            // 7. 로그 기록
             Log::warning('데이터 초기화 실행', [
                 'admin_id' => $admin->id,
                 'admin_name' => $admin->name,
@@ -1414,10 +1393,26 @@ public function assignVideo(Request $request)
             \DB::commit();
 
         } catch (\Exception $e) {
-            \DB::rollback();
+            // ALTER TABLE이 트랜잭션을 먼저 끝낸 뒤 rollback을 호출하면
+            // "There is no active transaction"이 다시 난다.
+            if (\DB::transactionLevel() > 0) {
+                \DB::rollBack();
+            }
             Log::error('데이터 초기화 오류: ' . $e->getMessage());
-            
+
             return back()->with('error', '데이터 초기화 중 오류가 발생했습니다: ' . $e->getMessage());
+        }
+
+        // MySQL의 ALTER TABLE은 실행되는 순간 열린 트랜잭션을 강제로 커밋한다.
+        // 그 상태에서 DB::commit()을 호출하면 "There is no active transaction"이 난다.
+        // 그래서 삭제 커밋이 끝난 뒤에 접수번호 카운터를 1로 되돌린다.
+        try {
+            $this->restartDeletedTableIds();
+        } catch (\Exception $e) {
+            Log::warning('ID 시퀀스 초기화 경고: ' . $e->getMessage());
+
+            return redirect()->route('admin.dashboard')
+                ->with('error', '접수는 삭제되었지만 접수번호 초기화에 실패했습니다: '.$e->getMessage());
         }
 
         // 트랜잭션 완료 후 리다이렉트
@@ -1430,6 +1425,41 @@ public function assignVideo(Request $request)
                               "배정 {$stats['assignments_deleted']}개, " .
                               "S3 파일 {$stats['s3_files_deleted']}개\n" .
                               "다음 접수번호는 GSK-00001부터 시작합니다.");
+    }
+
+    /**
+     * 삭제된 접수 표의 다음 번호를 1로 되돌린다.
+     * 이 작업은 트랜잭션 밖에서 해야 한다.
+     */
+    private function restartDeletedTableIds(): void
+    {
+        $tables = ['evaluations', 'video_assignments', 'ai_evaluations', 'video_submissions'];
+        $driver = \DB::getDriverName();
+
+        if ($driver === 'mysql') {
+            foreach ($tables as $table) {
+                if (Schema::hasTable($table)) {
+                    \DB::statement("ALTER TABLE {$table} AUTO_INCREMENT = 1");
+                }
+            }
+
+            return;
+        }
+
+        if ($driver === 'sqlite') {
+            $names = implode("','", $tables);
+            \DB::statement("DELETE FROM sqlite_sequence WHERE name IN ('{$names}')");
+
+            return;
+        }
+
+        if ($driver === 'pgsql') {
+            foreach ($tables as $table) {
+                if (Schema::hasTable($table)) {
+                    \DB::statement("ALTER SEQUENCE {$table}_id_seq RESTART WITH 1");
+                }
+            }
+        }
     }
 
     /**
