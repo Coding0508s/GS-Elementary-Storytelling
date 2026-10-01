@@ -115,6 +115,126 @@ class AdminController extends Controller
     }
 
     /**
+     * 세미나 신청으로 접수된 참가자 목록
+     */
+    public function seminarApplications(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (! $admin || ! $admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        $searchQuery = trim((string) $request->get('search', ''));
+
+        $applications = $this->seminarApplicationQuery($searchQuery)
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('admin.seminar-applications', [
+            'applications' => $applications,
+            'searchQuery' => $searchQuery,
+        ]);
+    }
+
+    /**
+     * 접수 내역을 엑셀 파일로 내려받는다.
+     * 화면의 검색어가 있으면 같은 조건의 행만 넣고, 없으면 전체를 넣는다.
+     */
+    public function downloadSeminarApplicationsExcel(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (! $admin || ! $admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        $searchQuery = trim((string) $request->get('search', ''));
+        $applications = $this->seminarApplicationQuery($searchQuery)->latest()->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('접수 내역');
+
+        $headers = ['접수번호', '접수일시', '학생 이름', '학년', '기관명', '거주지역', '학부모 성함', '전화번호', '강사님께 궁금한 점'];
+        foreach ($headers as $index => $header) {
+            $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($column.'1', $header);
+        }
+
+        $sheet->getStyle('A1:I1')->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '4F46E5'],
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+            ],
+        ]);
+
+        $rowIndex = 2;
+        foreach ($applications as $application) {
+            $question = $application->teacher_question ?: $application->unit_topic;
+
+            $sheet->setCellValue('A'.$rowIndex, $application->receipt_number);
+            $sheet->setCellValue('B'.$rowIndex, $application->created_at?->format('Y-m-d H:i'));
+            $sheet->setCellValue('C'.$rowIndex, $application->student_name_korean);
+            $sheet->setCellValue('D'.$rowIndex, $application->grade);
+            $sheet->setCellValue('E'.$rowIndex, $application->institution_name);
+            $sheet->setCellValue('F'.$rowIndex, $application->region);
+            $sheet->setCellValue('G'.$rowIndex, $application->parent_name);
+            // 전화번호가 숫자로 바뀌어 앞자리 0이 사라지지 않도록 글자로 넣는다.
+            $sheet->setCellValueExplicit(
+                'H'.$rowIndex,
+                (string) $application->parent_phone,
+                \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+            );
+            $sheet->setCellValue('I'.$rowIndex, $question);
+            $rowIndex++;
+        }
+
+        foreach (range('A', 'I') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $filename = 'seminar_applications_'.date('Y-m-d_H-i-s').'.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * 접수 목록과 엑셀이 같은 검색 조건을 쓰도록 쿼리를 한곳에 둔다.
+     */
+    private function seminarApplicationQuery(string $searchQuery)
+    {
+        return VideoSubmission::query()
+            ->when($searchQuery !== '', function ($query) use ($searchQuery) {
+                $query->where(function ($inner) use ($searchQuery) {
+                    $inner->where('student_name_korean', 'like', "%{$searchQuery}%")
+                        ->orWhere('institution_name', 'like', "%{$searchQuery}%")
+                        ->orWhere('parent_name', 'like', "%{$searchQuery}%")
+                        ->orWhere('parent_phone', 'like', "%{$searchQuery}%")
+                        ->orWhere('region', 'like', "%{$searchQuery}%")
+                        ->orWhere('grade', 'like', "%{$searchQuery}%");
+
+                    if (preg_match('/(\d+)/', $searchQuery, $matches)) {
+                        $inner->orWhere('id', (int) $matches[1]);
+                    }
+                });
+            });
+    }
+
+    /**
      * 관리자 대시보드
      */
     public function dashboard()

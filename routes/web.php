@@ -85,6 +85,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 대시보드
         Route::get('/dashboard', [AdminController::class, 'dashboard'])
             ->name('dashboard');
+
+        Route::get('/applications', [AdminController::class, 'seminarApplications'])
+            ->name('applications');
+
+        Route::get('/applications/excel', [AdminController::class, 'downloadSeminarApplicationsExcel'])
+            ->name('applications.excel');
         
         // 로그아웃
         Route::post('/logout', [AdminController::class, 'logout'])

@@ -378,6 +378,11 @@
                            href="{{ route('admin.dashboard') }}">
                             <i class="bi bi-speedometer2"></i> 대시보드
                         </a>
+
+                        <a class="nav-link {{ request()->routeIs('admin.applications') ? 'active' : '' }}"
+                           href="{{ route('admin.applications') }}">
+                            <i class="bi bi-person-lines-fill"></i> 접수 내역
+                        </a>
                         
                         <a class="nav-link {{ request()->routeIs('admin.evaluation.*') && !request()->routeIs('admin.evaluation.ranking') ? 'active' : '' }}" 
                            href="{{ route('admin.evaluation.list') }}">
