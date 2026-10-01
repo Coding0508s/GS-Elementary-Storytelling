@@ -106,6 +106,60 @@ class ResetReceiptNumberTest extends TestCase
         $this->assertSame('GSK-00001', $next->receipt_number);
     }
 
+    public function test_delete_moves_application_to_trash(): void
+    {
+        $admin = Admin::create([
+            'username' => 'admin',
+            'password' => 'secret-pass',
+            'name' => '관리자',
+            'email' => 'admin@example.com',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+        $submission = $this->makeSubmission('삭제대상');
+
+        $this->actingAs($admin, 'admin');
+        $request = Request::create('/admin/applications/'.$submission->id, 'DELETE', [
+            'search' => '삭제대상',
+        ]);
+
+        $response = app(AdminController::class)->deleteSeminarApplication($request, $submission);
+
+        $this->assertTrue($response->isRedirect(route('admin.applications', ['search' => '삭제대상'])));
+        $this->assertSoftDeleted('video_submissions', ['id' => $submission->id]);
+        $this->assertSame(0, VideoSubmission::count());
+        $this->assertSame(1, VideoSubmission::onlyTrashed()->count());
+    }
+
+    public function test_alimtalk_without_template_does_not_send(): void
+    {
+        config([
+            'services.solapi.kakao_pf_id' => '',
+            'services.solapi.kakao_template_id' => '',
+        ]);
+
+        $admin = Admin::create([
+            'username' => 'admin',
+            'password' => 'secret-pass',
+            'name' => '관리자',
+            'email' => 'admin@example.com',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+        $this->makeSubmission('알림톡대상');
+
+        $this->actingAs($admin, 'admin');
+        $request = Request::create('/admin/applications/alimtalk', 'POST', [
+            'search' => '알림톡대상',
+        ]);
+
+        $response = app(AdminController::class)->sendSeminarAlimtalk($request);
+
+        $this->assertTrue($response->isRedirect(route('admin.applications', ['search' => '알림톡대상'])));
+        $this->assertSame('템플릿이 연결되지 않았습니다.', session('error'));
+        $this->assertSame(1, VideoSubmission::count());
+    }
+
     private function makeSubmission(string $name): VideoSubmission
     {
         return VideoSubmission::create([

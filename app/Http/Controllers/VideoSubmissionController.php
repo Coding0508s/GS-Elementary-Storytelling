@@ -99,7 +99,7 @@ class VideoSubmissionController extends Controller
         // 개인정보 동의 확인
         if (!$request->session()->has('privacy_consent') || !$request->session()->get('privacy_consent')) {
             return redirect()->route('privacy.consent')
-                           ->with('error', '개인정보 수집 및 이용에 동의해야 세미나 신청이 가능합니다.');
+                           ->with('error', '개인정보 수집 및 이용에 동의해야 웨비나 신청이 가능합니다.');
         }
 
         // 업로드 폼 진입 시 이전 OTP 세션 정리 (CSRF 토큰 보존)
@@ -165,7 +165,7 @@ class VideoSubmissionController extends Controller
         $request->session()->put('otp_attempts', 0);
         $request->session()->put('otp_sent_at', now()); // OTP 발송 시간 기록
 
-        $message = "[GrapeSEED 세미나 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
+        $message = "[GrapeSEED 웨비나 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
 
         try {
             $sms = new SolapiSmsService();
@@ -270,6 +270,7 @@ class VideoSubmissionController extends Controller
         // 세션에 동의 정보 저장
         $request->session()->put('privacy_consent', true);
         $request->session()->put('privacy_consent_time', now());
+        $request->session()->put('marketing_consent', $request->boolean('marketing_consent'));
 
         return redirect()->route('upload.form')
                         ->with('success', '동의 완료. 신청 정보를 입력해주세요.');
@@ -335,7 +336,9 @@ class VideoSubmissionController extends Controller
             'grade' => 'required|string|in:'.$gradeOptions,
             'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
-            'teacher_question' => 'nullable|string|max:2000',
+            'attendance_day' => 'required|string|in:'.implode(',', array_keys(VideoSubmission::ATTENDANCE_OPTIONS)),
+            'question_day1' => 'nullable|string|max:2000',
+            'question_day2' => 'nullable|string|max:2000',
         ], [
             'region.required' => '거주 지역을 선택해주세요.',
             'institution_name.required' => '기관명을 입력해주세요.',
@@ -344,7 +347,10 @@ class VideoSubmissionController extends Controller
             'grade.in' => '학년 또는 연령을 다시 선택해주세요.',
             'parent_name.required' => '학부모 성함을 입력해주세요.',
             'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
-            'teacher_question.max' => '강사님께 궁금한 점은 2000자 이하로 입력해주세요.',
+            'attendance_day.required' => '참석 일자를 선택해주세요.',
+            'attendance_day.in' => '참석 일자를 다시 선택해주세요.',
+            'question_day1.max' => 'Day 1 질문은 2000자 이하로 입력해주세요.',
+            'question_day2.max' => 'Day 2 질문은 2000자 이하로 입력해주세요.',
         ]);
 
         if ($validator->fails()) {
@@ -406,12 +412,40 @@ class VideoSubmissionController extends Controller
         ];
 
         $columns = collect(Schema::getColumns('video_submissions'))->keyBy('name');
-        $question = $request->input('teacher_question');
+        if ($columns->has('marketing_consent')) {
+            $agreed = (bool) $request->session()->get('marketing_consent');
+            $attributes['marketing_consent'] = $agreed;
+            if ($columns->has('marketing_consent_at')) {
+                $attributes['marketing_consent_at'] = $agreed ? now() : null;
+            }
+        }
+        $attendance = $request->input('attendance_day');
+        $day1 = $attendance === 'day2' ? null : $request->input('question_day1');
+        $day2 = $attendance === 'day1' ? null : $request->input('question_day2');
+        $day1 = filled($day1) ? $day1 : null;
+        $day2 = filled($day2) ? $day2 : null;
 
-        if ($columns->has('teacher_question')) {
-            $attributes['teacher_question'] = $question;
-        } elseif ($question) {
-            $attributes['unit_topic'] = $question;
+        if ($columns->has('attendance_day')) {
+            $attributes['attendance_day'] = $attendance;
+        }
+        if ($columns->has('question_day1')) {
+            $attributes['question_day1'] = $day1;
+        }
+        if ($columns->has('question_day2')) {
+            $attributes['question_day2'] = $day2;
+        }
+
+        $legacyQuestion = collect([
+            $day1 ? 'Day 1: '.$day1 : null,
+            $day2 ? 'Day 2: '.$day2 : null,
+        ])->filter()->implode("\n");
+
+        if (! $columns->has('question_day1') && $legacyQuestion !== '') {
+            if ($columns->has('teacher_question')) {
+                $attributes['teacher_question'] = $legacyQuestion;
+            } else {
+                $attributes['unit_topic'] = $legacyQuestion;
+            }
         }
 
         foreach ([
@@ -799,20 +833,16 @@ class VideoSubmissionController extends Controller
     public function getInstitutions(Request $request)
     {
         $query = $request->get('q', '');
-        
-        // Institution 테이블에서 활성화된 기관명만 조회
+
+        // 활성화된 기관을 이름순으로 모두 보여 줍니다.
+        // 예전에는 20곳만 내려와서 구미 근처에서 목록이 끊겼습니다.
         $institutionsQuery = \App\Models\Institution::active()->ordered();
-        
-        // 검색어가 있을 때는 필터링
+
         if (strlen($query) >= 1) {
             $institutionsQuery->search($query);
-            $limit = 10;
-        } else {
-            // 전체 목록일 때는 더 많이 표시
-            $limit = 20;
         }
-        
-        $institutions = $institutionsQuery->limit($limit)->pluck('name');
+
+        $institutions = $institutionsQuery->pluck('name');
             
         return response()->json($institutions);
     }

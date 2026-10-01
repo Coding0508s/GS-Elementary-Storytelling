@@ -118,7 +118,7 @@ class SolapiSmsService
 
         $message = "[GrapeSEED]\n";
         $message .= empty($submission->video_file_path)
-            ? "{$studentName} 학생의 세미나 신청이 완료되었습니다.\n"
+            ? "{$studentName} 학생의 웨비나 신청이 완료되었습니다.\n"
             : "{$studentName}학생의 영상 업로드 완료!\n";
         $message .= "접수번호: GSK-{$receiptNumber}\n";
         $message .= "참여해주셔서 감사합니다! 🎉";

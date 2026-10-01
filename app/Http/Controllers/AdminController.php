@@ -19,6 +19,7 @@ use App\Models\Institution;
 use App\Models\AiEvaluation;
 use App\Models\SiteSetting;
 use App\Services\OpenAiService;
+use App\Services\SolapiAlimtalkService;
 use Illuminate\Support\Facades\Schema;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -115,7 +116,7 @@ class AdminController extends Controller
     }
 
     /**
-     * 세미나 신청으로 접수된 참가자 목록
+     * 웨비나 신청으로 접수된 참가자 목록
      */
     public function seminarApplications(Request $request)
     {
@@ -139,6 +140,80 @@ class AdminController extends Controller
     }
 
     /**
+     * 접수 한 건을 휴지통으로 옮긴다.
+     * 완전히 지우지 않아서 휴지통에서 복원할 수 있고, 접수번호도 다시 쓰이지 않는다.
+     */
+    public function deleteSeminarApplication(Request $request, VideoSubmission $submission)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (! $admin || ! $admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        $receiptNumber = $submission->receipt_number;
+        $studentName = $submission->student_name_korean;
+        $submission->delete();
+
+        Log::info('접수 내역을 휴지통으로 이동', [
+            'admin_id' => $admin->id,
+            'submission_id' => $submission->id,
+            'receipt_number' => $receiptNumber,
+        ]);
+
+        return redirect()
+            ->route('admin.applications', array_filter([
+                'search' => $request->input('search'),
+            ]))
+            ->with('success', "{$receiptNumber} {$studentName} 접수를 휴지통으로 옮겼습니다.");
+    }
+
+    /**
+     * 지금 목록과 같은 범위의 참가자에게 알림톡 발송을 요청한다.
+     * 템플릿이 없으면 보내지 않는다.
+     */
+    public function sendSeminarAlimtalk(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (! $admin || ! $admin->isAdmin()) {
+            return redirect()->route('judge.dashboard')
+                ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
+        }
+
+        $searchQuery = trim((string) $request->input('search', ''));
+        $redirect = redirect()->route('admin.applications', array_filter([
+            'search' => $searchQuery,
+        ]));
+
+        $alimtalk = app(SolapiAlimtalkService::class);
+        if (! $alimtalk->isReady()) {
+            return $redirect->with('error', '템플릿이 연결되지 않았습니다.');
+        }
+
+        $applications = $this->seminarApplicationQuery($searchQuery)->latest()->get();
+        if ($applications->isEmpty()) {
+            return $redirect->with('error', '보낼 참가자가 없습니다.');
+        }
+
+        try {
+            $result = $alimtalk->sendToApplications($applications);
+        } catch (\Throwable $e) {
+            Log::error('접수 알림톡 발송 오류', [
+                'admin_id' => $admin->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $redirect->with('error', '알림톡 발송 중 오류가 발생했습니다.');
+        }
+
+        if ($result['requested'] === 0) {
+            return $redirect->with('error', '보낼 수 있는 전화번호가 없습니다. 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.');
+        }
+
+        return $redirect->with('success', '알림톡 발송을 요청했습니다. 요청 '.$result['requested'].'건, 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.');
+    }
+
+    /**
      * 접수 내역을 엑셀 파일로 내려받는다.
      * 화면의 검색어가 있으면 같은 조건의 행만 넣고, 없으면 전체를 넣는다.
      */
@@ -157,13 +232,13 @@ class AdminController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('접수 내역');
 
-        $headers = ['접수번호', '접수일시', '학생 이름', '학년', '기관명', '거주지역', '학부모 성함', '전화번호', '강사님께 궁금한 점'];
+        $headers = ['접수번호', '접수일시', '학생 이름', '학년', '기관명', '거주지역', '학부모 성함', '전화번호', '참석 일자', 'Day 1 김상균 교수님', 'Day 2 윤윤구 강사님', '마케팅 수신 동의'];
         foreach ($headers as $index => $header) {
             $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue($column.'1', $header);
         }
 
-        $sheet->getStyle('A1:I1')->applyFromArray([
+        $sheet->getStyle('A1:L1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -179,8 +254,6 @@ class AdminController extends Controller
 
         $rowIndex = 2;
         foreach ($applications as $application) {
-            $question = $application->teacher_question ?: $application->unit_topic;
-
             $sheet->setCellValue('A'.$rowIndex, $application->receipt_number);
             $sheet->setCellValue('B'.$rowIndex, $application->created_at?->format('Y-m-d H:i'));
             $sheet->setCellValue('C'.$rowIndex, $application->student_name_korean);
@@ -194,11 +267,14 @@ class AdminController extends Controller
                 (string) $application->parent_phone,
                 \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
             );
-            $sheet->setCellValue('I'.$rowIndex, $question);
+            $sheet->setCellValue('I'.$rowIndex, $application->attendanceLabel());
+            $sheet->setCellValue('J'.$rowIndex, $application->instructorQuestion('day1'));
+            $sheet->setCellValue('K'.$rowIndex, $application->instructorQuestion('day2'));
+            $sheet->setCellValue('L'.$rowIndex, $application->marketing_consent ? '동의' : '미동의');
             $rowIndex++;
         }
 
-        foreach (range('A', 'I') as $column) {
+        foreach (range('A', 'L') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -3823,14 +3899,14 @@ public function assignVideo(Request $request)
                     'id' => $submission->id,
                     'region' => $submission->region,
                     'institution_name' => $submission->institution_name,
-                    'class_name' => $submission->class_name,
                     'student_name_korean' => $submission->student_name_korean,
-                    'student_name_english' => $submission->student_name_english,
                     'grade' => $submission->grade,
-                    'age' => $submission->age,
                     'parent_name' => $submission->parent_name,
                     'parent_phone' => $submission->parent_phone,
-                    'unit_topic' => $submission->unit_topic,
+                    'attendance_day' => $submission->attendance_day,
+                    'question_day1' => $submission->instructorQuestion('day1'),
+                    'question_day2' => $submission->instructorQuestion('day2'),
+                    'marketing_consent' => (bool) $submission->marketing_consent,
                 ]
             ]);
         } catch (ModelNotFoundException $e) {
@@ -3895,27 +3971,22 @@ public function assignVideo(Request $request)
                     }
                 }],
                 'institution_name' => 'required|string|max:255',
-                'class_name' => 'required|string|max:255',
                 'student_name_korean' => 'required|string|max:255',
-                'student_name_english' => 'required|string|max:255',
                 'grade' => 'required|string|max:50',
-                'age' => 'required|integer|min:1|max:100',
                 'parent_name' => 'required|string|max:255',
                 'parent_phone' => 'required|string|max:20',
-                'unit_topic' => 'nullable|string|max:255',
+                'attendance_day' => 'required|in:all,day1,day2',
+                'question_day1' => 'nullable|string|max:2000',
+                'question_day2' => 'nullable|string|max:2000',
+                'marketing_consent' => 'nullable|boolean',
             ], [
                 'region.required' => '거주 지역을 선택해주세요.',
                 'institution_name.required' => '기관명을 입력해주세요.',
-                'class_name.required' => '반 이름을 입력해주세요.',
                 'student_name_korean.required' => '학생 한글 이름을 입력해주세요.',
-                'student_name_english.required' => '학생 영어 이름을 입력해주세요.',
                 'grade.required' => '학년을 입력해주세요.',
-                'age.required' => '나이를 선택해주세요.',
-                'age.integer' => '올바른 나이를 선택해주세요.',
-                'age.min' => '나이는 1세 이상이어야 합니다.',
-                'age.max' => '나이는 100세 이하여야 합니다.',
                 'parent_name.required' => '학부모 성함을 입력해주세요.',
                 'parent_phone.required' => '학부모 전화번호를 입력해주세요.',
+                'attendance_day.required' => '참석 일자를 선택해주세요.',
             ]);
 
             if ($validator->fails()) {
@@ -3945,18 +4016,24 @@ public function assignVideo(Request $request)
             }
 
             // 업데이트할 데이터 준비
+            $attendance = $request->input('attendance_day');
             $updateData = [
                 'region' => $request->region,
                 'institution_name' => $request->institution_name,
-                'class_name' => $request->class_name,
                 'student_name_korean' => $request->student_name_korean,
-                'student_name_english' => $request->student_name_english,
                 'grade' => $request->grade,
-                'age' => $request->age,
                 'parent_name' => $request->parent_name,
                 'parent_phone' => $request->parent_phone,
-                'unit_topic' => $request->unit_topic,
+                'attendance_day' => $attendance,
+                'question_day1' => $attendance === 'day2' ? null : ($request->input('question_day1') ?: null),
+                'question_day2' => $attendance === 'day1' ? null : ($request->input('question_day2') ?: null),
+                'marketing_consent' => $request->boolean('marketing_consent'),
             ];
+            if ($request->boolean('marketing_consent')) {
+                $updateData['marketing_consent_at'] = $submission->marketing_consent_at ?? now();
+            } else {
+                $updateData['marketing_consent_at'] = null;
+            }
             
             // 파일명이 업데이트된 경우 추가
             if ($newFileName) {

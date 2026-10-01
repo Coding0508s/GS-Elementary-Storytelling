@@ -608,58 +608,35 @@
                             </div>
                             
                             <div class="row mb-3">
-                                <div class="col-md-6">
+                                <div class="col-12">
                                     <label for="edit-institution_name" class="form-label">기관명 <span class="text-danger">*</span></label>
                                     <div class="position-relative">
-                                        <input type="text" 
-                                               class="form-control" 
-                                               id="edit-institution_name" 
-                                               name="institution_name" 
+                                        <input type="text"
+                                               class="form-control"
+                                               id="edit-institution_name"
+                                               name="institution_name"
                                                placeholder="기관명을 입력하거나 선택해주세요"
                                                autocomplete="off"
                                                required>
-                                        <div id="edit-institution_suggestions" class="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-sm" style="display: none; z-index: 1000; max-height: 200px; overflow-y: auto;">
+                                        <div id="edit-institution_suggestions" class="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-sm" style="display: none; z-index: 1000; max-height: 320px; overflow-y: auto;">
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label for="edit-class_name" class="form-label">반 이름 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="edit-class_name" name="class_name" required>
-                                </div>
                             </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-md-6">
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="edit-grade" class="form-label">학년 / 연령 <span class="text-danger">*</span></label>
+                                    <select class="form-control" id="edit-grade" name="grade" required>
+                                        <option value="">학년 또는 연령을 선택하세요</option>
+                                        @foreach(\App\Models\VideoSubmission::GRADE_OPTIONS as $gradeOption)
+                                            <option value="{{ $gradeOption }}">{{ $gradeOption }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
                                     <label for="edit-student_name_korean" class="form-label">학생 이름 (한글) <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control" id="edit-student_name_korean" name="student_name_korean" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="edit-student_name_english" class="form-label">학생 이름 (영어) <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="edit-student_name_english" name="student_name_english" required>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="edit-grade" class="form-label">학년 <span class="text-danger">*</span></label>
-                                    <select class="form-control" id="edit-grade" name="grade" required>
-                                        <option value="">학년을 선택하세요</option>
-                                        <option value="예비 초 1학년">예비 초 1학년</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="edit-age" class="form-label">나이 <span class="text-danger">*</span></label>
-                                    <select class="form-control" id="edit-age" name="age" required>
-                                        <option value="">나이를 선택하세요</option>
-                                        <option value="7">7세</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-12">
-                                    <label for="edit-unit_topic" class="form-label">스토리의 제목 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="edit-unit_topic" name="unit_topic" required>
                                 </div>
                             </div>
                         </div>
@@ -683,6 +660,42 @@
                                     <div class="form-text">예: 010-1234-5678</div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">참석 일자</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex flex-wrap gap-3 mb-3">
+                                @foreach(\App\Models\VideoSubmission::ATTENDANCE_OPTIONS as $value => $label)
+                                    <label class="mb-0">
+                                        <input type="radio" name="attendance_day" value="{{ $value }}" class="edit-attendance-day">
+                                        {{ $label }}
+                                        @if($value === 'day1')
+                                            <span class="text-muted small">김상균 교수님</span>
+                                        @elseif($value === 'day2')
+                                            <span class="text-muted small">윤윤구 강사님</span>
+                                        @endif
+                                    </label>
+                                @endforeach
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6" id="edit-question-day1-wrap">
+                                    <label for="edit-question_day1" class="form-label">Day 1 · 김상균 교수님 <span class="text-muted small">(선택)</span></label>
+                                    <textarea class="form-control" id="edit-question_day1" name="question_day1" rows="3" maxlength="2000"></textarea>
+                                </div>
+                                <div class="col-md-6" id="edit-question-day2-wrap">
+                                    <label for="edit-question_day2" class="form-label">Day 2 · 윤윤구 강사님 <span class="text-muted small">(선택)</span></label>
+                                    <textarea class="form-control" id="edit-question_day2" name="question_day2" rows="3" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="form-check mt-3">
+                                <input type="checkbox" class="form-check-input" id="edit-marketing_consent" name="marketing_consent" value="1">
+                                <label class="form-check-label" for="edit-marketing_consent">(선택) 광고성 정보 수신에 동의합니다.</label>
+                            </div>
+                            <p class="text-muted small mb-0 mt-3">웨비나 링크는 행사 시작 30분 전에 위에 입력하신 전화번호로 전송됩니다.</p>
                         </div>
                     </div>
                 </form>
@@ -744,6 +757,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function syncEditAttendance() {
+    const attendance = document.querySelector('.edit-attendance-day:checked')?.value || '';
+    document.getElementById('edit-question-day1-wrap').classList.toggle('d-none', attendance === 'day2');
+    document.getElementById('edit-question-day2-wrap').classList.toggle('d-none', attendance === 'day1');
+}
+
+document.querySelectorAll('.edit-attendance-day').forEach(input => {
+    input.addEventListener('change', syncEditAttendance);
+});
+
 // 접수 정보 수정 모달 표시 함수
 function showEditModal(submissionId) {
     const modal = new bootstrap.Modal(document.getElementById('editModal'));
@@ -785,14 +808,22 @@ function showEditModal(submissionId) {
             document.getElementById('edit-submission-id').value = sub.id;
             document.getElementById('edit-province').value = province;
             document.getElementById('edit-institution_name').value = sub.institution_name || '';
-            document.getElementById('edit-class_name').value = sub.class_name || '';
             document.getElementById('edit-student_name_korean').value = sub.student_name_korean || '';
-            document.getElementById('edit-student_name_english').value = sub.student_name_english || '';
-            document.getElementById('edit-grade').value = sub.grade || '';
-            document.getElementById('edit-age').value = sub.age || '';
-            document.getElementById('edit-unit_topic').value = sub.unit_topic || '';
+            const gradeSelect = document.getElementById('edit-grade');
+            const grade = sub.grade || '';
+            if (grade && !Array.from(gradeSelect.options).some(option => option.value === grade)) {
+                gradeSelect.add(new Option(grade, grade));
+            }
+            gradeSelect.value = grade;
             document.getElementById('edit-parent_name').value = sub.parent_name || '';
             document.getElementById('edit-parent_phone').value = sub.parent_phone || '';
+            document.querySelectorAll('.edit-attendance-day').forEach(input => {
+                input.checked = input.value === (sub.attendance_day || '');
+            });
+            document.getElementById('edit-question_day1').value = sub.question_day1 || '';
+            document.getElementById('edit-question_day2').value = sub.question_day2 || '';
+            document.getElementById('edit-marketing_consent').checked = !!sub.marketing_consent;
+            syncEditAttendance();
             
             // 기존 지역 값이 있으면 먼저 설정
             if (sub.region) {
@@ -1052,17 +1083,23 @@ function saveEdit() {
     }
     
     // JSON 데이터 준비
+    const attendance = document.querySelector('.edit-attendance-day:checked')?.value || '';
+    if (!attendance) {
+        alert('참석 일자를 선택해주세요.');
+        return;
+    }
+
     const data = {
         region: region,
         institution_name: document.getElementById('edit-institution_name').value,
-        class_name: document.getElementById('edit-class_name').value,
         student_name_korean: document.getElementById('edit-student_name_korean').value,
-        student_name_english: document.getElementById('edit-student_name_english').value,
         grade: document.getElementById('edit-grade').value,
-        age: parseInt(document.getElementById('edit-age').value),
         parent_name: document.getElementById('edit-parent_name').value,
         parent_phone: document.getElementById('edit-parent_phone').value,
-        unit_topic: document.getElementById('edit-unit_topic').value || null
+        attendance_day: attendance,
+        question_day1: attendance === 'day2' ? '' : document.getElementById('edit-question_day1').value,
+        question_day2: attendance === 'day1' ? '' : document.getElementById('edit-question_day2').value,
+        marketing_consent: document.getElementById('edit-marketing_consent').checked
     };
     
     // 디버깅: 전송할 데이터 확인

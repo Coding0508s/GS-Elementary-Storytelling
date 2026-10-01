@@ -27,8 +27,13 @@ class VideoSubmission extends Model
         'video_file_size',
         'unit_topic',
         'teacher_question',
+        'attendance_day',
+        'question_day1',
+        'question_day2',
         'privacy_consent',
         'privacy_consent_at',
+        'marketing_consent',
+        'marketing_consent_at',
         'notification_sent',
         'notification_sent_at',
         'status',
@@ -41,8 +46,10 @@ class VideoSubmission extends Model
         'age' => 'integer',
         'video_file_size' => 'integer',
         'privacy_consent' => 'boolean',
+        'marketing_consent' => 'boolean',
         'notification_sent' => 'boolean',
         'privacy_consent_at' => 'datetime',
+        'marketing_consent_at' => 'datetime',
         'notification_sent_at' => 'datetime',
         'is_reevaluation_target' => 'boolean'
     ];
@@ -52,7 +59,18 @@ class VideoSubmission extends Model
         '만 3세',
         '만 4세',
         '만 5세',
-        '초 1~6학년',
+        '초등 1학년',
+        '초등 2학년',
+        '초등 3학년',
+        '초등 4학년',
+        '초등 5학년',
+        '초등 6학년',
+    ];
+
+    const ATTENDANCE_OPTIONS = [
+        'all' => '전체',
+        'day1' => 'Day 1',
+        'day2' => 'Day 2',
     ];
 
     const STATUS_UPLOADED = 'uploaded';
@@ -346,6 +364,32 @@ class VideoSubmission extends Model
             ]);
             return null;
         }
+    }
+
+    /**
+     * 참석 일자를 화면용 이름으로 바꿉니다.
+     */
+    public function attendanceLabel(): string
+    {
+        return self::ATTENDANCE_OPTIONS[$this->attendance_day ?? ''] ?? '';
+    }
+
+    /**
+     * Day 1 또는 Day 2 질문입니다.
+     * 예전 접수는 강사 구분이 없어서 Day 1 칸에만 보여 줍니다.
+     */
+    public function instructorQuestion(string $day): string
+    {
+        $value = $day === 'day1' ? $this->question_day1 : $this->question_day2;
+        if (filled($value)) {
+            return (string) $value;
+        }
+
+        if ($this->attendance_day || $day !== 'day1') {
+            return '';
+        }
+
+        return (string) ($this->teacher_question ?: '');
     }
 
     /**

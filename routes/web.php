@@ -91,6 +91,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::get('/applications/excel', [AdminController::class, 'downloadSeminarApplicationsExcel'])
             ->name('applications.excel');
+
+        Route::post('/applications/alimtalk', [AdminController::class, 'sendSeminarAlimtalk'])
+            ->name('applications.alimtalk');
+
+        Route::delete('/applications/{submission}', [AdminController::class, 'deleteSeminarApplication'])
+            ->whereNumber('submission')
+            ->name('applications.destroy');
         
         // 로그아웃
         Route::post('/logout', [AdminController::class, 'logout'])
