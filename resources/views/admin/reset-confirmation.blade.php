@@ -31,6 +31,8 @@
             <strong>주의사항:</strong>
             <ul class="mb-0 mt-2">
                 <li>모든 영상 제출 데이터가 영구적으로 삭제됩니다</li>
+                <li>휴지통에 있는 접수도 함께 완전히 삭제됩니다</li>
+                <li>다음 접수번호는 GSK-00001부터 다시 시작합니다</li>
                 <li>모든 심사 결과가 영구적으로 삭제됩니다</li>
                 <li>모든 배정 정보가 영구적으로 삭제됩니다</li>
                 <li>S3에 저장된 모든 영상 파일이 삭제됩니다</li>
@@ -51,7 +53,7 @@
                 </div>
                 <h3 class="text-primary">{{ number_format($stats['total_submissions']) }}</h3>
                 <p class="card-text text-muted">영상 제출</p>
-                <small class="text-danger">삭제될 항목</small>
+                <small class="text-danger">삭제될 항목@if(($stats['trashed_submissions'] ?? 0) > 0) (휴지통 {{ number_format($stats['trashed_submissions']) }}건 포함)@endif</small>
             </div>
         </div>
     </div>

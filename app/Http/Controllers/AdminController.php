@@ -1281,7 +1281,8 @@ public function assignVideo(Request $request)
 
         // 현재 데이터 통계
         $stats = [
-            'total_submissions' => VideoSubmission::count(),
+            'total_submissions' => VideoSubmission::withTrashed()->count(),
+            'trashed_submissions' => VideoSubmission::onlyTrashed()->count(),
             'total_evaluations' => Evaluation::count(),
             'total_assignments' => VideoAssignment::count(),
             's3_files' => 0
@@ -1336,7 +1337,7 @@ public function assignVideo(Request $request)
 
             // 초기화 통계 수집
             $stats = [
-                'submissions_deleted' => VideoSubmission::count(),
+                'submissions_deleted' => VideoSubmission::withTrashed()->count(),
                 'evaluations_deleted' => Evaluation::count(),
                 'assignments_deleted' => VideoAssignment::count(),
                 's3_files_deleted' => 0
@@ -1347,6 +1348,9 @@ public function assignVideo(Request $request)
 
             // 2. 영상 배정 삭제
             VideoAssignment::query()->delete();
+
+            // 휴지통 접수를 지우기 전에, 그 접수에 붙은 AI 채점 기록도 지운다.
+            AiEvaluation::query()->delete();
 
             // 3. S3 파일 삭제
             try {
@@ -1360,7 +1364,9 @@ public function assignVideo(Request $request)
             }
 
             // 4. 영상 제출 데이터 삭제
-            VideoSubmission::query()->delete();
+            // delete()는 휴지통(deleted_at)으로만 옮겨서 id가 남고, 다음 접수번호가 이어서 나온다.
+            // forceDelete()는 휴지통 행까지 지워서 접수번호를 GSK-00001부터 다시 쓸 수 있게 한다.
+            VideoSubmission::withTrashed()->forceDelete();
 
             // 5. 로컬 storage 파일 정리
             try {
@@ -1422,7 +1428,8 @@ public function assignVideo(Request $request)
                               "영상 {$stats['submissions_deleted']}개, " .
                               "심사 {$stats['evaluations_deleted']}개, " .
                               "배정 {$stats['assignments_deleted']}개, " .
-                              "S3 파일 {$stats['s3_files_deleted']}개");
+                              "S3 파일 {$stats['s3_files_deleted']}개\n" .
+                              "다음 접수번호는 GSK-00001부터 시작합니다.");
     }
 
     /**
