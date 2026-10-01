@@ -131,13 +131,20 @@ class VideoSubmissionController extends Controller
             'parent_phone' => 'required|string|min:10|max:20',
         ]);
 
-        // 개선된 OTP 발송 제한 (IP 기준 1분 30회 - 200-300명 동시 접속 대응)
-        $rateKey = 'storytelling:otp_rate:ip:' . $request->ip();
-        $rateAttempts = cache()->get($rateKey, 0);
-        if ($rateAttempts >= 30) {
-            return response()->json(['success' => false, 'message' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'], 429);
+        // 캐시 저장소가 없어도 인증번호 발송 자체가 500으로 끊기지 않게 합니다.
+        try {
+            $rateKey = 'storytelling:otp_rate:ip:' . $request->ip();
+            $rateAttempts = cache()->get($rateKey, 0);
+            if ($rateAttempts >= 30) {
+                return response()->json(['success' => false, 'message' => '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'], 429);
+            }
+            cache()->put($rateKey, $rateAttempts + 1, 60);
+        } catch (\Throwable $e) {
+            Log::warning('OTP 발송 제한 캐시를 사용하지 못했습니다.', [
+                'error' => $e->getMessage(),
+            ]);
+            $rateAttempts = 0;
         }
-        cache()->put($rateKey, $rateAttempts + 1, 60);
 
         $phone = $request->input('parent_phone');
         
@@ -165,7 +172,11 @@ class VideoSubmissionController extends Controller
             if (!$result['success']) {
                 return response()->json(['success' => false, 'message' => '인증번호 전송 실패: ' . ($result['error'] ?? 'Unknown')], 500);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('OTP 발송 오류', [
+                'error' => $e->getMessage(),
+            ]);
+
             return response()->json(['success' => false, 'message' => '인증번호 전송 오류: ' . $e->getMessage()], 500);
         }
 

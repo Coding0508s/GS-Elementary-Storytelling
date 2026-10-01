@@ -26,7 +26,7 @@ function setup(response = {success:true}, ok = true) {
     let tick;
     const sandbox = {
         document:{getElementById:id=>elements[id],querySelector:()=>({getAttribute:()=> 'test-csrf'})},
-        fetch:async()=>{requests++;return {ok,json:async()=>response};},
+        fetch:async()=>{requests++;return {ok,status:ok?200:500,json:async()=>response,text:async()=>JSON.stringify(response)};},
         setInterval:fn=>{tick=fn;return 1;},clearInterval:()=>{},
         otpCodeInput:elements.otp_code,otpSendBtn:elements['send-otp-btn'],otpVerifyBtn:elements['verify-otp-btn'],
         otpVerificationArea:elements['otp-verification-area'],otpSuccessArea:elements['otp-success-area'],

@@ -53,6 +53,6 @@ class SolapiSmsServiceTest extends TestCase
         $result = $service->sendSms('01012345678', '테스트');
 
         $this->assertFalse($result['success']);
-        $this->assertSame('Solapi API 키 설정이 없습니다.', $result['error']);
+        $this->assertStringContainsString('Solapi API 키 설정이 없습니다.', $result['error']);
     }
 }

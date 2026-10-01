@@ -85,7 +85,7 @@ class SolapiSmsService
                 'success' => false,
                 'error' => $error,
             ];
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('SMS 전송 실패', [
                 'to' => $to,
                 'error' => $e->getMessage(),
@@ -167,7 +167,11 @@ class SolapiSmsService
         $apiSecret = config('services.solapi.api_secret');
 
         if (! $apiKey || ! $apiSecret) {
-            throw new Exception('Solapi API 키 설정이 없습니다.');
+            throw new Exception('Solapi API 키 설정이 없습니다. 서버 .env의 SOLAPI_API_KEY와 SOLAPI_API_SECRET을 확인해주세요.');
+        }
+
+        if (! class_exists(SolapiMessageService::class)) {
+            throw new Exception('Solapi SDK가 서버에 설치되어 있지 않습니다. 서버에서 composer install을 실행해주세요.');
         }
 
         return new SolapiMessageService($apiKey, $apiSecret);
