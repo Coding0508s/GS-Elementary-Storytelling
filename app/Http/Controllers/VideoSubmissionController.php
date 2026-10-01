@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use App\Models\Institution;
 use App\Models\SiteSetting;
 use App\Jobs\SendSmsJob;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 
 class VideoSubmissionController extends Controller
@@ -363,18 +364,7 @@ class VideoSubmissionController extends Controller
 
         try {
             $submission = new VideoSubmission();
-            $submission->fill([
-                'region' => $request->region,
-                'institution_name' => $request->institution_name,
-                'student_name_korean' => $request->student_name_korean,
-                'grade' => $request->grade,
-                'parent_name' => $request->parent_name,
-                'parent_phone' => $request->parent_phone,
-                'teacher_question' => $request->teacher_question,
-                'privacy_consent' => true,
-                'privacy_consent_at' => now(),
-                'status' => VideoSubmission::STATUS_UPLOADED,
-            ]);
+            $submission->fill($this->applicationAttributes($request));
             $submission->save();
 
             session(['submission_id' => $submission->id]);
@@ -395,6 +385,56 @@ class VideoSubmissionController extends Controller
                 'message' => '신청 처리 중 오류가 발생했습니다.',
             ], 500);
         }
+    }
+
+    /**
+     * 예전 테이블에도 저장되도록, 비어 있으면 안 되는 칸만 기본값을 채웁니다.
+     * teacher_question 칸이 아직 없으면 질문 내용은 unit_topic에 넣습니다.
+     */
+    private function applicationAttributes(Request $request): array
+    {
+        $attributes = [
+            'region' => $request->region,
+            'institution_name' => $request->institution_name,
+            'student_name_korean' => $request->student_name_korean,
+            'grade' => $request->grade,
+            'parent_name' => $request->parent_name,
+            'parent_phone' => $request->parent_phone,
+            'privacy_consent' => true,
+            'privacy_consent_at' => now(),
+            'status' => VideoSubmission::STATUS_UPLOADED,
+        ];
+
+        $columns = collect(Schema::getColumns('video_submissions'))->keyBy('name');
+        $question = $request->input('teacher_question');
+
+        if ($columns->has('teacher_question')) {
+            $attributes['teacher_question'] = $question;
+        } elseif ($question) {
+            $attributes['unit_topic'] = $question;
+        }
+
+        foreach ([
+            'class_name' => '',
+            'student_name_english' => '',
+            'video_file_path' => '',
+            'video_file_name' => '',
+            'video_file_type' => '',
+        ] as $column => $value) {
+            if ($columns->has($column) && empty($columns[$column]['nullable'])) {
+                $attributes[$column] = $value;
+            }
+        }
+
+        if ($columns->has('age') && empty($columns['age']['nullable'])) {
+            $attributes['age'] = 0;
+        }
+
+        if ($columns->has('video_file_size') && empty($columns['video_file_size']['nullable'])) {
+            $attributes['video_file_size'] = 0;
+        }
+
+        return $attributes;
     }
 
     /**
