@@ -7,22 +7,47 @@
     <div>
         <h1><i class="bi bi-person-lines-fill"></i> 접수 내역</h1>
         <p class="text-muted mb-0">접수된 참가자 {{ number_format($applications->total()) }}명</p>
-        <p class="mb-0 mt-2">웨비나 링크는 행사 시작 30분 전에 신청자 전화번호로 전송됩니다.</p>
+        <p class="mb-0 mt-2">신청이 완료되면 접수번호 알림톡이 바로 갑니다. 당일 안내와 입장 링크는 아래에서 보냅니다.</p>
     </div>
     <div class="d-flex gap-2">
-        @if($applications->total() > 0)
-            <form method="POST" action="{{ route('admin.applications.alimtalk') }}"
-                  onsubmit="return confirm(@json(($searchQuery !== '' ? '검색된 ' : '접수된 ').number_format($applications->total()).'명에게 알림톡을 보낼까요?'))">
-                @csrf
-                <input type="hidden" name="search" value="{{ $searchQuery }}">
-                <button type="submit" class="btn btn-warning">
-                    <i class="bi bi-chat-dots"></i> 알림톡 보내기
-                </button>
-            </form>
-        @endif
         <a href="{{ route('admin.applications.excel', request()->only('search')) }}" class="btn btn-success">
             <i class="bi bi-file-earmark-excel"></i> 엑셀 다운로드
         </a>
+    </div>
+</div>
+
+@php
+    $recipientLabel = ($searchQuery !== '' ? '검색된 ' : '접수된 ').number_format($applications->total()).'명';
+@endphp
+<div class="card admin-card mb-4">
+    <div class="card-body">
+        <h2 class="h5 mb-2">알림톡</h2>
+        <p class="text-muted small mb-3">신청 완료 알림은 접수되는 순간 자동으로 나갑니다. 아래 버튼은 지금 목록의 {{ $recipientLabel }}에게 보냅니다.</p>
+        <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="mb-3"
+              onsubmit="return confirm(@json($recipientLabel.'에게 당일 오전 안내를 보낼까요?'))">
+            @csrf
+            <input type="hidden" name="search" value="{{ $searchQuery }}">
+            <input type="hidden" name="kind" value="morning">
+            <button type="submit" class="btn btn-warning" @disabled($applications->total() === 0)>
+                <i class="bi bi-sunrise"></i> 당일 오전 안내 보내기
+            </button>
+        </form>
+        <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="d-flex flex-column flex-md-row gap-2"
+              onsubmit="return confirm(@json($recipientLabel.'에게 입장 안내를 보낼까요?'))">
+            @csrf
+            <input type="hidden" name="search" value="{{ $searchQuery }}">
+            <input type="hidden" name="kind" value="entry">
+            <input type="url"
+                   name="zoom_url"
+                   class="form-control"
+                   value="{{ $zoomUrl }}"
+                   placeholder="https://us02web.zoom.us/j/..."
+                   required>
+            <button type="submit" class="btn btn-primary text-nowrap" @disabled($applications->total() === 0)>
+                <i class="bi bi-camera-video"></i> 입장 안내 보내기
+            </button>
+        </form>
+        <p class="form-text mb-0 mt-2">줌에서 복사한 주소 전체를 넣으면 됩니다. 발송할 때 https:// 는 템플릿 변수 규칙에 맞게 빼고 넣습니다.</p>
     </div>
 </div>
 

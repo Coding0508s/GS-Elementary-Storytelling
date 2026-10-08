@@ -43,10 +43,17 @@ return [
         'sync' => env('SMS_SYNC_MODE', true),
         // 알림톡 템플릿이 승인된 뒤에 채널 ID와 템플릿 ID를 넣습니다.
         'kakao_pf_id' => env('SOLAPI_KAKAO_PF_ID'),
+        // 예전 키입니다. 신청 완료 템플릿 ID가 비어 있으면 이 값을 사용합니다.
         'kakao_template_id' => env('SOLAPI_KAKAO_TEMPLATE_ID'),
-        // 템플릿 치환 문구와 글자가 같아야 합니다. 예: #{학생이름}
-        'kakao_var_student_name' => env('SOLAPI_KAKAO_VAR_STUDENT_NAME', '#{학생이름}'),
+        'kakao_template_completed' => env('SOLAPI_KAKAO_TEMPLATE_COMPLETED'),
+        'kakao_template_morning' => env('SOLAPI_KAKAO_TEMPLATE_MORNING'),
+        'kakao_template_entry' => env('SOLAPI_KAKAO_TEMPLATE_ENTRY'),
+        'kakao_template_otp' => env('SOLAPI_KAKAO_TEMPLATE_OTP'),
+        // 템플릿 치환 문구와 글자가 같아야 합니다. 예: #{신청자명}
+        'kakao_var_applicant_name' => env('SOLAPI_KAKAO_VAR_APPLICANT', '#{신청자명}'),
         'kakao_var_receipt_number' => env('SOLAPI_KAKAO_VAR_RECEIPT', '#{접수번호}'),
+        'kakao_var_entry_link' => env('SOLAPI_KAKAO_VAR_ENTRY_LINK', '#{입장링크}'),
+        'kakao_var_otp' => env('SOLAPI_KAKAO_VAR_OTP', '#{인증번호}'),
     ],
 
     'openai' => [

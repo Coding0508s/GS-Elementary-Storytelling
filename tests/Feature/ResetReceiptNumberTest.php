@@ -136,6 +136,7 @@ class ResetReceiptNumberTest extends TestCase
         config([
             'services.solapi.kakao_pf_id' => '',
             'services.solapi.kakao_template_id' => '',
+            'services.solapi.kakao_template_morning' => '',
         ]);
 
         $admin = Admin::create([
@@ -151,6 +152,7 @@ class ResetReceiptNumberTest extends TestCase
         $this->actingAs($admin, 'admin');
         $request = Request::create('/admin/applications/alimtalk', 'POST', [
             'search' => '알림톡대상',
+            'kind' => 'morning',
         ]);
 
         $response = app(AdminController::class)->sendSeminarAlimtalk($request);

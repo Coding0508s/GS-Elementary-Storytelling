@@ -165,13 +165,20 @@ class VideoSubmissionController extends Controller
         $request->session()->put('otp_attempts', 0);
         $request->session()->put('otp_sent_at', now()); // OTP 발송 시간 기록
 
-        $message = "[GrapeSEED 웨비나 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
-
         try {
-            $sms = new SolapiSmsService();
-            $result = $sms->sendSms($phone, $message);
-            if (!$result['success']) {
-                return response()->json(['success' => false, 'message' => '인증번호 전송 실패: ' . ($result['error'] ?? 'Unknown')], 500);
+            $alimtalk = app(\App\Services\SolapiAlimtalkService::class);
+            if ($alimtalk->isReady(\App\Services\SolapiAlimtalkService::KIND_OTP)) {
+                $result = $alimtalk->sendVerificationCode($phone, $code);
+                if (($result['requested'] ?? 0) < 1) {
+                    return response()->json(['success' => false, 'message' => '인증번호 전송 실패'], 500);
+                }
+            } else {
+                $sms = new SolapiSmsService();
+                $message = "[GrapeSEED 웨비나 인증]\n인증번호: {$code}\n5분 이내에 입력해주세요.";
+                $result = $sms->sendSms($phone, $message);
+                if (!$result['success']) {
+                    return response()->json(['success' => false, 'message' => '인증번호 전송 실패: ' . ($result['error'] ?? 'Unknown')], 500);
+                }
             }
         } catch (\Throwable $e) {
             Log::error('OTP 발송 오류', [
@@ -371,7 +378,7 @@ class VideoSubmissionController extends Controller
             $submission->save();
 
             session(['submission_id' => $submission->id]);
-            $this->notifySubmissionBySms($submission);
+            $this->notifySubmission($submission);
             $this->clearAllOtpSessions($request);
 
             return response()->json([
@@ -466,8 +473,36 @@ class VideoSubmissionController extends Controller
     }
 
     /**
-     * 접수 완료 문자를 보냅니다. 실패해도 접수는 유지합니다.
+     * 신청 완료 알림톡 템플릿이 연결되어 있으면 카카오톡으로 보내고, 아니면 기존 문자를 보냅니다.
+     * 발송이 실패해도 접수는 유지합니다.
      */
+    private function notifySubmission($submission): void
+    {
+        $alimtalk = app(\App\Services\SolapiAlimtalkService::class);
+        if ($alimtalk->isReady(\App\Services\SolapiAlimtalkService::KIND_COMPLETED)) {
+            $this->notifySubmissionByAlimtalk($submission);
+
+            return;
+        }
+
+        $this->notifySubmissionBySms($submission);
+    }
+
+    private function notifySubmissionByAlimtalk($submission): void
+    {
+        try {
+            app(\App\Services\SolapiAlimtalkService::class)->sendToApplications(
+                collect([$submission]),
+                \App\Services\SolapiAlimtalkService::KIND_COMPLETED
+            );
+        } catch (\Throwable $e) {
+            Log::error('신청 완료 알림톡 발송 예외', [
+                'submission_id' => $submission->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private function notifySubmissionBySms($submission): void
     {
         try {

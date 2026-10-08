@@ -136,6 +136,7 @@ class AdminController extends Controller
         return view('admin.seminar-applications', [
             'applications' => $applications,
             'searchQuery' => $searchQuery,
+            'zoomUrl' => (string) SiteSetting::get('webinar_zoom_url', ''),
         ]);
     }
 
@@ -181,13 +182,29 @@ class AdminController extends Controller
         }
 
         $searchQuery = trim((string) $request->input('search', ''));
+        $kind = (string) $request->input('kind');
         $redirect = redirect()->route('admin.applications', array_filter([
             'search' => $searchQuery,
         ]));
 
+        if (! in_array($kind, [SolapiAlimtalkService::KIND_MORNING, SolapiAlimtalkService::KIND_ENTRY], true)) {
+            return $redirect->with('error', '알림 종류를 선택해주세요.');
+        }
+
         $alimtalk = app(SolapiAlimtalkService::class);
-        if (! $alimtalk->isReady()) {
+        if (! $alimtalk->isReady($kind)) {
             return $redirect->with('error', '템플릿이 연결되지 않았습니다.');
+        }
+
+        $entryLink = null;
+        if ($kind === SolapiAlimtalkService::KIND_ENTRY) {
+            try {
+                $zoomUrl = trim((string) $request->input('zoom_url'));
+                $entryLink = $alimtalk->entryLinkValue($zoomUrl);
+                SiteSetting::set('webinar_zoom_url', $zoomUrl, '웨비나 입장 줌 링크');
+            } catch (\Throwable $e) {
+                return $redirect->with('error', $e->getMessage());
+            }
         }
 
         $applications = $this->seminarApplicationQuery($searchQuery)->latest()->get();
@@ -196,7 +213,7 @@ class AdminController extends Controller
         }
 
         try {
-            $result = $alimtalk->sendToApplications($applications);
+            $result = $alimtalk->sendToApplications($applications, $kind, $entryLink);
         } catch (\Throwable $e) {
             Log::error('접수 알림톡 발송 오류', [
                 'admin_id' => $admin->id,
