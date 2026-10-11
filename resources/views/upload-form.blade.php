@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '연사 초청 웨비나 신청 - GrapeSEED')
+@section('title', '2026 GrapeSEED Webinar for Parents - GrapeSEED')
 
 @section('content')
 @include('partials.application-progress', ['currentStep' => 2])

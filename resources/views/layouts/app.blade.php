@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', '연사 초청 웨비나 신청 - GrapeSEED')</title>
+    <title>@yield('title', '2026 GrapeSEED Webinar for Parents - GrapeSEED')</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="{{ asset('images/favicon.png') }}">
@@ -21,7 +21,7 @@
     <div class="container">
         <div class="contest-container">
             <div class="header-section">
-                <h1><span class="contest-title">연사 초청 웨비나 신청</span></h1>
+                <h2><span class="contest-title">2026 GrapeSEED Webinar for Parents</span></h2>
             </div>
             
             @if(session('success'))
