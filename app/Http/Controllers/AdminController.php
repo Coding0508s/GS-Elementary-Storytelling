@@ -235,23 +235,26 @@ class AdminController extends Controller
             return $redirect->with('error', '알림톡 발송 중 오류가 발생했습니다.');
         }
 
-        $this->rememberAlimtalkResults($result['results'] ?? []);
+        $this->rememberAlimtalkResults($kind, $result['results'] ?? []);
 
-        $summary = '알림톡 발송 결과입니다. 성공 '.$result['requested'].'건, 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.';
+        $kindLabel = $kind === SolapiAlimtalkService::KIND_MORNING ? '오전 안내' : '입장 링크';
+        $summary = $kindLabel.' 발송 결과입니다. 성공 '.$result['requested'].'건, 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.';
         $flash = ($result['requested'] > 0 && $result['failed'] === 0) ? 'success' : 'error';
 
         return $redirect->with($flash, $summary);
     }
 
     /**
-     * 방금 보낸 결과를 접수 행에 남긴다.
-     * 목록을 다시 열어도 성공, 실패, 번호 오류가 보이게 한다.
+     * 방금 보낸 결과를 알림 종류별로 접수 행에 남긴다.
+     * 입장 링크를 보내도 오전 안내 결과는 지워지지 않는다.
      *
      * @param  array<int, array<string, mixed>>  $results
      */
-    private function rememberAlimtalkResults(array $results): void
+    private function rememberAlimtalkResults(string $kind, array $results): void
     {
-        if (! Schema::hasColumn('video_submissions', 'alimtalk_status')) {
+        $hasBundle = Schema::hasColumn('video_submissions', 'alimtalk_results');
+        $hasLegacy = Schema::hasColumn('video_submissions', 'alimtalk_status');
+        if (! $hasBundle && ! $hasLegacy) {
             return;
         }
 
@@ -260,11 +263,33 @@ class AdminController extends Controller
                 continue;
             }
 
-            VideoSubmission::whereKey($row['id'])->update([
-                'alimtalk_status' => $row['status'],
-                'alimtalk_status_reason' => $row['reason'] !== '' ? $row['reason'] : null,
-                'alimtalk_sent_at' => now(),
-            ]);
+            $submission = VideoSubmission::find($row['id']);
+            if (! $submission) {
+                continue;
+            }
+
+            $payload = [
+                'status' => $row['status'],
+                'reason' => ($row['reason'] ?? '') !== '' ? $row['reason'] : null,
+                'sent_at' => now()->toDateTimeString(),
+            ];
+
+            if ($hasBundle) {
+                $bundle = $submission->alimtalk_results;
+                if (! is_array($bundle)) {
+                    $bundle = [];
+                }
+                $bundle[$kind] = $payload;
+                $submission->alimtalk_results = $bundle;
+            }
+
+            if ($hasLegacy) {
+                $submission->alimtalk_status = $payload['status'];
+                $submission->alimtalk_status_reason = $payload['reason'];
+                $submission->alimtalk_sent_at = now();
+            }
+
+            $submission->save();
         }
     }
 

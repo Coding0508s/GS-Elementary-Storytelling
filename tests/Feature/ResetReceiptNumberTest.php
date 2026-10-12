@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Http\Controllers\AdminController;
 use App\Models\Admin;
 use App\Models\VideoSubmission;
+use App\Services\SolapiAlimtalkService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -184,6 +185,79 @@ class ResetReceiptNumberTest extends TestCase
 
         $this->assertTrue($response->isRedirect(route('admin.applications')));
         $this->assertSame('보낼 사람을 선택해주세요.', session('error'));
+    }
+
+    public function test_morning_and_entry_results_stay_separate(): void
+    {
+        Schema::create('site_settings', function (Blueprint $table) {
+            $table->id();
+            $table->string('key')->unique();
+            $table->text('value')->nullable();
+            $table->string('description')->nullable();
+            $table->timestamps();
+        });
+        Schema::table('video_submissions', function (Blueprint $table) {
+            $table->json('alimtalk_results')->nullable();
+            $table->string('alimtalk_status', 20)->nullable();
+            $table->string('alimtalk_status_reason')->nullable();
+            $table->timestamp('alimtalk_sent_at')->nullable();
+        });
+
+        $admin = Admin::create([
+            'username' => 'admin',
+            'password' => 'secret-pass',
+            'name' => '관리자',
+            'email' => 'admin@example.com',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+        $submission = $this->makeSubmission('결과분리');
+
+        $this->app->instance(SolapiAlimtalkService::class, new class($submission->id) extends SolapiAlimtalkService
+        {
+            public function __construct(private int $submissionId) {}
+
+            public function isReady(string $kind = self::KIND_COMPLETED): bool
+            {
+                return true;
+            }
+
+            public function entryLinkValue(string $url): string
+            {
+                return 'us02web.zoom.us/j/1';
+            }
+
+            public function sendToApplications(\Illuminate\Support\Collection $applications, string $kind = self::KIND_COMPLETED, ?string $entryLink = null): array
+            {
+                return [
+                    'requested' => 1,
+                    'failed' => $kind === self::KIND_ENTRY ? 1 : 0,
+                    'skipped' => 0,
+                    'results' => [[
+                        'id' => $this->submissionId,
+                        'status' => $kind === self::KIND_ENTRY ? 'failed' : 'sent',
+                        'reason' => $kind === self::KIND_ENTRY ? '템플릿 불일치' : '',
+                    ]],
+                ];
+            }
+        });
+
+        $this->actingAs($admin, 'admin');
+
+        app(AdminController::class)->sendSeminarAlimtalk(Request::create('/admin/applications/alimtalk', 'POST', [
+            'kind' => 'morning',
+            'ids' => [$submission->id],
+        ]));
+        app(AdminController::class)->sendSeminarAlimtalk(Request::create('/admin/applications/alimtalk', 'POST', [
+            'kind' => 'entry',
+            'ids' => [$submission->id],
+            'zoom_url' => 'https://us02web.zoom.us/j/1',
+        ]));
+
+        $submission->refresh();
+        $this->assertSame('sent', $submission->alimtalkResult('morning')['status']);
+        $this->assertSame('failed', $submission->alimtalkResult('entry')['status']);
+        $this->assertSame('템플릿 불일치', $submission->alimtalkResult('entry')['reason']);
     }
 
     private function makeSubmission(string $name): VideoSubmission

@@ -56,6 +56,9 @@
         overflow: hidden;
     }
     .cell-sub { display: block; margin-top: 2px; color: #7b8490; font-size: 0.78rem; font-weight: 500; }
+    .application-ledger .is-send { white-space: normal; min-width: 168px; }
+    .send-line { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; }
+    .send-line .send-label { flex: 0 0 4.4rem; color: #7b8490; font-size: 0.72rem; font-weight: 700; line-height: 1.6; }
     .receipt-code { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
     @media (max-width: 900px) {
         .desk-head, .dispatch { display: block; }
@@ -104,7 +107,7 @@
                 <i class="bi bi-camera-video"></i> 입장 안내 보내기
             </button>
         </form>
-        <p class="dispatch-note">줌 주소 전체를 붙여 넣으면 됩니다. 결과는 아래 목록의 발송 결과 칸에 남습니다.</p>
+        <p class="dispatch-note">줌 주소 전체를 붙여 넣으면 됩니다. 오전 안내와 입장 링크 결과는 각각 남습니다.</p>
     </div>
 </div>
 
@@ -189,19 +192,27 @@
                                 @endif
                             </td>
                             <td>{{ $application->marketing_consent ? '동의' : '미동의' }}</td>
-                            <td class="text-nowrap">
-                                @if($application->alimtalk_status === 'sent')
-                                    <span class="badge text-bg-success">성공</span>
-                                @elseif($application->alimtalk_status === 'failed')
-                                    <span class="badge text-bg-danger">실패</span>
-                                    @if($application->alimtalk_status_reason)
-                                        <div class="small text-danger">{{ $application->alimtalk_status_reason }}</div>
-                                    @endif
-                                @elseif($application->alimtalk_status === 'skipped')
-                                    <span class="badge text-bg-secondary">번호 오류</span>
-                                @else
-                                    <span class="text-muted small">미발송</span>
-                                @endif
+                            <td class="is-send">
+                                @foreach(['morning' => '오전 안내', 'entry' => '입장 링크'] as $sendKind => $sendLabel)
+                                    @php $sendResult = $application->alimtalkResult($sendKind); @endphp
+                                    <div class="send-line">
+                                        <span class="send-label">{{ $sendLabel }}</span>
+                                        <div>
+                                            @if(($sendResult['status'] ?? null) === 'sent')
+                                                <span class="badge text-bg-success">성공</span>
+                                            @elseif(($sendResult['status'] ?? null) === 'failed')
+                                                <span class="badge text-bg-danger">실패</span>
+                                                @if(! empty($sendResult['reason']))
+                                                    <div class="small text-danger">{{ $sendResult['reason'] }}</div>
+                                                @endif
+                                            @elseif(($sendResult['status'] ?? null) === 'skipped')
+                                                <span class="badge text-bg-secondary">번호 오류</span>
+                                            @else
+                                                <span class="text-muted small">미발송</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
                             </td>
                             <td class="is-action">
                                 <form method="POST"

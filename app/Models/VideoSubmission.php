@@ -39,6 +39,7 @@ class VideoSubmission extends Model
         'alimtalk_status',
         'alimtalk_status_reason',
         'alimtalk_sent_at',
+        'alimtalk_results',
         'status',
         'video_url',
         'upload_method',
@@ -55,8 +56,25 @@ class VideoSubmission extends Model
         'marketing_consent_at' => 'datetime',
         'notification_sent_at' => 'datetime',
         'alimtalk_sent_at' => 'datetime',
+        'alimtalk_results' => 'array',
         'is_reevaluation_target' => 'boolean'
     ];
+
+    /**
+     * 알림 종류별 마지막 발송 결과입니다.
+     * morning은 당일 오전 안내, entry는 입장 링크입니다.
+     *
+     * @return array{status: string, reason: ?string, sent_at: ?string}|null
+     */
+    public function alimtalkResult(string $kind): ?array
+    {
+        $results = $this->alimtalk_results;
+        if (! is_array($results) || ! isset($results[$kind]) || ! is_array($results[$kind])) {
+            return null;
+        }
+
+        return $results[$kind];
+    }
 
     // 상태 상수 정의
     const GRADE_OPTIONS = [
