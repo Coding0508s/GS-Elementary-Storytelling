@@ -170,7 +170,7 @@ class AdminController extends Controller
     }
 
     /**
-     * 지금 목록과 같은 범위의 참가자에게 알림톡 발송을 요청한다.
+     * 목록에서 선택한 참가자에게 알림톡 발송을 요청한다.
      * 템플릿이 없으면 보내지 않는다.
      */
     public function sendSeminarAlimtalk(Request $request)
@@ -191,6 +191,15 @@ class AdminController extends Controller
             return $redirect->with('error', '알림 종류를 선택해주세요.');
         }
 
+        $selectedIds = collect($request->input('ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+        if ($selectedIds->isEmpty()) {
+            return $redirect->with('error', '보낼 사람을 선택해주세요.');
+        }
+
         $alimtalk = app(SolapiAlimtalkService::class);
         if (! $alimtalk->isReady($kind)) {
             return $redirect->with('error', '템플릿이 연결되지 않았습니다.');
@@ -207,7 +216,10 @@ class AdminController extends Controller
             }
         }
 
-        $applications = $this->seminarApplicationQuery($searchQuery)->latest()->get();
+        $applications = $this->seminarApplicationQuery($searchQuery)
+            ->whereIn('id', $selectedIds)
+            ->latest()
+            ->get();
         if ($applications->isEmpty()) {
             return $redirect->with('error', '보낼 참가자가 없습니다.');
         }

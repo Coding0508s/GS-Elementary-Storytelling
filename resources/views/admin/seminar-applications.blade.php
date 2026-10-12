@@ -16,15 +16,11 @@
     </div>
 </div>
 
-@php
-    $recipientLabel = ($searchQuery !== '' ? '검색된 ' : '접수된 ').number_format($applications->total()).'명';
-@endphp
 <div class="card admin-card mb-4">
     <div class="card-body">
         <h2 class="h5 mb-2">알림톡</h2>
-        <p class="text-muted small mb-3">신청 완료 알림은 접수되는 순간 자동으로 나갑니다. 아래 버튼은 지금 목록의 {{ $recipientLabel }}에게 보냅니다.</p>
-        <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="mb-3"
-              onsubmit="return confirm(@json($recipientLabel.'에게 당일 오전 안내를 보낼까요?'))">
+        <p class="text-muted small mb-3">신청 완료 알림은 접수되는 순간 자동으로 나갑니다. 아래 버튼은 표에서 체크한 사람에게만 보냅니다. 선택한 인원 <strong data-selected-count>0명</strong></p>
+        <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="js-alimtalk-form mb-3" data-action-label="당일 오전 안내">
             @csrf
             <input type="hidden" name="search" value="{{ $searchQuery }}">
             <input type="hidden" name="kind" value="morning">
@@ -32,8 +28,7 @@
                 <i class="bi bi-sunrise"></i> 당일 오전 안내 보내기
             </button>
         </form>
-        <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="d-flex flex-column flex-md-row gap-2"
-              onsubmit="return confirm(@json($recipientLabel.'에게 입장 안내를 보낼까요?'))">
+        <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="js-alimtalk-form d-flex flex-column flex-md-row gap-2" data-action-label="입장 안내">
             @csrf
             <input type="hidden" name="search" value="{{ $searchQuery }}">
             <input type="hidden" name="kind" value="entry">
@@ -78,6 +73,9 @@
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
+                        <th style="width: 42px;">
+                            <input type="checkbox" id="select-all-recipients" aria-label="이 페이지 전체 선택" @disabled($applications->isEmpty())>
+                        </th>
                         <th>접수번호</th>
                         <th>접수일시</th>
                         <th>학생 이름</th>
@@ -93,6 +91,12 @@
                 <tbody>
                     @forelse($applications as $application)
                         <tr>
+                            <td>
+                                <input type="checkbox"
+                                       class="recipient-checkbox"
+                                       value="{{ $application->id }}"
+                                       aria-label="{{ $application->receipt_number }} {{ $application->student_name_korean }} 선택">
+                            </td>
                             <td><strong>{{ $application->receipt_number }}</strong></td>
                             <td><small>{{ $application->created_at?->format('Y-m-d H:i') }}</small></td>
                             <td>{{ $application->student_name_korean }}</td>
@@ -135,7 +139,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center text-muted py-5">
+                            <td colspan="11" class="text-center text-muted py-5">
                                 @if($searchQuery !== '')
                                     검색 결과가 없습니다.
                                 @else
@@ -155,3 +159,58 @@
     @endif
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    const recipientBoxes = () => Array.from(document.querySelectorAll('.recipient-checkbox'));
+    const selectedRecipientIds = () => recipientBoxes().filter((box) => box.checked).map((box) => box.value);
+
+    const updateSelectedCount = () => {
+        const count = selectedRecipientIds().length;
+        document.querySelectorAll('[data-selected-count]').forEach((element) => {
+            element.textContent = count + '명';
+        });
+        const selectAll = document.getElementById('select-all-recipients');
+        const boxes = recipientBoxes();
+        if (selectAll && boxes.length > 0) {
+            selectAll.checked = count === boxes.length;
+            selectAll.indeterminate = count > 0 && count < boxes.length;
+        }
+    };
+
+    document.getElementById('select-all-recipients')?.addEventListener('change', (event) => {
+        recipientBoxes().forEach((box) => {
+            box.checked = event.target.checked;
+        });
+        updateSelectedCount();
+    });
+
+    recipientBoxes().forEach((box) => box.addEventListener('change', updateSelectedCount));
+
+    document.querySelectorAll('.js-alimtalk-form').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            const ids = selectedRecipientIds();
+            if (ids.length === 0) {
+                event.preventDefault();
+                window.alert('보낼 사람을 선택해주세요.');
+                return;
+            }
+
+            const label = form.dataset.actionLabel || '알림';
+            if (!window.confirm('선택한 ' + ids.length + '명에게 ' + label + '를 보낼까요?')) {
+                event.preventDefault();
+                return;
+            }
+
+            form.querySelectorAll('input[name="ids[]"]').forEach((input) => input.remove());
+            ids.forEach((id) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'ids[]';
+                input.value = id;
+                form.appendChild(input);
+            });
+        });
+    });
+</script>
+@endpush

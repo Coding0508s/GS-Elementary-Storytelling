@@ -147,12 +147,13 @@ class ResetReceiptNumberTest extends TestCase
             'role' => 'admin',
             'is_active' => true,
         ]);
-        $this->makeSubmission('알림톡대상');
+        $submission = $this->makeSubmission('알림톡대상');
 
         $this->actingAs($admin, 'admin');
         $request = Request::create('/admin/applications/alimtalk', 'POST', [
             'search' => '알림톡대상',
             'kind' => 'morning',
+            'ids' => [$submission->id],
         ]);
 
         $response = app(AdminController::class)->sendSeminarAlimtalk($request);
@@ -160,6 +161,29 @@ class ResetReceiptNumberTest extends TestCase
         $this->assertTrue($response->isRedirect(route('admin.applications', ['search' => '알림톡대상'])));
         $this->assertSame('템플릿이 연결되지 않았습니다.', session('error'));
         $this->assertSame(1, VideoSubmission::count());
+    }
+
+    public function test_alimtalk_without_selection_does_not_send(): void
+    {
+        $admin = Admin::create([
+            'username' => 'admin',
+            'password' => 'secret-pass',
+            'name' => '관리자',
+            'email' => 'admin@example.com',
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+        $this->makeSubmission('선택없음');
+
+        $this->actingAs($admin, 'admin');
+        $request = Request::create('/admin/applications/alimtalk', 'POST', [
+            'kind' => 'morning',
+        ]);
+
+        $response = app(AdminController::class)->sendSeminarAlimtalk($request);
+
+        $this->assertTrue($response->isRedirect(route('admin.applications')));
+        $this->assertSame('보낼 사람을 선택해주세요.', session('error'));
     }
 
     private function makeSubmission(string $name): VideoSubmission

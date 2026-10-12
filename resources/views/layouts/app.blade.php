@@ -21,7 +21,11 @@
     <div class="container">
         <div class="contest-container">
             <div class="header-section">
-                <h2><span class="contest-title">2026 GrapeSEED Webinar for Parents</span></h2>
+                <h2 class="contest-title">
+                    <span class="contest-title-year">2026</span>
+                    <span class="contest-title-brand">GrapeSEED</span>
+                    <span class="contest-title-event">Webinar for Parents</span>
+                </h2>
             </div>
             
             @if(session('success'))
