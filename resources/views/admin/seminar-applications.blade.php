@@ -100,14 +100,14 @@
                    name="zoom_url"
                    class="form-control"
                    value="{{ $zoomUrl }}"
-                   placeholder="https://us02web.zoom.us/j/..."
-                   aria-label="줌 입장 링크"
+                   placeholder="https://www.youtube.com/watch?v=..."
+                   aria-label="유튜브 입장 링크"
                    required>
             <button type="submit" class="btn btn-primary text-nowrap" @disabled($applications->total() === 0)>
-                <i class="bi bi-camera-video"></i> 입장 안내 보내기
+                <i class="bi bi-youtube"></i> 입장 안내 보내기
             </button>
         </form>
-        <p class="dispatch-note">줌 주소 전체를 붙여 넣으면 됩니다. 오전 안내와 입장 링크 결과는 각각 남습니다.</p>
+        <p class="dispatch-note">유튜브 주소 전체를 붙여 넣으면 됩니다. 오전 안내와 입장 링크 결과는 각각 남습니다.</p>
     </div>
 </div>
 

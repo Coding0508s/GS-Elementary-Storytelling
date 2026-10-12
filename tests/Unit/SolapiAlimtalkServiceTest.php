@@ -170,14 +170,14 @@ class SolapiAlimtalkServiceTest extends TestCase
         (new SolapiAlimtalkService($client))->sendToApplications(
             new Collection([$submission]),
             SolapiAlimtalkService::KIND_ENTRY,
-            'https://us02web.zoom.us/j/12345678901?pwd=abc'
+            'https://www.youtube.com/watch?v=abc123'
         );
 
         $message = $client->messages[0];
         $variables = (array) $message->getKakaoOptions()->getVariables();
         $this->assertFalse($message->getKakaoOptions()->getDisableSms());
         $this->assertSame('15449055', $message->from);
-        $this->assertSame('us02web.zoom.us/j/12345678901?pwd=abc', $variables['#{입장링크}']);
+        $this->assertSame('www.youtube.com/watch?v=abc123', $variables['#{입장링크}']);
     }
 
     public function test_verification_code_uses_otp_template_variable(): void
@@ -201,17 +201,21 @@ class SolapiAlimtalkServiceTest extends TestCase
         $this->assertSame(1, $result['requested']);
     }
 
-    public function test_entry_link_drops_https_and_rejects_non_zoom_urls(): void
+    public function test_entry_link_drops_https_and_rejects_non_youtube_urls(): void
     {
         $service = new SolapiAlimtalkService();
 
         $this->assertSame(
-            'us02web.zoom.us/j/12345678901?pwd=abc',
-            $service->entryLinkValue('https://us02web.zoom.us/j/12345678901?pwd=abc')
+            'www.youtube.com/watch?v=abc123',
+            $service->entryLinkValue('https://www.youtube.com/watch?v=abc123')
+        );
+        $this->assertSame(
+            'youtu.be/abc123',
+            $service->entryLinkValue('https://youtu.be/abc123')
         );
 
         $this->expectException(\Exception::class);
-        $service->entryLinkValue('https://grapeseed.ac/webinar');
+        $service->entryLinkValue('https://us02web.zoom.us/j/12345678901');
     }
 
     private function capturingClient(): SolapiMessageService

@@ -40,14 +40,14 @@ class SolapiAlimtalkService
     }
 
     /**
-     * 줌 주소에서 https:// 를 뺍니다.
+     * 유튜브 주소에서 https:// 를 뺍니다.
      * 템플릿 버튼은 https://#{입장링크} 로 등록하므로, 변수 값에 프로토콜이 있으면 주소가 두 번 붙습니다.
      */
     public function entryLinkValue(string $url): string
     {
         $url = trim($url);
         if ($url === '') {
-            throw new Exception('줌 링크를 입력해주세요.');
+            throw new Exception('유튜브 링크를 입력해주세요.');
         }
 
         if (! preg_match('#^https?://#i', $url)) {
@@ -56,8 +56,8 @@ class SolapiAlimtalkService
 
         $parts = parse_url($url);
         $host = strtolower((string) ($parts['host'] ?? ''));
-        if ($host === '' || ! str_contains($host, 'zoom.us')) {
-            throw new Exception('줌 링크만 보낼 수 있습니다. https:// 로 시작하는 줌 주소를 입력해주세요.');
+        if (! $this->isYoutubeHost($host)) {
+            throw new Exception('유튜브 링크만 보낼 수 있습니다. https:// 로 시작하는 유튜브 주소를 입력해주세요.');
         }
 
         $value = $parts['host'];
@@ -73,6 +73,17 @@ class SolapiAlimtalkService
         }
 
         return $value;
+    }
+
+    /**
+     * 버튼에 넣을 수 있는 주소는 유튜브 본편, 라이브, 짧은 주소입니다.
+     */
+    private function isYoutubeHost(string $host): bool
+    {
+        return $host === 'youtu.be'
+            || $host === 'youtube.com'
+            || str_ends_with($host, '.youtube.com')
+            || str_ends_with($host, '.youtu.be');
     }
 
     /**

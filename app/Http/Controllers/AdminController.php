@@ -210,7 +210,7 @@ class AdminController extends Controller
             try {
                 $zoomUrl = trim((string) $request->input('zoom_url'));
                 $entryLink = $alimtalk->entryLinkValue($zoomUrl);
-                SiteSetting::set('webinar_zoom_url', $zoomUrl, '웨비나 입장 줌 링크');
+                SiteSetting::set('webinar_zoom_url', $zoomUrl, '웨비나 입장 유튜브 링크');
             } catch (\Throwable $e) {
                 return $redirect->with('error', $e->getMessage());
             }
