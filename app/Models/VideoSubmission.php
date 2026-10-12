@@ -36,6 +36,9 @@ class VideoSubmission extends Model
         'marketing_consent_at',
         'notification_sent',
         'notification_sent_at',
+        'alimtalk_status',
+        'alimtalk_status_reason',
+        'alimtalk_sent_at',
         'status',
         'video_url',
         'upload_method',
@@ -51,6 +54,7 @@ class VideoSubmission extends Model
         'privacy_consent_at' => 'datetime',
         'marketing_consent_at' => 'datetime',
         'notification_sent_at' => 'datetime',
+        'alimtalk_sent_at' => 'datetime',
         'is_reevaluation_target' => 'boolean'
     ];
 

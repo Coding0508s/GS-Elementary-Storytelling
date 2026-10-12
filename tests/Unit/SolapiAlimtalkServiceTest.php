@@ -81,6 +81,52 @@ class SolapiAlimtalkServiceTest extends TestCase
         $this->assertSame(1, $result['requested']);
         $this->assertSame(0, $result['failed']);
         $this->assertSame(1, $result['skipped']);
+        $this->assertSame('sent', $result['results'][0]['status']);
+        $this->assertSame('skipped', $result['results'][1]['status']);
+        $this->assertSame('휴대폰 번호가 아닙니다.', $result['results'][1]['reason']);
+    }
+
+    public function test_send_marks_rejected_recipient_as_failed(): void
+    {
+        config([
+            'services.solapi.kakao_pf_id' => 'KA01PF',
+            'services.solapi.kakao_template_morning' => 'KA01MORNING',
+            'services.solapi.from_number' => '15449055',
+        ]);
+
+        $submission = new VideoSubmission();
+        $submission->id = 3;
+        $submission->student_name_korean = '김뚜비';
+        $submission->parent_name = '김학부모';
+        $submission->parent_phone = '01012345678';
+
+        $client = new class extends SolapiMessageService
+        {
+            public function __construct()
+            {
+            }
+
+            public function send($messages, $scheduledDateTime = null): SendResponse
+            {
+                return new SendResponse((object) [
+                    'groupInfo' => (object) ['groupId' => 'G1', 'status' => 'SENDING'],
+                    'failedMessageList' => [
+                        (object) ['to' => '01012345678', 'statusMessage' => '템플릿 불일치'],
+                    ],
+                ]);
+            }
+        };
+
+        $result = (new SolapiAlimtalkService($client))->sendToApplications(
+            new Collection([$submission]),
+            SolapiAlimtalkService::KIND_MORNING
+        );
+
+        $this->assertSame(0, $result['requested']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertSame('failed', $result['results'][0]['status']);
+        $this->assertSame('템플릿 불일치', $result['results'][0]['reason']);
+        $this->assertSame('GSK-00003', $result['results'][0]['receipt']);
     }
 
     public function test_morning_message_has_no_variables(): void

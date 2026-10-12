@@ -96,19 +96,46 @@ class SolapiAlimtalkService
         }
 
         $messages = [];
+        $results = [];
         $skipped = 0;
 
         foreach ($applications as $application) {
             $phone = $this->formatPhoneNumber($application->parent_phone);
+            $row = [
+                'id' => $application->id,
+                'receipt' => (string) $application->receipt_number,
+                'name' => (string) $application->student_name_korean,
+                'parent' => (string) $application->parent_name,
+                'phone' => $phone,
+                'status' => 'sent',
+                'reason' => '',
+            ];
+
             if (! $this->isMobilePhone($phone)) {
                 $skipped++;
+                $row['status'] = 'skipped';
+                $row['reason'] = '휴대폰 번호가 아닙니다.';
+                $results[] = $row;
                 continue;
             }
 
             $messages[] = $this->makeMessage($application, $phone, $kind, $entryLink, null);
+            $results[] = $row;
         }
 
-        return $this->deliver($messages, $skipped);
+        $delivery = $this->deliver($messages, $skipped);
+        foreach ($results as $index => $row) {
+            if ($row['status'] !== 'sent' || ! isset($delivery['failures'][$row['phone']])) {
+                continue;
+            }
+
+            $results[$index]['status'] = 'failed';
+            $results[$index]['reason'] = $delivery['failures'][$row['phone']];
+        }
+
+        $delivery['results'] = $results;
+
+        return $delivery;
     }
 
     /**
@@ -143,29 +170,33 @@ class SolapiAlimtalkService
 
     /**
      * @param  array<int, Message>  $messages
-     * @return array{requested: int, failed: int, skipped: int}
+     * @return array{requested: int, failed: int, skipped: int, failures: array<string, string>}
      */
     private function deliver(array $messages, int $skipped): array
     {
         $requested = 0;
         $failed = 0;
+        $failures = [];
 
         foreach (array_chunk($messages, 100) as $chunk) {
             try {
                 $result = $this->client()->send($chunk);
-                $failedInChunk = count($result->failedMessageList ?? []);
+                $failedInChunk = $this->recordFailures($result->failedMessageList ?? [], $failures);
                 $failed += $failedInChunk;
                 $requested += count($chunk) - $failedInChunk;
             } catch (MessageNotReceivedException $e) {
-                $failedInChunk = count($e->getFailedMessageList());
-                $failed += $failedInChunk > 0 ? $failedInChunk : count($chunk);
+                $failedInChunk = $this->recordFailures($e->getFailedMessageList(), $failures);
+                if ($failedInChunk === 0) {
+                    $failedInChunk = $this->recordChunkFailure($chunk, $failures, $e->getMessage());
+                }
+                $failed += $failedInChunk;
                 $requested += max(0, count($chunk) - $failedInChunk);
                 Log::error('알림톡 발송 실패', [
                     'error' => $e->getMessage(),
                     'failed' => $failedInChunk,
                 ]);
             } catch (\Throwable $e) {
-                $failed += count($chunk);
+                $failed += $this->recordChunkFailure($chunk, $failures, $e->getMessage());
                 Log::error('알림톡 발송 오류', [
                     'error' => $e->getMessage(),
                 ]);
@@ -176,7 +207,42 @@ class SolapiAlimtalkService
             'requested' => $requested,
             'failed' => $failed,
             'skipped' => $skipped,
+            'failures' => $failures,
         ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $failedMessages
+     * @param  array<string, string>  $failures
+     */
+    private function recordFailures(array $failedMessages, array &$failures): int
+    {
+        foreach ($failedMessages as $failedMessage) {
+            $phone = $this->formatPhoneNumber($failedMessage->to ?? '');
+            if ($phone === '') {
+                continue;
+            }
+
+            $failures[$phone] = trim((string) ($failedMessage->statusMessage ?? '')) ?: '발송 요청이 거절되었습니다.';
+        }
+
+        return count($failedMessages);
+    }
+
+    /**
+     * @param  array<int, Message>  $chunk
+     * @param  array<string, string>  $failures
+     */
+    private function recordChunkFailure(array $chunk, array &$failures, string $reason): int
+    {
+        foreach ($chunk as $message) {
+            $phone = $this->formatPhoneNumber($message->getTo());
+            if ($phone !== '') {
+                $failures[$phone] = $reason !== '' ? $reason : '발송 요청이 거절되었습니다.';
+            }
+        }
+
+        return count($chunk);
     }
 
     private function makeMessage($application, string $phone, string $kind, ?string $entryLink, ?string $verificationCode): Message

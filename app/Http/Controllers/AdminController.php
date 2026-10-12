@@ -235,11 +235,37 @@ class AdminController extends Controller
             return $redirect->with('error', '알림톡 발송 중 오류가 발생했습니다.');
         }
 
-        if ($result['requested'] === 0) {
-            return $redirect->with('error', '보낼 수 있는 전화번호가 없습니다. 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.');
+        $this->rememberAlimtalkResults($result['results'] ?? []);
+
+        $summary = '알림톡 발송 결과입니다. 성공 '.$result['requested'].'건, 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.';
+        $flash = ($result['requested'] > 0 && $result['failed'] === 0) ? 'success' : 'error';
+
+        return $redirect->with($flash, $summary);
+    }
+
+    /**
+     * 방금 보낸 결과를 접수 행에 남긴다.
+     * 목록을 다시 열어도 성공, 실패, 번호 오류가 보이게 한다.
+     *
+     * @param  array<int, array<string, mixed>>  $results
+     */
+    private function rememberAlimtalkResults(array $results): void
+    {
+        if (! Schema::hasColumn('video_submissions', 'alimtalk_status')) {
+            return;
         }
 
-        return $redirect->with('success', '알림톡 발송을 요청했습니다. 요청 '.$result['requested'].'건, 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.');
+        foreach ($results as $row) {
+            if (empty($row['id'])) {
+                continue;
+            }
+
+            VideoSubmission::whereKey($row['id'])->update([
+                'alimtalk_status' => $row['status'],
+                'alimtalk_status_reason' => $row['reason'] !== '' ? $row['reason'] : null,
+                'alimtalk_sent_at' => now(),
+            ]);
+        }
     }
 
     /**
