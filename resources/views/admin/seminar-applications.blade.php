@@ -242,7 +242,7 @@
     </div>
     @if($applications->hasPages())
         <div class="card-footer">
-            {{ $applications->links() }}
+            {{ $applications->links('custom.pagination') }}
         </div>
     @endif
 </div>
