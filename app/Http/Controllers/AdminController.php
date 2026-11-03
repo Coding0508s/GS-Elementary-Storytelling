@@ -20,6 +20,7 @@ use App\Models\AiEvaluation;
 use App\Models\SiteSetting;
 use App\Services\OpenAiService;
 use App\Services\SolapiAlimtalkService;
+use App\Services\AdminAlimtalkDispatchService;
 use Illuminate\Support\Facades\Schema;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -136,6 +137,10 @@ class AdminController extends Controller
         return view('admin.seminar-applications', [
             'applications' => $applications,
             'searchQuery' => $searchQuery,
+            'allRecipientCount' => VideoSubmission::count(),
+            'dispatchReady' => Schema::hasColumn('alimtalk_dispatches', 'deleted_at'),
+            'dispatches' => Schema::hasColumn('alimtalk_dispatches', 'deleted_at') ? app(AdminAlimtalkDispatchService::class)->recent() : [],
+            'applicationResults' => app(AdminAlimtalkDispatchService::class)->applicationResults($applications->getCollection()),
             'zoomUrl' => (string) SiteSetting::get('webinar_zoom_url', ''),
         ]);
     }
@@ -169,128 +174,152 @@ class AdminController extends Controller
             ->with('success', "{$receiptNumber} {$studentName} 접수를 휴지통으로 옮겼습니다.");
     }
 
-    /**
-     * 목록에서 선택한 참가자에게 알림톡 발송을 요청한다.
-     * 템플릿이 없으면 보내지 않는다.
-     */
+    /** Builds a persisted preview. No external message is sent by this request. */
     public function sendSeminarAlimtalk(Request $request)
     {
         $admin = Auth::guard('admin')->user();
-        if (! $admin || ! $admin->isAdmin()) {
-            return redirect()->route('judge.dashboard')
-                ->with('error', '관리자만 접근할 수 있는 페이지입니다.');
-        }
-
-        $searchQuery = trim((string) $request->input('search', ''));
-        $kind = (string) $request->input('kind');
-        $redirect = redirect()->route('admin.applications', array_filter([
-            'search' => $searchQuery,
-        ]));
-
-        if (! in_array($kind, [SolapiAlimtalkService::KIND_MORNING, SolapiAlimtalkService::KIND_ENTRY], true)) {
-            return $redirect->with('error', '알림 종류를 선택해주세요.');
-        }
-
-        $selectedIds = collect($request->input('ids', []))
-            ->map(fn ($id) => (int) $id)
-            ->filter(fn ($id) => $id > 0)
-            ->unique()
-            ->values();
-        if ($selectedIds->isEmpty()) {
+        abort_unless($admin && $admin->isAdmin(), 403);
+        $redirect = redirect()->route('admin.applications', array_filter(['search' => $request->input('search')]));
+        $data = $request->validate([
+            'kind' => 'required|in:morning,entry',
+            'scope' => 'sometimes|in:selected,all',
+            'ids' => 'sometimes|array|max:1000',
+            'ids.*' => 'integer|min:1|distinct',
+            'request_token' => 'sometimes|uuid',
+            'zoom_url' => 'nullable|string|max:2048',
+            'delivery_mode' => 'sometimes|in:immediate,scheduled',
+            'scheduled_at' => 'nullable|required_if:delivery_mode,scheduled|date_format:Y-m-d\\TH:i',
+        ]);
+        $scope = $data['scope'] ?? 'selected';
+        if ($scope === 'selected' && empty($data['ids'])) {
             return $redirect->with('error', '보낼 사람을 선택해주세요.');
         }
-
-        $alimtalk = app(SolapiAlimtalkService::class);
-        if (! $alimtalk->isReady($kind)) {
+        if (! app(SolapiAlimtalkService::class)->isReady($data['kind'])) {
             return $redirect->with('error', '템플릿이 연결되지 않았습니다.');
         }
-
-        $entryLink = null;
-        if ($kind === SolapiAlimtalkService::KIND_ENTRY) {
-            try {
-                $zoomUrl = trim((string) $request->input('zoom_url'));
-                $entryLink = $alimtalk->entryLinkValue($zoomUrl);
-                SiteSetting::set('webinar_zoom_url', $zoomUrl, '웨비나 입장 유튜브 링크');
-            } catch (\Throwable $e) {
-                return $redirect->with('error', $e->getMessage());
-            }
+        if (! Schema::hasColumn('alimtalk_dispatches', 'deleted_at')) {
+            return $redirect->with('error', '전체 발송 기능의 데이터베이스 업데이트가 필요합니다.');
         }
-
-        $applications = $this->seminarApplicationQuery($searchQuery)
-            ->whereIn('id', $selectedIds)
-            ->latest()
-            ->get();
-        if ($applications->isEmpty()) {
-            return $redirect->with('error', '보낼 참가자가 없습니다.');
-        }
-
         try {
-            $result = $alimtalk->sendToApplications($applications, $kind, $entryLink);
-        } catch (\Throwable $e) {
-            Log::error('접수 알림톡 발송 오류', [
-                'admin_id' => $admin->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return $redirect->with('error', '알림톡 발송 중 오류가 발생했습니다.');
+            $dispatch = app(AdminAlimtalkDispatchService::class)->preview(
+                $admin->id, $data['request_token'] ?? (string) \Illuminate\Support\Str::uuid(),
+                $data['kind'], $scope, $data['ids'] ?? [], $data['zoom_url'] ?? null,
+                ($data['delivery_mode'] ?? 'immediate') === 'scheduled' ? $data['scheduled_at'] : null,
+            );
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $redirect->withErrors($e->errors());
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            Log::warning('관리자 알림톡 대상 확인 오류', ['exception' => get_class($e)]);
+            return $redirect->with('error', '발송 준비에 실패했습니다. 템플릿, 발신번호, API 설정과 대기열을 확인해주세요.');
         }
-
-        $this->rememberAlimtalkResults($kind, $result['results'] ?? []);
-
-        $kindLabel = $kind === SolapiAlimtalkService::KIND_MORNING ? '오전 안내' : '입장 링크';
-        $summary = $kindLabel.' 발송 결과입니다. 성공 '.$result['requested'].'건, 실패 '.$result['failed'].'건, 번호 오류 '.$result['skipped'].'건입니다.';
-        $flash = ($result['requested'] > 0 && $result['failed'] === 0) ? 'success' : 'error';
-
-        return $redirect->with($flash, $summary);
+        return $redirect->with('success', $dispatch->status === 'preview'
+            ? '아직 발송되지 않았습니다. 아래 대상과 내용을 확인하고 발송을 확정해주세요.'
+            : '이미 접수된 작업입니다. 새 발송을 만들지 않았습니다. 아래 진행 상황을 확인해주세요.');
     }
 
-    /**
-     * 방금 보낸 결과를 알림 종류별로 접수 행에 남긴다.
-     * 입장 링크를 보내도 오전 안내 결과는 지워지지 않는다.
-     *
-     * @param  array<int, array<string, mixed>>  $results
-     */
-    private function rememberAlimtalkResults(string $kind, array $results): void
+    public function confirmSeminarAlimtalk(Request $request, string $dispatch)
     {
-        $hasBundle = Schema::hasColumn('video_submissions', 'alimtalk_results');
-        $hasLegacy = Schema::hasColumn('video_submissions', 'alimtalk_status');
-        if (! $hasBundle && ! $hasLegacy) {
-            return;
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        $request->validate(['confirm_resend' => 'sometimes|accepted']);
+        try {
+            app(AdminAlimtalkDispatchService::class)->confirm($dispatch, $admin->id, $request->boolean('confirm_resend'));
+        } catch (\Illuminate\Validation\ValidationException|\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::warning('관리자 알림톡 확정 결과 확인 필요', ['dispatch_id' => $dispatch, 'exception' => get_class($e)]);
+            return redirect()->route('admin.applications')->with('error', '발송 확정 결과를 확인하지 못했습니다. 새 작업을 만들지 말고 아래 진행 상황을 확인해주세요.');
         }
+        return redirect()->route('admin.applications')->with('success', '발송 작업이 접수되었습니다. 이 화면을 닫아도 계속 처리됩니다.');
+    }
 
-        foreach ($results as $row) {
-            if (empty($row['id'])) {
-                continue;
-            }
+    public function cancelSeminarAlimtalk(Request $request, string $dispatch)
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        app(AdminAlimtalkDispatchService::class)->cancel($dispatch, $admin->id);
+        return redirect()->route('admin.applications')->with('success', '발송 전 확인을 취소했습니다.');
+    }
 
-            $submission = VideoSubmission::find($row['id']);
-            if (! $submission) {
-                continue;
-            }
-
-            $payload = [
-                'status' => $row['status'],
-                'reason' => ($row['reason'] ?? '') !== '' ? $row['reason'] : null,
-                'sent_at' => now()->toDateTimeString(),
-            ];
-
-            if ($hasBundle) {
-                $bundle = $submission->alimtalk_results;
-                if (! is_array($bundle)) {
-                    $bundle = [];
-                }
-                $bundle[$kind] = $payload;
-                $submission->alimtalk_results = $bundle;
-            }
-
-            if ($hasLegacy) {
-                $submission->alimtalk_status = $payload['status'];
-                $submission->alimtalk_status_reason = $payload['reason'];
-                $submission->alimtalk_sent_at = now();
-            }
-
-            $submission->save();
+    public function manageSeminarAlimtalkSchedule(Request $request, string $dispatch)
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        $data = $request->validate(['action' => 'required|in:refresh,cancel']);
+        try {
+            app(AdminAlimtalkDispatchService::class)->requestScheduleManagement($dispatch, $admin->id, $data['action'] === 'cancel');
+        } catch (\Illuminate\Validation\ValidationException|\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::warning('관리자 알림톡 예약 관리 요청 확인 필요', ['dispatch_id' => $dispatch, 'exception' => get_class($e)]);
+            return redirect()->route('admin.applications')->with('error', '예약 관리 요청 결과를 확인하지 못했습니다. 예약이 취소되었다고 가정하지 말고 기존 작업 상태를 확인해주세요.');
         }
+        return redirect()->route('admin.applications')->with('success', '예약 상태 확인 작업을 접수했습니다. 취소 요청은 제공사 확인 후 반영됩니다.');
+    }
+
+    public function updateSeminarAlimtalk(Request $request, string $dispatch)
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        $data = $request->validate([
+            'revision' => 'required|integer|min:1',
+            'delivery_mode' => 'required|in:immediate,scheduled',
+            'scheduled_at' => 'nullable|required_if:delivery_mode,scheduled|date_format:Y-m-d\\TH:i',
+            'zoom_url' => 'nullable|string|max:2048',
+        ]);
+        try {
+            app(AdminAlimtalkDispatchService::class)->updateDispatch($dispatch, $admin->id, $data['revision'], $data);
+        } catch (\Illuminate\Validation\ValidationException|\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::warning('관리자 알림톡 수정 결과 확인 필요', ['dispatch_id' => $dispatch, 'exception' => get_class($e)]);
+            return redirect()->route('admin.applications')->with('error', '수정 요청 결과를 확인하지 못했습니다. 기존 작업 상태를 확인해주세요.');
+        }
+        return redirect()->route('admin.applications')->with('success', '수정을 요청했습니다. 기존 예약이 있으면 취소 확인 후 변경됩니다. 변경된 대상과 내용을 확인하고 다시 확정해주세요.');
+    }
+
+    public function destroySeminarAlimtalk(Request $request, string $dispatch)
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        $data = $request->validate(['revision' => 'required|integer|min:1']);
+        try {
+            app(AdminAlimtalkDispatchService::class)->deleteDispatch($dispatch, $admin->id, $data['revision']);
+        } catch (\Illuminate\Validation\ValidationException|\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::warning('관리자 알림톡 삭제 결과 확인 필요', ['dispatch_id' => $dispatch, 'exception' => get_class($e)]);
+            return redirect()->route('admin.applications')->with('error', '삭제 요청 결과를 확인하지 못했습니다. 예약 취소 여부와 기존 작업 상태를 확인해주세요.');
+        }
+        return redirect()->route('admin.applications')->with('success', '삭제를 요청했습니다. 등록된 예약은 취소가 확인되어야 목록에서 삭제됩니다. 이미 보낸 메시지는 취소되지 않습니다.');
+    }
+
+    public function seminarAlimtalkProgress()
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        return response()->json(app(AdminAlimtalkDispatchService::class)->recent())
+            ->header('Cache-Control', 'no-store, private');
+    }
+
+    public function seminarAlimtalkResults(Request $request)
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        $data = $request->validate(['ids' => 'required|array|max:20', 'ids.*' => 'required|integer|min:1|distinct']);
+        $applications = VideoSubmission::whereIn('id', $data['ids'])->get();
+        return response()->json(app(AdminAlimtalkDispatchService::class)->applicationResults($applications))
+            ->header('Cache-Control', 'no-store, private');
+    }
+
+    public function syncSeminarAlimtalkResults()
+    {
+        $admin = Auth::guard('admin')->user();
+        abort_unless($admin && $admin->isAdmin(), 403);
+        return response()->json(app(AdminAlimtalkDispatchService::class)->syncDeliveryResults())
+            ->header('Cache-Control', 'no-store, private');
     }
 
     /**

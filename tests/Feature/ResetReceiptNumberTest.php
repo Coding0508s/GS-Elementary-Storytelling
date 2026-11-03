@@ -14,57 +14,13 @@ use Tests\TestCase;
 
 class ResetReceiptNumberTest extends TestCase
 {
+    use \Tests\Concerns\CreatesSeminarSchema;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        Schema::dropAllTables();
-
-        Schema::create('admins', function (Blueprint $table) {
-            $table->id();
-            $table->string('username')->unique();
-            $table->string('password');
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->string('role')->default('judge');
-            $table->boolean('is_active')->default(true);
-            $table->timestamp('last_login_at')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::create('video_submissions', function (Blueprint $table) {
-            $table->id();
-            $table->string('region');
-            $table->string('institution_name');
-            $table->string('class_name')->nullable();
-            $table->string('student_name_korean');
-            $table->string('student_name_english')->nullable();
-            $table->string('grade');
-            $table->integer('age')->nullable();
-            $table->string('parent_name');
-            $table->string('parent_phone');
-            $table->string('video_file_path')->nullable();
-            $table->string('video_file_name')->nullable();
-            $table->string('video_file_type')->nullable();
-            $table->unsignedBigInteger('video_file_size')->nullable();
-            $table->string('unit_topic')->nullable();
-            $table->text('teacher_question')->nullable();
-            $table->boolean('privacy_consent')->default(false);
-            $table->timestamp('privacy_consent_at')->nullable();
-            $table->boolean('notification_sent')->default(false);
-            $table->timestamp('notification_sent_at')->nullable();
-            $table->string('status')->default('uploaded');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-
-        foreach (['evaluations', 'video_assignments', 'ai_evaluations'] as $tableName) {
-            Schema::create($tableName, function (Blueprint $table) {
-                $table->id();
-                $table->unsignedBigInteger('video_submission_id')->nullable();
-                $table->timestamps();
-            });
-        }
+        $this->createSeminarSchema();
     }
 
     public function test_reset_permanently_deletes_trash_and_restarts_receipt_numbers(): void
@@ -227,35 +183,36 @@ class ResetReceiptNumberTest extends TestCase
                 return 'us02web.zoom.us/j/1';
             }
 
-            public function sendToApplications(\Illuminate\Support\Collection $applications, string $kind = self::KIND_COMPLETED, ?string $entryLink = null): array
+            public function adminConfigurationHash(string $kind): string
             {
-                return [
-                    'requested' => 1,
-                    'failed' => $kind === self::KIND_ENTRY ? 1 : 0,
-                    'skipped' => 0,
-                    'results' => [[
-                        'id' => $this->submissionId,
-                        'status' => $kind === self::KIND_ENTRY ? 'failed' : 'sent',
-                        'reason' => $kind === self::KIND_ENTRY ? '템플릿 불일치' : '',
-                    ]],
-                ];
+                return 'test-configuration';
+            }
+
+            public function sendAdminBatch(array $phones, string $kind, ?string $entryLink): array
+            {
+                return array_fill_keys($phones, [
+                    'status' => $kind === self::KIND_ENTRY ? 'failed' : 'accepted',
+                    'reason' => $kind === self::KIND_ENTRY ? '템플릿 불일치' : null,
+                ]);
             }
         });
 
         $this->actingAs($admin, 'admin');
 
-        app(AdminController::class)->sendSeminarAlimtalk(Request::create('/admin/applications/alimtalk', 'POST', [
-            'kind' => 'morning',
-            'ids' => [$submission->id],
-        ]));
-        app(AdminController::class)->sendSeminarAlimtalk(Request::create('/admin/applications/alimtalk', 'POST', [
-            'kind' => 'entry',
-            'ids' => [$submission->id],
-            'zoom_url' => 'https://us02web.zoom.us/j/1',
-        ]));
+        (require database_path('migrations/2026_11_03_010000_create_admin_alimtalk_dispatch_tables.php'))->up();
+        (require database_path('migrations/2026_11_03_020000_add_scheduling_to_alimtalk_dispatches.php'))->up();
+        (require database_path('migrations/2026_11_03_030000_add_change_management_to_alimtalk_dispatches.php'))->up();
+        (require database_path('migrations/0001_01_01_000002_create_jobs_table.php'))->up();
+        $service = app(\App\Services\AdminAlimtalkDispatchService::class);
+        foreach (['morning', 'entry'] as $kind) {
+            $dispatch = $service->preview($admin->id, (string) \Illuminate\Support\Str::uuid(), $kind, 'selected', [$submission->id], 'https://youtu.be/test');
+            $service->confirm($dispatch->id, $admin->id, true);
+            $ids = \Illuminate\Support\Facades\DB::table('alimtalk_recipients')->where('dispatch_id', $dispatch->id)->pluck('id')->all();
+            $service->processBatch($dispatch->id, $ids);
+        }
 
         $submission->refresh();
-        $this->assertSame('sent', $submission->alimtalkResult('morning')['status']);
+        $this->assertSame('accepted', $submission->alimtalkResult('morning')['status']);
         $this->assertSame('failed', $submission->alimtalkResult('entry')['status']);
         $this->assertSame('템플릿 불일치', $submission->alimtalkResult('entry')['reason']);
     }

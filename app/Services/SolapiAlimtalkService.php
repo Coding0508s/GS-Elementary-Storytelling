@@ -39,6 +39,219 @@ class SolapiAlimtalkService
         return $this->pfId() !== '' && $this->templateId($kind) !== '';
     }
 
+    public function adminConfigurationHash(string $kind): string
+    {
+        if (! in_array($kind, [self::KIND_MORNING, self::KIND_ENTRY], true)
+            || ! $this->isReady($kind) || $this->fromNumber() === ''
+            || ! config('services.solapi.api_key') || ! config('services.solapi.api_secret')) {
+            throw new Exception('알림톡 템플릿, 발신번호와 API 설정을 확인해주세요.');
+        }
+
+        return hash('sha256', json_encode([
+            $kind, $this->pfId(), $this->templateId($kind), $this->fromNumber(),
+            config('services.solapi.kakao_var_entry_link'),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    /** Common administrator notices only. Completed/OTP callers keep their existing semantics. */
+    public function sendAdminBatch(array $phones, string $kind, ?string $entryLink): array
+    {
+        return $this->deliverAdminBatch($phones, $kind, $entryLink, null);
+    }
+
+    public function scheduleAdminBatch(array $phones, string $kind, ?string $entryLink, \DateTimeInterface $when): array
+    {
+        if ($when->getTimestamp() < now()->timestamp + 60) {
+            return array_fill_keys($phones, ['status' => 'skipped', 'reason' => '예약 시간까지 1분 미만으로 남아 즉시 전송을 방지했습니다.']);
+        }
+
+        return $this->deliverAdminBatch($phones, $kind, $entryLink, \DateTime::createFromInterface($when));
+    }
+
+    private function deliverAdminBatch(array $phones, string $kind, ?string $entryLink, ?\DateTime $when): array
+    {
+        $this->adminConfigurationHash($kind);
+        if (count($phones) > 100 || count(array_unique($phones)) !== count($phones)) {
+            throw new Exception('한 번에 서로 다른 번호 100개까지 보낼 수 있습니다.');
+        }
+        if ($kind === self::KIND_ENTRY) {
+            $entryLink = $this->entryLinkValue((string) $entryLink);
+        }
+        $messages = [];
+        foreach ($phones as $phone) {
+            if ($phone !== $this->formatPhoneNumber($phone) || ! $this->isMobilePhone($phone)) {
+                throw new Exception('올바르지 않은 수신 번호입니다.');
+            }
+            $messages[] = $this->makeMessage(null, $phone, $kind, $entryLink, null);
+        }
+        if ($messages === []) {
+            return [];
+        }
+
+        $results = array_fill_keys($phones, ['status' => 'unknown', 'reason' => '접수 여부를 확인하지 못했습니다.']);
+        try {
+            $response = $this->client()->send($messages, $when);
+            if (empty($response->groupInfo->groupId)) {
+                return $results;
+            }
+            $failures = [];
+            foreach ($response->failedMessageList ?? [] as $failure) {
+                $phone = $this->formatPhoneNumber($failure->to ?? '');
+                if (! in_array($phone, $phones, true)) {
+                    return $results; // Unmappable response: never infer successful acceptance.
+                }
+                if (isset($failures[$phone])) {
+                    return $results;
+                }
+                $failures[$phone] = $failure->statusMessage ?? '발송 요청이 거절되었습니다.';
+            }
+            foreach ($phones as $phone) {
+                $results[$phone] = [
+                    'status' => isset($failures[$phone]) ? 'failed' : ($when ? ($response->groupInfo->status === 'SCHEDULED' ? 'scheduled' : 'unknown') : 'accepted'),
+                    'reason' => $failures[$phone] ?? null,
+                    'provider_group_id' => $response->groupInfo->groupId,
+                ];
+            }
+        } catch (MessageNotReceivedException $e) {
+            foreach ($e->getFailedMessageList() as $failure) {
+                $phone = $this->formatPhoneNumber($failure->to ?? '');
+                if (isset($results[$phone])) {
+                    $results[$phone] = ['status' => 'failed', 'reason' => $failure->statusMessage ?? '발송 요청이 거절되었습니다.'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // The provider may have accepted the request before the connection was lost.
+            Log::warning('관리자 알림톡 접수 여부 확인 필요', ['exception' => get_class($e)]);
+        }
+
+        return $results;
+    }
+
+    /** The SDK has no cancellation method; use the documented group API, without retries. */
+    public function manageAdminSchedule(string $groupId, bool $cancel): array
+    {
+        $date = gmdate('Y-m-d\TH:i:s\Z');
+        $salt = bin2hex(random_bytes(16));
+        $key = (string) config('services.solapi.api_key');
+        $signature = hash_hmac('sha256', $date.$salt, (string) config('services.solapi.api_secret'));
+        $url = 'https://api.solapi.com/messages/v4/groups/'.rawurlencode($groupId);
+        $request = \Illuminate\Support\Facades\Http::connectTimeout(5)->timeout(15)->withHeaders([
+            'Authorization' => "HMAC-SHA256 apiKey={$key}, date={$date}, salt={$salt}, signature={$signature}",
+        ]);
+        try {
+            $response = $cancel ? $request->delete($url.'/schedule') : $request->get($url);
+            $group = $response->json();
+            if (! $response->successful() || ($group['groupId'] ?? null) !== $groupId) {
+                return ['status' => $cancel ? 'cancel_unknown' : 'unavailable', 'reason' => '제공사 예약 상태를 확인하지 못했습니다. 다시 상태를 조회해주세요.'];
+            }
+            $status = match ($group['status'] ?? '') {
+                'PENDING', 'DELETED' => 'cancelled',
+                'SCHEDULED' => $cancel ? 'cancel_unknown' : 'scheduled',
+                'SENDING', 'PROCESSING', 'COMPLETE' => 'accepted',
+                'FAILED' => 'failed',
+                default => $cancel ? 'cancel_unknown' : 'unavailable',
+            };
+
+            return ['status' => $status, 'reason' => match ($status) {
+                'cancel_unknown' => '예약 취소 여부를 확인하지 못했습니다. 제공사 기록을 확인해주세요.',
+                'accepted' => $cancel ? '이미 발송 처리가 시작되어 취소하지 못했습니다.' : null,
+                'failed' => '제공사에서 발송 실패로 처리되었습니다.',
+                default => null,
+            }];
+        } catch (\Throwable $e) {
+            return ['status' => $cancel ? 'cancel_unknown' : 'unavailable', 'reason' => '제공사와 연결하지 못했습니다. 예약이 취소되었다고 가정하지 마세요.'];
+        }
+    }
+
+    public function normalizedAdminPhone(string $phone): string
+    {
+        return $this->formatPhoneNumber($phone);
+    }
+
+    /** Only reads results. Never infer delivery from the group's COMPLETE status. */
+    public function adminDeliveryResults(string $groupId): array
+    {
+        $messages = [];
+        $startKey = null;
+        $seen = [];
+        // Administrator batches contain at most 100 numbers. Bound both pagination and time.
+        for ($page = 0; $page < 2; $page++) {
+            $date = gmdate('Y-m-d\TH:i:s\Z');
+            $salt = bin2hex(random_bytes(16));
+            $key = (string) config('services.solapi.api_key');
+            $signature = hash_hmac('sha256', $date.$salt, (string) config('services.solapi.api_secret'));
+            if ($key === '' || ! config('services.solapi.api_secret')) {
+                throw new Exception('SOLAPI 조회 설정을 확인해주세요.');
+            }
+            $response = \Illuminate\Support\Facades\Http::connectTimeout(3)->timeout(8)->withHeaders([
+                'Authorization' => "HMAC-SHA256 apiKey={$key}, date={$date}, salt={$salt}, signature={$signature}",
+            ])->get('https://api.solapi.com/messages/v4/groups/'.rawurlencode($groupId).'/messages',
+                array_filter(['limit' => 500, 'startKey' => $startKey], fn ($value) => $value !== null));
+            $body = $response->json();
+            if (! $response->successful() || ! is_array($body['messageList'] ?? null)) {
+                throw new Exception('SOLAPI 발송 결과를 조회하지 못했습니다.');
+            }
+            foreach ($body['messageList'] as $message) {
+                if (! is_array($message) || ($message['groupId'] ?? null) !== $groupId
+                    || empty($message['messageId']) || isset($seen[$message['messageId']])) {
+                    throw new Exception('SOLAPI 발송 결과의 연결 정보를 확인하지 못했습니다.');
+                }
+                $seen[$message['messageId']] = true;
+                $phone = $this->formatPhoneNumber((string) ($message['to'] ?? ''));
+                if (! $this->isMobilePhone($phone) || (string) ($message['country'] ?? '82') !== '82') {
+                    continue;
+                }
+                $messages[$phone][] = $message;
+            }
+            $nextKey = $body['nextKey'] ?? null;
+            if (! $nextKey) {
+                return array_map(fn ($items) => $this->deliveryResult($items), $messages);
+            }
+            if (! is_string($nextKey) || $nextKey === $startKey) {
+                break;
+            }
+            $startKey = $nextKey;
+        }
+        throw new Exception('SOLAPI 결과의 모든 페이지를 확인하지 못했습니다. 다시 조회해주세요.');
+    }
+
+    private function deliveryResult(array $messages): array
+    {
+        // Some providers return a separate replacement message, others update the original.
+        // Prefer the replacement's FINAL result; an earlier Kakao failure is not final.
+        $replacements = array_values(array_filter($messages, fn ($item) => ($item['replacement'] ?? false) === true));
+        $candidates = $replacements ?: $messages;
+        if (count($candidates) !== 1) {
+            return ['status' => 'unavailable', 'reason' => '같은 번호의 메시지가 여러 개여서 최종 결과를 확인하지 못했습니다.'];
+        }
+        $message = $candidates[0];
+        $code = (string) ($message['statusCode'] ?? '');
+        $complete = ($message['status'] ?? null) === 'COMPLETE';
+        $status = match (true) {
+            $complete && $code === '4000' => 'delivered',
+            $complete && $code === '1070' => 'cancelled',
+            $complete && preg_match('/^[1-5][0-9]{3}$/', $code) && ! in_array($code, ['2000', '3000', '4000'], true) => 'delivery_failed',
+            $code === '3000' => 'delivering',
+            $code === '2000' => 'accepted',
+            // A channel failure while the replacement is queued is not a delivery failure.
+            ! $complete && preg_match('/^[1-5][0-9]{3}$/', $code) => 'delivering',
+            default => 'unavailable',
+        };
+        $type = (string) ($message['type'] ?? '');
+
+        return [
+            'status' => $status,
+            'reason' => $status === 'delivery_failed' ? (string) ($message['reason'] ?? $message['statusMessage'] ?? '제공사에서 전달 실패로 처리했습니다.') : null,
+            'provider_status_code' => $code,
+            'delivery_channel' => in_array($type, ['ATA', 'CTA', 'CTI', 'SMS', 'LMS', 'MMS'], true) ? $type : null,
+        ];
+    }
+
+    public function validAdminPhone(string $phone): bool
+    {
+        return $this->isMobilePhone($phone);
+    }
+
     /**
      * 유튜브 주소에서 https:// 를 뺍니다.
      * 템플릿 버튼은 https://#{입장링크} 로 등록하므로, 변수 값에 프로토콜이 있으면 주소가 두 번 붙습니다.
@@ -127,6 +340,7 @@ class SolapiAlimtalkService
                 $row['status'] = 'skipped';
                 $row['reason'] = '휴대폰 번호가 아닙니다.';
                 $results[] = $row;
+
                 continue;
             }
 
@@ -258,7 +472,7 @@ class SolapiAlimtalkService
 
     private function makeMessage($application, string $phone, string $kind, ?string $entryLink, ?string $verificationCode): Message
     {
-        $kakaoOption = new KakaoOption();
+        $kakaoOption = new KakaoOption;
         $kakaoOption->setPfId($this->pfId())
             ->setTemplateId($this->templateId($kind))
             ->setDisableSms(false);
@@ -268,7 +482,7 @@ class SolapiAlimtalkService
             $kakaoOption->setVariables((object) $variables);
         }
 
-        $message = new Message();
+        $message = new Message;
         $message->setTo($phone)
             ->setFrom($this->fromNumber())
             ->setKakaoOptions($kakaoOption);

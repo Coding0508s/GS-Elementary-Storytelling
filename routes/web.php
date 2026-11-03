@@ -95,6 +95,23 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/applications/alimtalk', [AdminController::class, 'sendSeminarAlimtalk'])
             ->name('applications.alimtalk');
 
+        Route::get('/applications/alimtalk/progress', [AdminController::class, 'seminarAlimtalkProgress'])
+            ->name('applications.alimtalk.progress');
+        Route::get('/applications/alimtalk/results', [AdminController::class, 'seminarAlimtalkResults'])
+            ->name('applications.alimtalk.results');
+        Route::post('/applications/alimtalk/results/sync', [AdminController::class, 'syncSeminarAlimtalkResults'])
+            ->middleware('throttle:12,1')->name('applications.alimtalk.results.sync');
+        Route::post('/applications/alimtalk/{dispatch}/confirm', [AdminController::class, 'confirmSeminarAlimtalk'])
+            ->whereUuid('dispatch')->name('applications.alimtalk.confirm');
+        Route::post('/applications/alimtalk/{dispatch}/cancel', [AdminController::class, 'cancelSeminarAlimtalk'])
+            ->whereUuid('dispatch')->name('applications.alimtalk.cancel');
+        Route::post('/applications/alimtalk/{dispatch}/schedule', [AdminController::class, 'manageSeminarAlimtalkSchedule'])
+            ->whereUuid('dispatch')->name('applications.alimtalk.schedule');
+        Route::put('/applications/alimtalk/{dispatch}', [AdminController::class, 'updateSeminarAlimtalk'])
+            ->whereUuid('dispatch')->name('applications.alimtalk.update');
+        Route::delete('/applications/alimtalk/{dispatch}', [AdminController::class, 'destroySeminarAlimtalk'])
+            ->whereUuid('dispatch')->name('applications.alimtalk.destroy');
+
         Route::delete('/applications/{submission}', [AdminController::class, 'deleteSeminarApplication'])
             ->whereNumber('submission')
             ->name('applications.destroy');
