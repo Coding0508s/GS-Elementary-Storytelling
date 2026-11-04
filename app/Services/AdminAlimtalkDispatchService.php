@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class AdminAlimtalkDispatchService
 {
+    public const QUEUE = 'storytelling-alimtalk';
+
     private const SNAPSHOT_COLUMNS = ['id', 'parent_phone', 'student_name_korean', 'parent_name', 'created_at', 'alimtalk_results'];
 
     private const RESULT_PENDING = ['accepted', 'delivering', 'scheduled', 'unknown'];
@@ -119,7 +121,7 @@ class AdminAlimtalkDispatchService
             DB::table('alimtalk_recipients')->where('dispatch_id', $id)->select('id')->orderBy('id')
                 ->chunkById(100, function ($rows) use ($id, $jobClass) {
                     $jobClass::dispatch($id, $rows->pluck('id')->all())
-                        ->onConnection('database')->beforeCommit();
+                        ->onConnection('database')->onQueue(self::QUEUE)->beforeCommit();
                 });
 
             return null;
@@ -222,7 +224,8 @@ class AdminAlimtalkDispatchService
         DB::table('alimtalk_recipients')->where('dispatch_id', $dispatch->id)->where('status', 'scheduled')
             ->update(['status' => 'cancel_pending', 'updated_at' => now()]);
         foreach ($groups as $group) {
-            CancelAlimtalkForChange::dispatch($dispatch->id, $group)->onConnection('database')->beforeCommit();
+            CancelAlimtalkForChange::dispatch($dispatch->id, $group)
+                ->onConnection('database')->onQueue(self::QUEUE)->beforeCommit();
         }
     }
 
@@ -504,7 +507,8 @@ class AdminAlimtalkDispatchService
                     ->whereNotNull('provider_group_id')->update(['status' => 'cancel_pending', 'updated_at' => now()]);
             }
             foreach ($groups as $group) {
-                ManageAdminAlimtalkSchedule::dispatch($id, $group, $cancel)->onConnection('database')->beforeCommit();
+                ManageAdminAlimtalkSchedule::dispatch($id, $group, $cancel)
+                    ->onConnection('database')->onQueue(self::QUEUE)->beforeCommit();
             }
         });
     }

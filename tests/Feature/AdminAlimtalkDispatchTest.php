@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\BatchAiEvaluationJob;
 use App\Jobs\SendAdminAlimtalkBatch;
 use App\Models\Admin;
 use App\Models\VideoSubmission;
@@ -502,6 +503,7 @@ class AdminAlimtalkDispatchTest extends TestCase
     public function test_scheduled_http_flow_registers_now_with_provider_time_and_can_cancel(): void
     {
         $row = $this->submission();
+        $aiJobId = Queue::connection('database')->push(new BatchAiEvaluationJob(0, $this->admin->id), '', 'default');
         $when = now()->addHour()->format('Y-m-d\TH:i');
         $this->post(route('admin.applications.alimtalk'), ['kind' => 'morning', 'scope' => 'all', 'delivery_mode' => 'scheduled', 'scheduled_at' => $when])
             ->assertRedirect()->assertSessionHasNoErrors();
@@ -520,6 +522,7 @@ class AdminAlimtalkDispatchTest extends TestCase
         $this->runQueue();
         $this->assertSame('cancelled', DB::table('alimtalk_dispatches')->value('status'));
         $this->assertSame('cancelled', $row->fresh()->alimtalkResult('morning')['status']);
+        $this->assertDatabaseHas('jobs', ['id' => $aiJobId, 'queue' => 'default', 'attempts' => 0, 'reserved_at' => null]);
     }
 
     public function test_schedule_invalid_past_and_missing_dates_never_create_dispatches(): void
@@ -1115,7 +1118,10 @@ class AdminAlimtalkDispatchTest extends TestCase
 
     private function runQueue(): void
     {
-        $this->assertSame(0, Artisan::call('queue:work', ['connection' => 'database', '--stop-when-empty' => true, '--sleep' => 0, '--tries' => 1]));
+        $this->assertSame(0, Artisan::call('queue:work', [
+            'connection' => 'database', '--queue' => AdminAlimtalkDispatchService::QUEUE,
+            '--stop-when-empty' => true, '--sleep' => 0, '--tries' => 1,
+        ]));
     }
 }
 

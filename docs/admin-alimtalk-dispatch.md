@@ -37,7 +37,7 @@
 - 등록 중 또는 미확정한 예약 결과가 남은 작업을 운영 종료 명령으로 닫아도 외부 예약이 취소되지는 않습니다. 알려진 외부 예약이 남아 있으면 종료 명령을 차단합니다.
 
 추가 마이그레이션: `2026_11_03_020000_add_scheduling_to_alimtalk_dispatches.php`.
-배포 후 실행 중인 worker를 재시작해야 새 예약·취소 작업이 반영됩니다. 로컬에서는 기존 `php artisan queue:work database`를 종료하고 다시 실행하세요. 새 예약은 전용 작업 클래스를 사용해 구버전 worker가 즉시 전송 경로로 처리하는 것도 방지합니다.
+로컬에서는 `php artisan queue:work database --queue=storytelling-alimtalk`로 알림톡 worker를 실행합니다. 배포 시에는 아래 Supervisor 설정을 사용합니다.
 
 예약 등록은 SDK의 예약 인자를 사용합니다. 취소는 공식 `DELETE /messages/v4/groups/{groupId}/schedule`, 조회는 `GET /messages/v4/groups/{groupId}`를 사용하며 외부 쓰기 요청을 자동 재시도하지 않습니다.
 
@@ -58,14 +58,23 @@
 ## 배포 시 필요한 작업
 
 - `php artisan migrate --force`로 새 저장 구조를 적용합니다. 마이그레이션 전에는 발송 버튼이 비활성화됩니다.
-- 기존 worker를 `php artisan queue:restart`로 재시작해 새 작업 클래스를 읽게 합니다. 실제 실행 경로와 프로세스 관리자 설정을 확인합니다.
-- 발송은 기본 큐 연결과 무관하게 `database` 연결을 사용합니다. `queue.connections.database.connection`은 앱 DB와 동일해야 합니다.
-- 해당 database 연결의 큐 이름(기본 `default`)을 처리하는 worker가 있어야 합니다. 예: `php artisan queue:work database --queue=default`.
+- 관리자 알림톡의 즉시 발송·예약 등록·예약 관리 작업은 `database` 연결의 `storytelling-alimtalk` 큐를 사용합니다. `queue.connections.database.connection`은 앱 DB와 동일해야 합니다. `QUEUE_CONNECTION`과 `DB_QUEUE`는 기존 작업의 설정을 유지합니다.
 - SOLAPI API 키·시크릿·채널·오전/입장 템플릿·발신번호를 확인합니다. 입장 링크 변수 설정도 필요합니다. 기존 대체 문자 설정을 유지합니다.
 - 작업별 제한 시간은 60초, 시도 횟수는 1회입니다. SDK 기본 요청 제한은 30초입니다. `retry_after`는 작업 제한보다 충분히 커야 하며 앱은 65초 이하 설정을 거부합니다. 기본값은 90초입니다.
 - worker의 PHP CLI에는 `pcntl` 확장이 있어야 작업 제한 시간이 적용됩니다. 이 조건을 운영 환경에서 확인합니다.
 - 확인·작업 등록은 같은 DB 트랜잭션에서 수행합니다. `beforeCommit()`으로 jobs 테이블 등록까지 포함하므로 중간 오류 시 함께 롤백됩니다. 별도 queue DB 연결은 사용하지 않습니다.
 - 전체 운영 발송 전에 지정한 테스트 번호로 템플릿과 대체 문자 동작을 확인합니다. 개발 검증에서는 실제 발송하지 않았습니다.
+
+운영 서버에 코드가 반영된 뒤 프로젝트 루트에서 전용 프로그램을 등록합니다. 설정의 경로는 `/var/www/html/storytelling`이며 PHP 실행 파일은 `/usr/bin/php`, 실행 계정은 `www-data`입니다. 서버 환경이 다르면 설치 전에 설정 파일에서 해당 값을 확인합니다.
+
+```sh
+sudo install -m 644 supervisor-alimtalk.conf /etc/supervisor/conf.d/storytelling-alimtalk.conf
+sudo supervisorctl reread
+sudo supervisorctl update storytelling-alimtalk
+sudo supervisorctl status storytelling-alimtalk
+```
+
+앞서 알림톡을 처리하려고 `storytelling-queue`라는 이름으로 `default` 큐 워커를 별도 설치했다면, 그 프로그램의 설정을 확인한 뒤 전용 워커로 교체합니다. 배포 전에 `default`에 쌓인 알림톡 작업은 기존 큐에 남으므로 발송 내역과 대조해 건별로 확인합니다. 이후 배포에서는 `sudo supervisorctl restart storytelling-alimtalk`로 이 워커만 새 코드로 다시 실행합니다.
 
 ## 상태와 중단 복구
 
