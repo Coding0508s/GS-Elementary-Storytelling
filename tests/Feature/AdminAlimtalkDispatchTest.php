@@ -1179,6 +1179,55 @@ class AdminAlimtalkDispatchTest extends TestCase
         $this->assertSame(0, DB::table('jobs')->count());
     }
 
+    public function test_dispatch_history_renders_compact_rows_with_owned_detail_dialogs_and_groups(): void
+    {
+        $row = $this->submission();
+        $dispatchIds = [];
+        for ($i = 0; $i < 7; $i++) {
+            $draft = $this->service->preview($this->admin->id, (string) Str::uuid(), 'morning', 'selected', [$row->id], null);
+            $dispatchIds[] = $draft->id;
+            DB::table('alimtalk_dispatches')->where('id', $draft->id)->update([
+                'status' => 'scheduled', 'scheduled_at' => now()->addDays(1)->addMinutes($i), 'confirmed_at' => now(),
+            ]);
+            DB::table('alimtalk_recipients')->where('dispatch_id', $draft->id)->update(['status' => 'scheduled']);
+            DB::table('alimtalk_dispatch_locks')->where('kind', 'morning')->update(['dispatch_id' => null]);
+        }
+        DB::table('alimtalk_dispatches')->where('id', $dispatchIds[5])->update(['status' => 'completed']);
+        DB::table('alimtalk_recipients')->where('dispatch_id', $dispatchIds[5])->update(['status' => 'delivery_failed', 'reason' => '수신 불가']);
+        DB::table('alimtalk_dispatches')->where('id', $dispatchIds[6])->update(['status' => 'completed']);
+        DB::table('alimtalk_recipients')->where('dispatch_id', $dispatchIds[6])->update(['status' => 'delivered']);
+        $history = collect($this->service->recent())->keyBy('id');
+        $this->assertSame('active', $history[$dispatchIds[0]]['history_group']);
+        $this->assertSame('review', $history[$dispatchIds[5]]['history_group']);
+        $this->assertSame('done', $history[$dispatchIds[6]]['history_group']);
+        $response = $this->get(route('admin.applications'))->assertOk()
+            ->assertSee('dispatch-history-scroll')->assertSee('role="tablist"', false)
+            ->assertSee('data-dispatch-open="'.$dispatchIds[0].'"', false)
+            ->assertSee('id="dispatch-dialog-'.$dispatchIds[0].'"', false)
+            ->assertSee('예약 상세')->assertSee('발송 내역 삭제')->assertSee('상태 새로고침');
+        $this->assertSame(7, substr_count($response->getContent(), '<dialog '));
+        if ($directory = getenv('DISPATCH_PREVIEW_DIR')) {
+            file_put_contents($directory.'/index.html', $response->getContent());
+            file_put_contents($directory.'/progress.json', json_encode($this->service->recent(), JSON_THROW_ON_ERROR));
+        }
+        $this->assertSame([], $this->sender->calls);
+    }
+
+    public function test_preview_dialog_auto_opens_only_for_its_owner_and_expires_into_history(): void
+    {
+        $this->submission();
+        $draft = $this->preview();
+        $this->get(route('admin.applications'))->assertOk()->assertSee('data-auto-open="true"', false);
+        $other = Admin::create(['username' => 'viewer', 'password' => 'secret', 'name' => '조회 관리자', 'email' => 'viewer@example.com', 'role' => 'admin', 'is_active' => true]);
+        $this->actingAs($other, 'admin')->get(route('admin.applications'))->assertOk()
+            ->assertDontSee('data-auto-open="true"', false)
+            ->assertDontSee('action="'.route('admin.applications.alimtalk.confirm', $draft->id).'"', false);
+        $this->travel(16)->minutes();
+        $summary = $this->service->summary(DB::table('alimtalk_dispatches')->find($draft->id));
+        $this->assertSame('done', $summary['history_group']);
+        $this->assertSame([], $this->sender->calls);
+    }
+
     private function preview(string $kind = 'morning'): object
     {
         return $this->service->preview($this->admin->id, (string) Str::uuid(), $kind, 'all', [], 'https://youtu.be/test');

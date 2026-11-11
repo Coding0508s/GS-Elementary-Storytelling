@@ -667,7 +667,25 @@ class AdminAlimtalkDispatchService
         $stalled = in_array($dispatch->status, ['queued', 'processing', 'cancelling'], true)
             && now()->diffInSeconds($dispatch->updated_at, true) > 120;
 
+        $needsReview = $stalled || $dispatch->change_error || in_array($dispatch->status, ['needs_review', 'partial_scheduled'], true)
+            || ($counts['failed'] ?? 0) + ($counts['delivery_failed'] ?? 0) + ($counts['unknown'] ?? 0) + ($counts['cancel_unknown'] ?? 0) > 0;
+        $active = in_array($dispatch->status, ['preview', 'queued', 'processing', 'scheduled', 'partial_scheduled', 'cancelling'], true)
+            || ($counts['accepted'] ?? 0) + ($counts['delivering'] ?? 0) > 0;
+        $expired = $dispatch->status === 'preview' && now()->gte($dispatch->expires_at);
+
+        $labels = ['preview' => '발송 전 확인', 'queued' => '발송 대기', 'processing' => '처리 중', 'completed' => '처리 완료', 'needs_review' => '확인 필요', 'closed' => '종료 확인', 'cancelled' => '취소', 'expired' => '확인 만료', 'scheduled' => '예약 접수 완료', 'partial_scheduled' => '일부 예약 접수', 'cancelling' => '예약 취소 확인 중'];
+        if ($dispatch->scheduled_at) {
+            $labels['queued'] = '예약 등록 대기';
+            $labels['processing'] = '예약 등록 중';
+        }
+        $statusLabel = $expired ? '확인 만료' : $labels[$dispatch->status];
+        if ($dispatch->status === 'completed' && $needsReview) {
+            $statusLabel = '실패 포함';
+        }
+
         return [
+            'status_label' => $statusLabel,
+            'history_group' => $expired ? 'done' : ($needsReview ? 'review' : ($active ? 'active' : 'done')),
             'id' => $dispatch->id, 'admin_id' => $dispatch->admin_id, 'kind' => $dispatch->kind,
             'scope' => $dispatch->scope, 'status' => $dispatch->status,
             'revision' => $dispatch->revision,

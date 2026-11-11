@@ -82,7 +82,8 @@
         boxes().forEach(box => { box.checked = false; });
         document.querySelectorAll('form[data-submitting]').forEach(form => {
             delete form.dataset.submitting;
-            form.querySelector('button[type="submit"]').disabled = false;
+            form.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = false; });
+            form.querySelector('input[name="action"]')?.remove();
         });
         updateSelection();
         document.querySelectorAll('.js-notice-kind, .js-delivery-mode').forEach(select => select.dispatchEvent(new Event('change')));
@@ -117,6 +118,19 @@
                 editForm.querySelector('[type="submit"]').disabled = true;
             });
         }
+        const scheduleForm = card.querySelector('.js-schedule-management');
+        scheduleForm?.addEventListener('submit', event => {
+            const action = event.submitter?.value;
+            if (scheduleForm.dataset.submitting || !action || (action === 'cancel' && !window.confirm('이 예약을 취소할까요? 취소 결과가 확인될 때까지 상태를 확인해주세요.'))) {
+                event.preventDefault(); return;
+            }
+            // Disabled submit buttons do not contribute their name/value to the POST.
+            const input = document.createElement('input');
+            input.type = 'hidden'; input.name = 'action'; input.value = action;
+            scheduleForm.appendChild(input);
+            scheduleForm.dataset.submitting = 'true';
+            scheduleForm.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        });
         const deleteForm = card.querySelector('.js-dispatch-delete');
         deleteForm?.addEventListener('submit', event => {
             if (deleteForm.dataset.submitting || !window.confirm(deleteForm.dataset.confirm)) {
@@ -202,11 +216,10 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshResults(); });
 
     const progress = document.getElementById('alimtalk-progress');
-    const labels = {preview: '발송 전 확인', queued: '발송 대기', processing: '처리 중', completed: '처리 완료', needs_review: '확인 필요', closed: '종료 확인', cancelled: '취소', expired: '확인 만료', scheduled: '예약 접수 완료', partial_scheduled: '일부 예약 접수', cancelling: '예약 취소 확인 중'};
-    const active = () => progress?.querySelector('[data-awaiting-results="true"], [data-status="queued"], [data-status="processing"], [data-status="preview"], [data-status="cancelling"], [data-status="scheduled"], [data-status="partial_scheduled"], [data-status="needs_review"]');
+
     let polling = false;
     const poll = async () => {
-        if (document.hidden || polling || !active()) return;
+        if (document.hidden || polling || !progress) return;
         polling = true;
         try {
             const response = await fetch(progress.dataset.url, {
@@ -216,38 +229,48 @@
             const dispatches = await response.json();
             const shownIds = Array.from(progress.querySelectorAll('[data-dispatch-id]')).map(el => el.dataset.dispatchId).sort();
             const receivedIds = dispatches.map(dispatch => dispatch.id).sort();
-            if (JSON.stringify(shownIds) !== JSON.stringify(receivedIds)
-                && !Array.from(progress.querySelectorAll('[data-editor]')).some(el => !el.hidden)) {
-                location.reload(); return; // A cancelled reservation was replaced by its edited preview, or deleted.
+            if (JSON.stringify(shownIds) !== JSON.stringify(receivedIds)) {
+                if (!progress.querySelector('dialog[open]')) {
+                    location.reload();
+                } else {
+                    const error = progress.querySelector('[data-poll-error]');
+                    error.textContent = '발송 내역이 변경되었습니다. 팝업을 닫으면 최신 목록을 불러옵니다.';
+                    error.hidden = false;
+                }
+                return;
             }
             dispatches.forEach(dispatch => {
                 const card = Array.from(progress.querySelectorAll('[data-dispatch-id]')).find(el => el.dataset.dispatchId === dispatch.id);
                 if (!card) return;
                 card.dataset.status = dispatch.status;
+                card.dataset.historyGroup = dispatch.history_group;
                 card.dataset.awaitingResults = dispatch.awaiting_results ? 'true' : 'false';
                 const toggle = card.querySelector('[data-edit-toggle]');
                 if (toggle) toggle.disabled = !dispatch.can_edit;
                 const editSubmit = card.querySelector('.js-dispatch-edit [type="submit"]');
                 if (editSubmit) editSubmit.disabled = !dispatch.can_edit || Boolean(editSubmit.form.dataset.submitting);
                 const deleteButton = card.querySelector('[data-delete-button]');
-                if (deleteButton) deleteButton.disabled = !dispatch.can_delete;
+                if (deleteButton) deleteButton.disabled = !dispatch.can_delete || Boolean(deleteButton.form.dataset.submitting);
                 const pendingChange = card.querySelector('[data-change-pending]');
                 pendingChange.hidden = !dispatch.change_pending;
                 pendingChange.textContent = dispatch.change_message || '';
                 const changeError = card.querySelector('[data-change-error]');
                 changeError.hidden = !dispatch.change_error;
                 changeError.textContent = dispatch.change_error || '';
-                card.querySelector('[data-dispatch-status]').textContent = dispatch.scheduled_at && ['queued', 'processing'].includes(dispatch.status) ? (dispatch.status === 'queued' ? '예약 등록 대기' : '예약 등록 중') : (labels[dispatch.status] || dispatch.status);
+                card.querySelector('[data-dispatch-status]').textContent = dispatch.status_label;
                 const scheduleActions = card.querySelector('[data-schedule-actions]');
                 if (scheduleActions) {
                     scheduleActions.hidden = !dispatch.can_cancel_schedule;
-                    scheduleActions.querySelector('[value="cancel"]').disabled = dispatch.status === 'cancelling';
+                    const submitting = Boolean(scheduleActions.querySelector('form').dataset.submitting);
+                    scheduleActions.querySelector('[value="refresh"]').disabled = submitting;
+                    scheduleActions.querySelector('[value="cancel"]').disabled = submitting || dispatch.status === 'cancelling';
                 }
                 card.querySelectorAll('[data-count]').forEach(el => {
                     const count = Number(dispatch.counts[el.dataset.count] || 0);
                     el.textContent = count;
                     el.closest('[data-count-item]').hidden = count === 0 || (el.dataset.count === 'pending' && ['cancelled', 'expired'].includes(dispatch.status));
                 });
+                card.querySelector('[data-scheduled-notice]').hidden = dispatch.status !== 'scheduled';
                 card.querySelector('[data-reservation-note]').hidden = !dispatch.scheduled_at || !['preview', 'queued', 'processing'].includes(dispatch.status);
                 card.querySelector('[data-updated-at]').textContent = dispatch.updated_at;
                 card.querySelector('[data-stalled]').hidden = !dispatch.stalled;
@@ -264,6 +287,7 @@
                     card.dataset.status = 'expired';
                 }
             });
+            document.dispatchEvent(new CustomEvent('dispatches:updated', {detail: dispatches}));
             progress.querySelector('[data-poll-error]').hidden = true;
         } catch {
             progress.querySelector('[data-poll-error]').hidden = false;

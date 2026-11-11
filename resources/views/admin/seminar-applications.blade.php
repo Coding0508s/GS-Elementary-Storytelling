@@ -21,12 +21,13 @@
     .dispatch-clear { background: #eaf0f7; border-color: #d7e1ed; color: #34516f; }
     .dispatch-clear:hover, .dispatch-clear:focus-visible { background: #dce7f3; border-color: #bfcee0; color: #263f59; }
     .selected-pill { display: inline-flex; gap: 4px; font-size: 0.85rem; font-weight: 700; color: #541b86; }
-    .dispatch-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; max-width: 800px; }
-    .dispatch-field { display: grid; gap: 6px; margin: 0; font-size: 0.82rem; font-weight: 600; }
-    .dispatch-optional, .dispatch-footer { grid-column: 1 / -1; }
-    .dispatch-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding-top: 2px; }
-    .dispatch-note { max-width: 540px; }
-    .dispatch .js-schedule-time { max-width: 360px; }
+    .dispatch-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(240px, 1.25fr) auto; gap: 12px 18px; align-items: start; }
+    .dispatch-field { display: grid; gap: 6px; min-width: 0; margin: 0; font-size: 0.82rem; font-weight: 600; }
+    .dispatch-form .form-select, .dispatch-form .form-control { min-width: 0; min-height: 42px; }
+    .dispatch-form .js-schedule-time { grid-column: auto; max-width: none; }
+    .dispatch-form .js-entry-link, .dispatch-note { grid-column: 1 / -1; }
+    .dispatch-submit { grid-column: 4; grid-row: 1; margin-top: 26px; min-height: 42px; white-space: nowrap; }
+    .dispatch-note { margin: 0; }
     .dispatch .js-schedule-time span { font-size: 0.77rem; font-weight: 400; }
     .dispatch-history [hidden] { display: none !important; }
     .dispatch-record { padding: 16px 0; border-top: 1px solid #e9ecf0; }
@@ -113,6 +114,10 @@
     .send-line { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; }
     .send-line .send-label { flex: 0 0 4.4rem; color: #7b8490; font-size: 0.72rem; font-weight: 700; line-height: 1.6; }
     .receipt-code { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    @media (max-width: 1200px) {
+        .dispatch-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .dispatch-submit { grid-column: auto; grid-row: auto; }
+    }
     @media (max-width: 900px) {
         .desk-head { display: block; }
         .desk-head .btn { margin-top: 12px; }
@@ -120,10 +125,10 @@
     @media (max-width: 540px) {
         .dispatch { padding: 16px; }
         .dispatch-form { grid-template-columns: 1fr; }
-        .dispatch-footer { align-items: stretch; flex-direction: column; }
-        .dispatch-footer .btn { width: 100%; }
+        .dispatch-submit { margin-top: 0; width: 100%; }
     }
 </style>
+<link rel="stylesheet" href="{{ asset('css/admin-dispatch-history.css') }}">
 <div class="application-desk">
 <div class="desk-head">
     <div>
@@ -161,14 +166,12 @@
             </select>
         </label>
         @include('admin.partials.alimtalk-schedule-options')
+        <button type="submit" class="btn btn-primary px-4 dispatch-submit" disabled>{{ $resultStatus === 'failed' ? '재발송 대상 확인' : '대상 확인' }}</button>
         <label class="dispatch-field dispatch-optional js-entry-link" hidden>유튜브 입장 링크
             <input type="url" name="zoom_url" class="form-control" value="{{ $zoomUrl }}"
                    placeholder="https://www.youtube.com/watch?v=..." disabled>
         </label>
-        <div class="dispatch-footer">
-            <p id="selection-scope-note" class="dispatch-note">목록에서 받는 사람을 선택해주세요. 같은 번호에는 한 번만 보냅니다.</p>
-            <button type="submit" class="btn btn-primary px-4" disabled>{{ $resultStatus === 'failed' ? '재발송 대상 확인' : '대상 확인' }}</button>
-        </div>
+        <p id="selection-scope-note" class="dispatch-note">목록에서 받는 사람을 선택해주세요. 같은 번호에는 한 번만 보냅니다.</p>
     </form>
     @unless($dispatchReady)<p class="text-danger mt-2">기능 업데이트가 필요합니다. 관리자에게 문의해주세요.</p>@endunless
 </section>
@@ -261,5 +264,6 @@
 
 @push('scripts')
 <script src="{{ asset('js/admin-alimtalk-dispatch.js') }}" defer></script>
+<script src="{{ asset('js/admin-dispatch-history.js') }}" defer></script>
 <script src="{{ asset('js/admin-application-scroll.js') }}" defer></script>
 @endpush
