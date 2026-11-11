@@ -59,6 +59,36 @@
     .dispatch-crud-actions, .dispatch-editor-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .dispatch-crud-actions form { margin: 0; }
     .dispatch-editor { max-width: 600px; padding: 14px; background: #f8f9fb; border: 1px solid #e5e9ee; border-radius: 8px; margin-top: 10px; }
+    .application-filters { padding: 18px 20px; border: 1px solid #e2e5e9; border-radius: 12px; background: #fff; }
+    .application-filter-form { display: grid; grid-template-columns: 150px 210px minmax(180px, 1fr) auto; gap: 12px; align-items: end; }
+    .application-filter-field { display: grid; gap: 7px; min-width: 0; margin: 0; }
+    .application-filter-label { color: #5c6570; font-size: 0.78rem; font-weight: 600; }
+    .application-filter-field .form-select,
+    .application-filter-field .form-control { height: 42px; border-color: #dce1e7; border-radius: 8px; font-size: 0.875rem; }
+    .application-filter-field .form-select { padding-right: 34px; }
+    .application-search-input { position: relative; min-width: 0; }
+    .application-search-input > i { position: absolute; top: 50%; left: 13px; transform: translateY(-50%); color: #7b8490; pointer-events: none; }
+    .application-search-input .form-control { padding-left: 38px; width: 100%; }
+    .application-search-input .form-control::placeholder { color: #89919d; }
+    .application-filter-actions { display: flex; align-items: center; gap: 8px; }
+    .application-filter-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 9px 18px; border-radius: 8px; white-space: nowrap; font-size: 0.875rem; }
+    .application-filter-reset { color: #606a76; border: 1px solid #dce1e7; background: #fff; }
+    .application-filter-reset:hover { color: #343b45; background: #f4f6f8; border-color: #bbc4ce; }
+    .application-filters :is(input, select, .btn):focus-visible { outline: 3px solid #b9cdf9; outline-offset: 2px; }
+    @media (max-width: 1200px) {
+        .application-filter-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+        .application-filter-search { grid-column: 1 / 3; }
+        .application-filter-actions { grid-column: 3; grid-row: 2; }
+    }
+    @media (max-width: 540px) {
+        .application-filters { padding: 16px; }
+        .application-filter-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .application-filter-search { grid-column: 1 / -1; }
+        .application-filter-actions { grid-column: 1 / -1; grid-row: auto; }
+        .application-filter-actions .btn-primary { flex: 1; }
+    }
+    .application-scroll { max-height: 65vh; overflow: auto; }
+    .application-ledger thead { position: sticky; top: 0; z-index: 2; }
     .application-ledger { min-width: 1180px; }
     .application-ledger th,
     .application-ledger td { text-align: left; white-space: nowrap; word-break: keep-all; }
@@ -98,7 +128,7 @@
 <div class="desk-head">
     <div>
         <h1>접수 내역</h1>
-        <p class="desk-kicker">접수된 참가자 <span class="desk-count">{{ number_format($applications->total()) }}명</span>. 신청 완료 알림은 접수되는 순간 자동으로 갑니다.</p>
+        <p class="desk-kicker">{{ $resultStatus !== '' || $searchQuery !== '' ? '조회된 참가자' : '접수된 참가자' }} <span class="desk-count">{{ number_format($applicationCount) }}명</span>. 신청 완료 알림은 접수되는 순간 자동으로 갑니다.</p>
     </div>
     <a href="{{ route('admin.applications.excel', request()->only('search')) }}" class="btn btn-outline-success">
         <i class="bi bi-file-earmark-excel"></i> 엑셀 다운로드
@@ -111,18 +141,23 @@
         <div class="dispatch-recipients">
             <span class="selected-pill" aria-live="polite">선택 <span data-selected-count>0명</span></span>
             <button type="button" class="btn btn-sm dispatch-select-all" id="select-every-recipient"
-                    data-total="{{ $allRecipientCount }}" aria-label="등록자 전체 {{ number_format($allRecipientCount) }}명 선택" @disabled(!$dispatchReady || $allRecipientCount === 0)>전체 {{ number_format($allRecipientCount) }}명 선택</button>
+                    data-failed="{{ $resultStatus === 'failed' ? 'true' : 'false' }}" data-total="{{ $resultStatus === 'failed' ? $applicationCount : $allRecipientCount }}" aria-label="{{ $resultStatus === 'failed' ? '검색된 실패건 전체 선택' : '등록자 전체 '.number_format($allRecipientCount).'명 선택' }}" @disabled(!$dispatchReady || ($resultStatus === 'failed' ? $applicationCount : $allRecipientCount) === 0)>{{ $resultStatus === 'failed' ? '검색된 실패건 전체 선택' : '전체 '.number_format($allRecipientCount).'명 선택' }}</button>
             <button type="button" class="btn btn-sm dispatch-clear" id="clear-recipients">선택 해제</button>
         </div>
     </div>
     <form method="POST" action="{{ route('admin.applications.alimtalk') }}" class="js-alimtalk-form dispatch-form" data-ready="{{ $dispatchReady && $allRecipientCount > 0 ? 'true' : 'false' }}">
         @csrf
         <input type="hidden" name="search" value="{{ $searchQuery }}">
+        @if($resultStatus === 'failed')
+            <input type="hidden" name="retry_failed" value="1">
+            <input type="hidden" name="notice_kind" value="{{ $noticeKind }}">
+            <input type="hidden" name="result_status" value="failed">
+        @endif
         <input type="hidden" name="request_token" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
         <label class="dispatch-field">안내 종류
-            <select name="kind" class="form-select js-notice-kind">
-                <option value="morning">오전 안내</option>
-                <option value="entry">입장 안내</option>
+            <select name="kind" class="form-select js-notice-kind" required>
+                <option value="morning" @selected($noticeKind === 'morning') @disabled($resultStatus === 'failed' && $noticeKind !== 'morning')>오전 안내</option>
+                <option value="entry" @selected($noticeKind === 'entry') @disabled($resultStatus === 'failed' && $noticeKind !== 'entry')>입장 안내</option>
             </select>
         </label>
         @include('admin.partials.alimtalk-schedule-options')
@@ -132,7 +167,7 @@
         </label>
         <div class="dispatch-footer">
             <p id="selection-scope-note" class="dispatch-note">목록에서 받는 사람을 선택해주세요. 같은 번호에는 한 번만 보냅니다.</p>
-            <button type="submit" class="btn btn-primary px-4" disabled>대상 확인</button>
+            <button type="submit" class="btn btn-primary px-4" disabled>{{ $resultStatus === 'failed' ? '재발송 대상 확인' : '대상 확인' }}</button>
         </div>
     </form>
     @unless($dispatchReady)<p class="text-danger mt-2">기능 업데이트가 필요합니다. 관리자에게 문의해주세요.</p>@endunless
@@ -140,27 +175,47 @@
 
 @include('admin.partials.alimtalk-dispatches')
 
-<div class="card admin-card mb-4">
-    <div class="card-body">
-        <form method="GET" action="{{ route('admin.applications') }}" class="d-flex gap-2">
-            <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="text"
-                       name="search"
-                       class="form-control"
+<section class="application-filters" aria-label="접수 내역 검색">
+    <form method="GET" action="{{ route('admin.applications') }}" class="application-filter-form" role="search">
+        <label class="application-filter-field">
+            <span class="application-filter-label">안내 종류</span>
+            <select name="notice_kind" class="form-select">
+                @if($resultStatus !== 'failed')<option value="">전체 안내</option>@endif
+                <option value="morning" @selected($noticeKind === 'morning')>오전 안내</option>
+                <option value="entry" @selected($noticeKind === 'entry')>입장 링크</option>
+            </select>
+        </label>
+        <label class="application-filter-field">
+            <span class="application-filter-label">발송 상태</span>
+            <select name="result_status" class="form-select">
+                <option value="">전체 상태</option>
+                <option value="failed" @selected($resultStatus === 'failed')>발송 실패 · 전달 실패</option>
+                <option value="unknown" @selected($resultStatus === 'unknown')>확인 필요</option>
+            </select>
+        </label>
+        <label class="application-filter-field application-filter-search">
+            <span class="application-filter-label">검색어</span>
+            <span class="application-search-input">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" name="search" class="form-control"
                        placeholder="학생명, 기관명, 학부모, 전화번호, 접수번호"
                        value="{{ $searchQuery }}">
-                @if($searchQuery !== '')
-                    <a href="{{ route('admin.applications') }}" class="btn btn-outline-secondary" title="검색 초기화">
-                        <i class="bi bi-x-circle"></i>
-                    </a>
-                @endif
-                <button type="submit" class="btn btn-primary">검색</button>
-            </div>
-        </form>
-    </div>
-</div>
+            </span>
+        </label>
+        <div class="application-filter-actions">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search" aria-hidden="true"></i>검색</button>
+            @if($searchQuery !== '' || $resultStatus !== '' || $noticeKind !== '')
+                <a href="{{ route('admin.applications') }}" class="btn application-filter-reset" aria-label="검색어와 필터 초기화">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>초기화
+                </a>
+            @endif
+        </div>
+    </form>
+</section>
 
+@if($resultStatus === 'failed')
+<p class="small text-muted mb-0">실패한 안내만 재발송합니다. 조회할 안내 종류는 검색 조건에서 변경할 수 있습니다. 안내 종류를 선택하고 대상을 확인해주세요. 상태가 바뀐 대상은 제외됩니다.</p>
+@endif
 <div class="card admin-card">
     <div class="card-body p-0">
         <div class="d-flex flex-wrap align-items-center gap-2 px-3 pt-3 pb-2"
@@ -169,12 +224,12 @@
             <span class="small text-muted" data-sync-note role="status">30초마다 자동 조회 · 예약은 예약 시각 이후 확인</span>
         </div>
         <p class="small text-muted px-3 mb-2" data-results-error role="status" hidden>발송 결과를 갱신하지 못했습니다. 로그인 상태를 확인하거나 새로고침해주세요.</p>
-        <div class="table-responsive">
+        <div class="table-responsive application-scroll" id="application-scroll" tabindex="0" aria-label="접수 내역 목록">
             <table class="table table-hover mb-0 align-middle application-ledger" data-results-url="{{ route('admin.applications.alimtalk.results') }}">
                 <thead class="table-light">
                     <tr>
                         <th class="is-check">
-                            <input type="checkbox" id="select-all-recipients" aria-label="이 페이지 전체 선택" @disabled($applications->isEmpty())>
+                            <input type="checkbox" id="select-all-recipients" aria-label="불러온 항목 전체 선택" @disabled($applications->isEmpty())>
                         </th>
                         <th>접수번호</th>
                         <th>접수일시</th>
@@ -190,90 +245,21 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($applications as $application)
-                        <tr>
-                            <td class="is-check">
-                                <input type="checkbox"
-                                       class="recipient-checkbox"
-                                       value="{{ $application->id }}"
-                                       aria-label="{{ $application->receipt_number }} {{ $application->student_name_korean }} 선택">
-                            </td>
-                            <td><strong class="receipt-code">{{ $application->receipt_number }}</strong></td>
-                            <td><small>{{ $application->created_at?->format('Y-m-d H:i') }}</small></td>
-                            <td>{{ $application->student_name_korean }}</td>
-                            <td>{{ $application->grade }}</td>
-                            <td>
-                                {{ $application->institution_name }}
-                                <span class="cell-sub">{{ $application->region }}</span>
-                            </td>
-                            <td>
-                                {{ $application->parent_name }}
-                                <span class="cell-sub">{{ $application->parent_phone }}</span>
-                            </td>
-                            <td class="is-question">
-                                @php $day1Question = $application->instructorQuestion('day1'); @endphp
-                                @if($day1Question !== '')
-                                    <span class="question-clamp" title="{{ $day1Question }}">{{ $day1Question }}</span>
-                                @else
-                                    <span class="text-muted">없음</span>
-                                @endif
-                            </td>
-                            <td class="is-question">
-                                @php $day2Question = $application->instructorQuestion('day2'); @endphp
-                                @if($day2Question !== '')
-                                    <span class="question-clamp" title="{{ $day2Question }}">{{ $day2Question }}</span>
-                                @else
-                                    <span class="text-muted">없음</span>
-                                @endif
-                            </td>
-                            <td>{{ $application->marketing_consent ? '동의' : '미동의' }}</td>
-                            <td class="is-send">
-                                @foreach(['morning' => '오전 안내', 'entry' => '입장 링크'] as $sendKind => $sendLabel)
-                                    @php $sendResult = $applicationResults[$application->id][$sendKind]; @endphp
-                                    <div class="send-line" data-result-id="{{ $application->id }}" data-result-kind="{{ $sendKind }}">
-                                        <span class="send-label">{{ $sendLabel }}</span>
-                                        <div>
-                                            <span class="{{ $sendResult['class'] }}" title="{{ $sendResult['title'] }}" data-result-badge>{{ $sendResult['label'] }}</span>
-                                            <div class="small text-muted" data-result-reason @if(!$sendResult['reason']) hidden @endif>{{ $sendResult['reason'] }}</div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </td>
-                            <td class="is-action">
-                                <form method="POST"
-                                      action="{{ route('admin.applications.destroy', $application) }}"
-                                      onsubmit="return confirm(@json($application->receipt_number.' '.$application->student_name_korean.' 접수를 휴지통으로 옮길까요? 휴지통에서 다시 복원할 수 있습니다.'))">
-                                    @csrf
-                                    @method('DELETE')
-                                    <input type="hidden" name="search" value="{{ $searchQuery }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">삭제</button>
-                                </form>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="12" class="text-center text-muted py-5">
-                                @if($searchQuery !== '')
-                                    검색 결과가 없습니다.
-                                @else
-                                    아직 접수된 참가자가 없습니다.
-                                @endif
-                            </td>
-                        </tr>
-                    @endforelse
+                    @include('admin.partials.application-rows')
                 </tbody>
             </table>
         </div>
     </div>
-    @if($applications->hasPages())
-        <div class="card-footer">
-            {{ $applications->links('custom.pagination') }}
-        </div>
-    @endif
+    <div class="card-footer d-flex align-items-center justify-content-between gap-2">
+        <span id="application-load-status" role="status" aria-live="polite">전체 {{ number_format($applicationCount) }}건 중 {{ $applications->count() }}건 표시@if(!$applications->hasMorePages()) · 모든 접수 내역을 불러왔습니다@endif</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="load-applications"
+                data-next="{{ $applications->nextPageUrl() }}" @if(!$applications->hasMorePages()) hidden @endif>더 불러오기</button>
+    </div>
 </div>
 </div>
 @endsection
 
 @push('scripts')
 <script src="{{ asset('js/admin-alimtalk-dispatch.js') }}" defer></script>
+<script src="{{ asset('js/admin-application-scroll.js') }}" defer></script>
 @endpush

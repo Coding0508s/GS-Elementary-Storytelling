@@ -1103,6 +1103,82 @@ class AdminAlimtalkDispatchTest extends TestCase
         $this->assertSame('completed', DB::table('alimtalk_dispatches')->value('status'));
     }
 
+    public function test_failure_filter_uses_effective_results_and_keeps_unknown_separate(): void
+    {
+        $failed = $this->submission();
+        $failed->update(['alimtalk_results' => ['morning' => ['status' => 'failed', 'reason' => '번호 오류']]]);
+        $unknown = $this->submission('01022222222');
+        $unknown->update(['alimtalk_results' => ['morning' => ['status' => 'unknown']]]);
+        $delivered = $this->submission('01033333333');
+        $delivered->update(['alimtalk_results' => ['morning' => ['status' => 'delivered']]]);
+        // The saved JSON still says failed; an active dispatch must override it.
+        $draft = $this->preview();
+        $this->service->confirm($draft->id, $this->admin->id, true);
+        DB::table('alimtalk_recipients')->where('dispatch_id', $draft->id)->where('phone', '01012345678')->update(['status' => 'delivery_failed', 'reason' => '수신 불가']);
+        DB::table('alimtalk_recipients')->where('dispatch_id', $draft->id)->where('phone', '01033333333')->update(['status' => 'unknown']);
+        $response = $this->getJson(route('admin.applications', ['result_status' => 'failed', 'notice_kind' => 'morning']));
+        $response->assertOk()->assertJsonPath('total', 1);
+        $this->assertStringContainsString('수신 불가', $response->json('html'));
+        $this->assertStringNotContainsString('data-application-id="'.$unknown->id.'"', $response->json('html'));
+        $this->get(route('admin.applications', ['result_status' => 'failed']))->assertOk()->assertSee('재발송 대상 확인');
+    }
+
+    public function test_cursor_loads_without_duplicates_when_new_applications_arrive(): void
+    {
+        for ($i = 0; $i < 25; $i++) {
+            $this->submission(sprintf('010%08d', $i));
+        }
+        $first = $this->getJson(route('admin.applications'))->assertOk()->assertJsonPath('total', 25);
+        preg_match_all('/data-application-id="(\d+)"/', $first->json('html'), $ids);
+        $this->assertCount(20, $ids[1]);
+        $this->submission('01099999999');
+        $next = $this->getJson($first->json('next'))->assertOk()->assertJsonPath('next', null);
+        preg_match_all('/data-application-id="(\d+)"/', $next->json('html'), $nextIds);
+        $this->assertCount(5, $nextIds[1]);
+        $this->assertCount(25, array_unique(array_merge($ids[1], $nextIds[1])));
+    }
+
+    public function test_retry_all_is_limited_to_search_and_notice_failures_and_deduplicates_numbers(): void
+    {
+        foreach (['01012345678', '821012345678', '01022222222'] as $phone) {
+            $row = $this->submission($phone);
+            $row->update(['institution_name' => '재발송기관', 'alimtalk_results' => ['morning' => ['status' => 'delivery_failed']]]);
+        }
+        $other = $this->submission('01033333333');
+        $other->update(['alimtalk_results' => ['morning' => ['status' => 'failed']]]);
+        $unknown = $this->submission('01044444444');
+        $unknown->update(['institution_name' => '재발송기관', 'alimtalk_results' => ['morning' => ['status' => 'unknown'], 'entry' => ['status' => 'failed']]]);
+        $this->post(route('admin.applications.alimtalk'), [
+            'kind' => 'morning', 'retry_failed' => 1, 'scope' => 'failed', 'failed_all' => 1, 'search' => '재발송기관',
+        ])->assertSessionHasNoErrors();
+        $draft = DB::table('alimtalk_dispatches')->first();
+        $this->assertSame('failed', $draft->scope);
+        $this->assertSame(3, $draft->selected_count);
+        $this->assertSame(2, DB::table('alimtalk_recipients')->count());
+        $this->assertSame(0, DB::table('jobs')->count());
+        $this->post(route('admin.applications.alimtalk.confirm', $draft->id), ['confirm_resend' => 1])->assertSessionHasNoErrors();
+        $this->runQueue();
+        $this->assertSame([['01012345678', '01022222222']], $this->sender->calls);
+    }
+
+    public function test_selected_retry_cannot_include_successes_and_rechecks_status_at_confirmation(): void
+    {
+        $failed = $this->submission();
+        $failed->update(['alimtalk_results' => ['morning' => ['status' => 'failed']]]);
+        $success = $this->submission('01022222222');
+        $success->update(['alimtalk_results' => ['morning' => ['status' => 'delivered']]]);
+        $this->post(route('admin.applications.alimtalk'), [
+            'kind' => 'morning', 'retry_failed' => 1, 'scope' => 'all', 'ids' => [$failed->id, $success->id],
+        ])->assertSessionHasNoErrors();
+        $draft = DB::table('alimtalk_dispatches')->first();
+        $this->assertSame(1, $draft->selected_count);
+        $this->post(route('admin.applications.alimtalk.confirm', $draft->id))->assertSessionHasErrors();
+        $failed->update(['alimtalk_results' => ['morning' => ['status' => 'delivered']]]);
+        $this->post(route('admin.applications.alimtalk.confirm', $draft->id), ['confirm_resend' => 1])->assertSessionHasErrors();
+        $this->assertSame('cancelled', DB::table('alimtalk_dispatches')->first()->status);
+        $this->assertSame(0, DB::table('jobs')->count());
+    }
+
     private function preview(string $kind = 'morning'): object
     {
         return $this->service->preview($this->admin->id, (string) Str::uuid(), $kind, 'all', [], 'https://youtu.be/test');

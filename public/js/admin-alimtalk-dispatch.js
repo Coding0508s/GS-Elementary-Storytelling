@@ -5,7 +5,7 @@
     const allSelect = document.getElementById('select-every-recipient');
     let scope = 'selected';
     const updateSelection = () => {
-        const all = scope === 'all';
+        const all = scope === 'all' || scope === 'failed';
         const count = all ? Number(allSelect.dataset.total) : ids().length;
         document.querySelectorAll('[data-selected-count]').forEach(el => { el.textContent = count.toLocaleString() + '명'; });
         boxes().forEach(box => { box.disabled = all; });
@@ -15,13 +15,13 @@
             pageSelect.indeterminate = !all && count > 0 && count < boxes().length;
         }
         document.getElementById('selection-scope-note').textContent = all
-            ? '검색과 관계없이 등록자 전체에게 보냅니다. 같은 번호에는 한 번만 보냅니다.'
+            ? (scope === 'failed' ? '현재 검색 조건에서 선택한 안내의 실패건 전체를 확인합니다. 상태가 바뀐 대상은 제외합니다.' : '검색과 관계없이 등록자 전체에게 보냅니다. 같은 번호에는 한 번만 보냅니다.')
             : '목록에서 받는 사람을 선택해주세요. 같은 번호에는 한 번만 보냅니다.';
         document.querySelectorAll('.js-alimtalk-form').forEach(form => {
             form.querySelector('button[type="submit"]').disabled = count === 0 || form.dataset.ready !== 'true' || Boolean(form.dataset.submitting);
         });
     };
-    allSelect?.addEventListener('click', () => { scope = 'all'; updateSelection(); });
+    allSelect?.addEventListener('click', () => { scope = allSelect.dataset.failed === 'true' ? 'failed' : 'all'; updateSelection(); });
     document.getElementById('clear-recipients')?.addEventListener('click', () => {
         scope = 'selected';
         boxes().forEach(box => { box.checked = false; });
@@ -31,7 +31,10 @@
         boxes().forEach(box => { box.checked = event.target.checked; });
         updateSelection();
     });
-    boxes().forEach(box => box.addEventListener('change', updateSelection));
+    document.addEventListener('change', event => {
+        if (event.target.matches('.recipient-checkbox')) updateSelection();
+    });
+    document.addEventListener('applications:loaded', updateSelection);
     document.querySelectorAll('.js-alimtalk-form').forEach(form => {
         const mode = form.querySelector('.js-delivery-mode');
         const group = form.querySelector('.js-schedule-time');
@@ -55,8 +58,8 @@
                 return;
             }
             if (form.dataset.submitting) { event.preventDefault(); return; }
-            form.querySelectorAll('input[name="ids[]"], input[name="scope"]').forEach(el => el.remove());
-            const values = [['scope', scope], ...ids().map(id => ['ids[]', id])];
+            form.querySelectorAll('input[name="ids[]"], input[name="scope"], input[name="failed_all"]').forEach(el => el.remove());
+            const values = [['scope', scope], ['failed_all', scope === 'failed' ? '1' : '0'], ...(scope === 'selected' ? ids().map(id => ['ids[]', id]) : [])];
             values.forEach(([name, value]) => {
                 const input = document.createElement('input');
                 input.type = 'hidden'; input.name = name; input.value = value;
@@ -160,17 +163,25 @@
     let pollingResults = false;
     const refreshResults = async () => {
         if (!ledger || document.hidden || pollingResults) return;
-        const cells = Array.from(ledger.querySelectorAll('[data-result-id]'));
+        const viewport = document.getElementById('application-scroll')?.getBoundingClientRect();
+        const cells = Array.from(ledger.querySelectorAll('[data-result-id]')).filter(cell => {
+            if (!viewport) return true;
+            const rect = cell.closest('tr').getBoundingClientRect();
+            return rect.bottom >= viewport.top && rect.top <= viewport.bottom;
+        });
         const applicationIds = Array.from(new Set(cells.map(cell => cell.dataset.resultId)));
         if (applicationIds.length === 0) return;
         pollingResults = true;
         const error = document.querySelector('[data-results-error]');
         try {
-            const url = new URL(ledger.dataset.resultsUrl, location.origin);
-            applicationIds.forEach(id => url.searchParams.append('ids[]', id));
-            const response = await fetch(url, {headers: {'Accept': 'application/json'}, cache: 'no-store', signal: AbortSignal.timeout(10000)});
-            if (!response.ok) throw new Error('Result refresh unavailable');
-            const results = await response.json();
+            const results = {};
+            for (let offset = 0; offset < applicationIds.length; offset += 20) {
+                const url = new URL(ledger.dataset.resultsUrl, location.origin);
+                applicationIds.slice(offset, offset + 20).forEach(id => url.searchParams.append('ids[]', id));
+                const response = await fetch(url, {headers: {'Accept': 'application/json'}, cache: 'no-store', signal: AbortSignal.timeout(10000)});
+                if (!response.ok) throw new Error('Result refresh unavailable');
+                Object.assign(results, await response.json());
+            }
             cells.forEach(cell => {
                 const result = results[cell.dataset.resultId]?.[cell.dataset.resultKind];
                 if (!result) return;

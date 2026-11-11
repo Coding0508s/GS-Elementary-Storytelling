@@ -16,7 +16,7 @@
             <article class="dispatch-record" data-dispatch-id="{{ $dispatch['id'] }}" data-status="{{ $dispatch['status'] }}" data-awaiting-results="{{ $dispatch['awaiting_results'] ? 'true' : 'false' }}">
                 <div class="dispatch-record-head">
                     <div>
-                        <h3>{{ $dispatch['kind'] === 'morning' ? '오전 안내' : '입장 안내' }} <span class="dispatch-scope">{{ $dispatch['scope'] === 'all' ? '등록자 전체' : '개별 선택' }}</span></h3>
+                        <h3>{{ $dispatch['kind'] === 'morning' ? '오전 안내' : '입장 안내' }} <span class="dispatch-scope">{{ $dispatch['scope'] === 'all' ? '등록자 전체' : ($dispatch['scope'] === 'failed' ? '실패건 재발송' : '개별 선택') }}</span></h3>
                         <p class="dispatch-record-meta">발송 대상 <strong>{{ number_format($dispatch['total']) }}개 번호</strong>
                             @if($dispatch['scheduled_at'])
                                 <span class="dispatch-meta-separator">·</span> 예약 {{ \Illuminate\Support\Carbon::parse($dispatch['scheduled_at'])->format('Y.m.d H:i') }} <span class="dispatch-timezone">한국 시간</span>
@@ -48,7 +48,7 @@
                             @if($expired)<p class="dispatch-warning">확인 시간이 만료되었습니다. 대상을 다시 선택해주세요.</p>@endif
                             <form method="POST" action="{{ route('admin.applications.alimtalk.confirm', $dispatch['id']) }}" class="js-dispatch-confirm dispatch-confirm-form">
                                 @csrf
-                                @if($dispatch['previous_count'] > 0)
+                                @if(($dispatch['previous_count'] > 0 || $dispatch['scope'] === 'failed'))
                                     <label class="d-block small mb-2"><input type="checkbox" name="confirm_resend" value="1" required> 이전 발송 이력을 확인했으며 같은 안내의 재발송에 동의합니다.</label>
                                 @endif
                                 <button type="submit" class="btn btn-primary btn-sm" @disabled($expired || $dispatch['total'] === 0)>{{ number_format($dispatch['total']) }}개 번호에 {{ $dispatch['scheduled_at'] ? '예약 확정' : '발송 확정' }}</button>

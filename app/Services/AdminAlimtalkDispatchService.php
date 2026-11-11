@@ -24,6 +24,26 @@ class AdminAlimtalkDispatchService
 
     public function __construct(private SolapiAlimtalkService $alimtalk) {}
 
+    /** Use the same effective result (including active dispatches) as the ledger. */
+    public function matchingApplicationIds(\Illuminate\Database\Eloquent\Builder $query, string $kind, string $status): array
+    {
+        $ids = [];
+        (clone $query)->reorder()->select(self::SNAPSHOT_COLUMNS)->chunkById(200, function ($rows) use ($kind, $status, &$ids) {
+            $results = $this->applicationResults($rows);
+            $states = $status === 'failed' ? ['failed', 'delivery_failed'] : ['unknown', 'cancel_unknown'];
+            foreach ($rows as $row) {
+                foreach ($kind === '' ? ['morning', 'entry'] : [$kind] as $type) {
+                    if (in_array($results[$row->id][$type]['status'], $states, true)) {
+                        $ids[] = $row->id;
+                        break;
+                    }
+                }
+            }
+        });
+
+        return $ids;
+    }
+
     public function preview(int $adminId, string $token, string $kind, string $scope, array $ids, ?string $link, ?string $scheduledAt = null): object
     {
         $this->assertQueue();
@@ -62,7 +82,14 @@ class AdminAlimtalkDispatchService
                 'entry_link' => $link, 'configuration_hash' => $configuration,
                 'expires_at' => now()->addMinutes(15), 'created_at' => now(), 'updated_at' => now(),
             ]);
-            $query = VideoSubmission::query()->when($scope === 'selected', fn ($q) => $q->whereIn('id', $ids));
+            $query = VideoSubmission::query()->when($scope !== 'all', fn ($q) => $q->whereIn('id', $ids));
+            if ($scope === 'failed') {
+                $eligible = $this->matchingApplicationIds($query, $kind, 'failed');
+                if (count($eligible) !== count(array_unique($ids))) {
+                    $this->invalid('실패 상태가 변경된 대상이 있습니다. 실패 목록을 다시 조회하고 선택해주세요.');
+                }
+                $query->whereIn('id', $eligible);
+            }
             $this->snapshot($dispatchId, $query, $kind);
             DB::table('alimtalk_dispatch_locks')->where('kind', $kind)->update(['dispatch_id' => $dispatchId]);
 
@@ -95,7 +122,7 @@ class AdminAlimtalkDispatchService
             if (! DB::table('alimtalk_recipients')->where('dispatch_id', $id)->exists()) {
                 $this->invalid('발송 가능한 대상이 없습니다. 대상을 다시 선택해주세요.');
             }
-            if ($dispatch->previous_count > 0 && ! $resend) {
+            if (($dispatch->previous_count > 0 || $dispatch->scope === 'failed') && ! $resend) {
                 $this->invalid('이전 발송 이력을 확인하고 재발송에 동의해주세요.');
             }
             try {
@@ -265,7 +292,7 @@ class AdminAlimtalkDispatchService
             'configuration_hash' => $edit['configuration_hash'],
             'expires_at' => now()->addMinutes(15), 'created_at' => now(), 'updated_at' => now(),
         ]);
-        $query = VideoSubmission::query()->when($source->scope === 'selected', fn ($q) => $q->whereIn('id',
+        $query = VideoSubmission::query()->when($source->scope !== 'all', fn ($q) => $q->whereIn('id',
             DB::table('alimtalk_dispatch_targets')->where('dispatch_id', $source->id)->select('submission_id')));
         $this->snapshot($newId, $query, $source->kind, true);
         DB::table('alimtalk_recipients')->where('dispatch_id', $source->id)->where('status', 'pending')
@@ -848,8 +875,14 @@ class AdminAlimtalkDispatchService
         }
         $unchanged = true;
         DB::table('alimtalk_dispatch_targets')->where('dispatch_id', $dispatch->id)->orderBy('id')
-            ->chunkById(500, function ($targets) use (&$unchanged) {
-                $rows = VideoSubmission::whereIn('id', $targets->pluck('submission_id'))->get(self::SNAPSHOT_COLUMNS)->keyBy('id');
+            ->chunkById(500, function ($targets) use (&$unchanged, $dispatch) {
+                $query = VideoSubmission::whereIn('id', $targets->pluck('submission_id'));
+                if ($dispatch->scope === 'failed' && count($this->matchingApplicationIds($query, $dispatch->kind, 'failed')) !== $targets->count()) {
+                    $unchanged = false;
+
+                    return false;
+                }
+                $rows = $query->get(self::SNAPSHOT_COLUMNS)->keyBy('id');
                 foreach ($targets as $target) {
                     if (! $rows->has($target->submission_id) || $this->identity($rows[$target->submission_id]) !== $target->identity_hash) {
                         $unchanged = false;

@@ -129,18 +129,41 @@ class AdminController extends Controller
 
         $searchQuery = trim((string) $request->get('search', ''));
 
-        $applications = $this->seminarApplicationQuery($searchQuery)
-            ->latest()
-            ->paginate(20)
-            ->withQueryString();
+        $filters = $request->validate([
+            'notice_kind' => 'nullable|in:morning,entry',
+            'result_status' => 'nullable|in:failed,unknown',
+        ]);
+        $noticeKind = $filters['notice_kind'] ?? '';
+        $resultStatus = $filters['result_status'] ?? '';
+        if ($resultStatus === 'failed' && $noticeKind === '') {
+            $noticeKind = 'morning';
+        }
+        $service = app(AdminAlimtalkDispatchService::class);
+        $query = $this->seminarApplicationQuery($searchQuery);
+        if ($resultStatus !== '') {
+            $query->whereIn('id', $service->matchingApplicationIds($query, $noticeKind, $resultStatus));
+        }
+        $applicationCount = (clone $query)->count();
+        $applications = $query->orderByDesc('created_at')->orderByDesc('id')->cursorPaginate(20)->withQueryString();
+        $applicationResults = $service->applicationResults($applications->getCollection());
+        if ($request->expectsJson()) {
+            return response()->json([
+                'html' => view('admin.partials.application-rows', compact('applications', 'applicationResults', 'searchQuery', 'noticeKind', 'resultStatus'))->render(),
+                'next' => $applications->nextPageUrl(),
+                'total' => $applicationCount,
+            ])->header('Cache-Control', 'no-store, private');
+        }
 
         return view('admin.seminar-applications', [
             'applications' => $applications,
+            'applicationCount' => $applicationCount,
+            'noticeKind' => $noticeKind,
+            'resultStatus' => $resultStatus,
             'searchQuery' => $searchQuery,
             'allRecipientCount' => VideoSubmission::count(),
             'dispatchReady' => Schema::hasColumn('alimtalk_dispatches', 'deleted_at'),
-            'dispatches' => Schema::hasColumn('alimtalk_dispatches', 'deleted_at') ? app(AdminAlimtalkDispatchService::class)->recent() : [],
-            'applicationResults' => app(AdminAlimtalkDispatchService::class)->applicationResults($applications->getCollection()),
+            'dispatches' => Schema::hasColumn('alimtalk_dispatches', 'deleted_at') ? $service->recent() : [],
+            'applicationResults' => $applicationResults,
             'zoomUrl' => (string) SiteSetting::get('webinar_zoom_url', ''),
         ]);
     }
@@ -179,10 +202,12 @@ class AdminController extends Controller
     {
         $admin = Auth::guard('admin')->user();
         abort_unless($admin && $admin->isAdmin(), 403);
-        $redirect = redirect()->route('admin.applications', array_filter(['search' => $request->input('search')]));
+        $redirect = redirect()->route('admin.applications', array_filter($request->only('search', 'notice_kind', 'result_status')));
         $data = $request->validate([
             'kind' => 'required|in:morning,entry',
-            'scope' => 'sometimes|in:selected,all',
+            'scope' => 'sometimes|in:selected,all,failed',
+            'retry_failed' => 'sometimes|boolean',
+            'failed_all' => 'sometimes|boolean',
             'ids' => 'sometimes|array|max:1000',
             'ids.*' => 'integer|min:1|distinct',
             'request_token' => 'sometimes|uuid',
@@ -191,8 +216,16 @@ class AdminController extends Controller
             'scheduled_at' => 'nullable|required_if:delivery_mode,scheduled|date_format:Y-m-d\\TH:i',
         ]);
         $scope = $data['scope'] ?? 'selected';
-        if ($scope === 'selected' && empty($data['ids'])) {
-            return $redirect->with('error', '보낼 사람을 선택해주세요.');
+        if ($request->boolean('retry_failed') || $scope === 'failed') {
+            $scope = 'failed';
+            $query = $this->seminarApplicationQuery(trim((string) $request->input('search', '')));
+            if (! $request->boolean('failed_all')) {
+                $query->whereIn('id', $data['ids'] ?? []);
+            }
+            $data['ids'] = app(AdminAlimtalkDispatchService::class)->matchingApplicationIds($query, $data['kind'], 'failed');
+        }
+        if ($scope !== 'all' && empty($data['ids'])) {
+            return $redirect->with('error', $scope === 'failed' ? '재발송할 실패건이 없습니다. 목록을 다시 조회하고 선택해주세요.' : '보낼 사람을 선택해주세요.');
         }
         if (! app(SolapiAlimtalkService::class)->isReady($data['kind'])) {
             return $redirect->with('error', '템플릿이 연결되지 않았습니다.');
