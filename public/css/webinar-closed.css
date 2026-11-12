@@ -1,0 +1,90 @@
+/* Uses the same brand tokens as the parent webinar application form. */
+body {
+    background: var(--white);
+    color: var(--text-dark);
+    font-family: Pretendard, ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.6;
+}
+.bg-pattern { display: none; }
+.webinar-closed {
+    display: grid;
+    place-items: center;
+    min-height: 100svh;
+    padding: 48px 24px;
+}
+.closed-content { width: min(100%, 740px); }
+.closed-card {
+    padding: 40px 48px 36px;
+    text-align: center;
+    background: var(--white);
+    border: 1px solid var(--pale-purple);
+    border-radius: var(--gs-radius-card);
+    box-shadow: var(--gs-shadow-elevation-1);
+}
+.closed-illustration {
+    display: block;
+    width: 280px;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto 20px;
+}
+.closed-card h1 { margin: 0; line-height: 1.35; }
+.closed-brand {
+    display: block;
+    margin-bottom: 12px;
+    color: var(--gs-text-brand);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+.closed-title {
+    display: block;
+    color: var(--text-dark);
+    font-size: clamp(28px, 3.5vw, 40px);
+    font-weight: 700;
+    letter-spacing: -.035em;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+}
+.closed-description {
+    margin: 20px 0 0;
+    color: var(--text-gray);
+    font-size: 16px;
+    word-break: keep-all;
+}
+.closed-thanks {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 32px;
+    padding: 18px 16px;
+    background: var(--pale-purple);
+    border-radius: 16px;
+    color: var(--gs-text-brand);
+}
+.closed-thanks .bi { flex-shrink: 0; font-size: 18px; }
+.closed-thanks p { margin: 0; font-size: 15px; font-weight: 500; word-break: keep-all; }
+.closed-mobile-break { display: none; }
+.closed-updated {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 20px 0 0;
+    color: var(--text-gray);
+    font-size: 12px;
+}
+@media (max-width: 575.98px) {
+    .webinar-closed { padding: 24px 16px; }
+    .closed-card { padding: 28px 20px 24px; border-radius: 24px; }
+    .closed-illustration { width: 220px; margin-bottom: 16px; }
+    .closed-brand { margin-bottom: 10px; font-size: 16px; }
+    .closed-description { margin-top: 16px; font-size: 14px; }
+    .closed-thanks { margin-top: 24px; padding: 16px 12px; gap: 8px; }
+    .closed-thanks p { font-size: 14px; }
+    .closed-mobile-break { display: inline; }
+    .closed-updated { font-size: 11px; }
+}
