@@ -74,6 +74,15 @@
             row.dataset.historyGroup = dispatch.history_group;
             row.dataset.status = card.dataset.status;
             row.querySelector('[data-history-status]').textContent = card.querySelector('[data-dispatch-status]').textContent;
+            const exclusions = row.querySelector('[data-history-exclusions]');
+            exclusions.replaceChildren();
+            const reasons = dispatch.exclusion_reasons || [];
+            reasons.forEach(reason => {
+                const paragraph = document.createElement('p');
+                paragraph.textContent = reason;
+                exclusions.appendChild(paragraph);
+            });
+            exclusions.hidden = reasons.length === 0;
         });
         render();
     });

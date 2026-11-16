@@ -667,7 +667,9 @@ class AdminAlimtalkDispatchService
         $stalled = in_array($dispatch->status, ['queued', 'processing', 'cancelling'], true)
             && now()->diffInSeconds($dispatch->updated_at, true) > 120;
 
-        $needsReview = $stalled || $dispatch->change_error || in_array($dispatch->status, ['needs_review', 'partial_scheduled'], true)
+        $excludedCount = (int) ($counts['skipped'] ?? 0);
+        $failedCount = ($counts['failed'] ?? 0) + ($counts['delivery_failed'] ?? 0);
+        $needsReview = $excludedCount > 0 || $stalled || $dispatch->change_error || in_array($dispatch->status, ['needs_review', 'partial_scheduled'], true)
             || ($counts['failed'] ?? 0) + ($counts['delivery_failed'] ?? 0) + ($counts['unknown'] ?? 0) + ($counts['cancel_unknown'] ?? 0) > 0;
         $active = in_array($dispatch->status, ['preview', 'queued', 'processing', 'scheduled', 'partial_scheduled', 'cancelling'], true)
             || ($counts['accepted'] ?? 0) + ($counts['delivering'] ?? 0) > 0;
@@ -679,11 +681,26 @@ class AdminAlimtalkDispatchService
             $labels['processing'] = '예약 등록 중';
         }
         $statusLabel = $expired ? '확인 만료' : $labels[$dispatch->status];
-        if ($dispatch->status === 'completed' && $needsReview) {
-            $statusLabel = '실패 포함';
+        if ($dispatch->status === 'completed') {
+            $statusLabel = match (true) {
+                $excludedCount > 0 && $excludedCount === array_sum($counts) => '발송 제외',
+                $excludedCount > 0 && $failedCount > 0 => '실패·제외 포함',
+                $excludedCount > 0 => '일부 발송 제외',
+                $failedCount > 0 => '실패 포함',
+                $needsReview => '확인 필요',
+                default => $statusLabel,
+            };
+        }
+        $exclusionReasons = $excludedCount === 0 ? [] : DB::table('alimtalk_recipients')
+            ->where('dispatch_id', $dispatch->id)->where('status', 'skipped')->whereNotNull('reason')
+            ->select('reason')->distinct()->orderBy('reason')->limit(5)->pluck('reason')
+            ->map(fn ($reason) => trim($reason))->filter()->values()->all();
+        if ($excludedCount > 0 && $exclusionReasons === []) {
+            $exclusionReasons = ['제외 사유가 기록되지 않았습니다.'];
         }
 
         return [
+            'exclusion_reasons' => $exclusionReasons,
             'status_label' => $statusLabel,
             'history_group' => $expired ? 'done' : ($needsReview ? 'review' : ($active ? 'active' : 'done')),
             'id' => $dispatch->id, 'admin_id' => $dispatch->admin_id, 'kind' => $dispatch->kind,

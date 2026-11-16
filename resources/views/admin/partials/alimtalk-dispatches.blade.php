@@ -29,7 +29,12 @@
                                 <td><strong>{{ $dispatch['kind'] === 'morning' ? '오전 안내' : '입장 안내' }}</strong></td>
                                 <td>{{ number_format($dispatch['total']) }}개 번호</td>
                                 <td>{{ $dispatch['scheduled_at'] ? \Illuminate\Support\Carbon::parse($dispatch['scheduled_at'])->format('m.d H:i') : '즉시 발송' }}</td>
-                                <td><span class="dispatch-status" data-history-status>{{ $dispatch['status_label'] }}</span></td>
+                                <td>
+                                    <span class="dispatch-status" data-history-status>{{ $dispatch['status_label'] }}</span>
+                                    <div class="dispatch-history-exclusions" data-history-exclusions aria-label="제외 사유" @if(empty($dispatch['exclusion_reasons'])) hidden @endif>
+                                        @foreach($dispatch['exclusion_reasons'] as $reason)<p>{{ $reason }}</p>@endforeach
+                                    </div>
+                                </td>
                                 <td><button type="button" class="dispatch-view" data-dispatch-open="{{ $dispatch['id'] }}" aria-haspopup="dialog" aria-controls="dispatch-dialog-{{ $dispatch['id'] }}" aria-label="{{ $dispatch['kind'] === 'morning' ? '오전 안내' : '입장 안내' }} {{ $dispatch['scheduled_at'] ?: '즉시 발송' }} 상세 보기">보기 <i class="bi bi-chevron-right" aria-hidden="true"></i></button></td>
                             </tr>
                         @endforeach

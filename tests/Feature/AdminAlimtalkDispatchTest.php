@@ -1228,6 +1228,53 @@ class AdminAlimtalkDispatchTest extends TestCase
         $this->assertSame([], $this->sender->calls);
     }
 
+    public function test_excluded_reservation_is_reviewable_and_reason_is_visible_in_history_row(): void
+    {
+        $this->submission();
+        $dispatch = $this->scheduledPreview();
+        $this->service->confirm($dispatch->id, $this->admin->id, false);
+        config(['services.solapi.api_key' => '']);
+        $this->runQueue();
+        $summary = $this->service->summary(DB::table('alimtalk_dispatches')->find($dispatch->id));
+        $this->assertSame('발송 제외', $summary['status_label']);
+        $this->assertSame('review', $summary['history_group']);
+        $this->assertSame(['발송 설정이 변경되어 제외했습니다.'], $summary['exclusion_reasons']);
+        $this->assertSame([], $this->sender->calls);
+        $response = $this->get(route('admin.applications'))->assertOk();
+        preg_match('/<tr data-dispatch-row="'.preg_quote($dispatch->id, '/').'".*?<\/tr>/s', $response->getContent(), $matches);
+        $this->assertNotEmpty($matches);
+        $this->assertStringContainsString('발송 제외', $matches[0]);
+        $this->assertStringContainsString('발송 설정이 변경되어 제외했습니다.', $matches[0]);
+        $this->assertStringNotContainsString('처리 완료', $matches[0]);
+        $this->assertSame('review', $this->getJson(route('admin.applications.alimtalk.progress'))->json('0.history_group'));
+        if ($directory = getenv('EXCLUSION_PREVIEW_DIR')) {
+            file_put_contents($directory.'/index.html', $response->getContent());
+            file_put_contents($directory.'/progress.json', json_encode($this->service->recent(), JSON_THROW_ON_ERROR));
+        }
+    }
+
+    public function test_mixed_exclusions_have_explicit_labels_and_clear_reasons_when_resolved(): void
+    {
+        $this->submission();
+        $this->submission('01022222222');
+        $dispatch = $this->preview();
+        DB::table('alimtalk_dispatches')->where('id', $dispatch->id)->update(['status' => 'completed', 'confirmed_at' => now()]);
+        $recipients = DB::table('alimtalk_recipients')->where('dispatch_id', $dispatch->id)->orderBy('id')->get();
+        DB::table('alimtalk_recipients')->where('id', $recipients[0]->id)->update(['status' => 'skipped', 'reason' => '<script>alert(1)</script>']);
+        DB::table('alimtalk_recipients')->where('id', $recipients[1]->id)->update(['status' => 'delivered']);
+        $summary = $this->service->summary(DB::table('alimtalk_dispatches')->find($dispatch->id));
+        $this->assertSame('일부 발송 제외', $summary['status_label']);
+        $this->assertSame('review', $summary['history_group']);
+        $this->get(route('admin.applications'))->assertOk()->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)->assertDontSee('<script>alert(1)</script>', false);
+        DB::table('alimtalk_recipients')->where('id', $recipients[1]->id)->update(['status' => 'failed']);
+        $this->assertSame('실패·제외 포함', $this->service->summary(DB::table('alimtalk_dispatches')->find($dispatch->id))['status_label']);
+        DB::table('alimtalk_recipients')->where('dispatch_id', $dispatch->id)->update(['status' => 'delivered', 'reason' => null]);
+        $summary = $this->service->summary(DB::table('alimtalk_dispatches')->find($dispatch->id));
+        $this->assertSame('처리 완료', $summary['status_label']);
+        $this->assertSame('done', $summary['history_group']);
+        $this->assertSame([], $summary['exclusion_reasons']);
+    }
+
     private function preview(string $kind = 'morning'): object
     {
         return $this->service->preview($this->admin->id, (string) Str::uuid(), $kind, 'all', [], 'https://youtu.be/test');

@@ -5,6 +5,8 @@ const vm = require('node:vm');
 
 class Element {
     constructor(dataset = {}) { this.dataset = dataset; this.listeners = {}; this.attrs = {}; this.nodes = {}; this.focused = false; this.hidden = false; }
+    replaceChildren() { this.children = []; }
+    appendChild(child) { (this.children ||= []).push(child); }
     addEventListener(type, callback) { this.listeners[type] = callback; }
     dispatchEvent(event) { return this.listeners[event.type]?.(event); }
     querySelector(selector) { return this.nodes[selector] || null; }
@@ -23,7 +25,8 @@ function setup(auto = false) {
     const rows = ['active', 'review', 'done'].map((group, index) => {
         const row = new Element({dispatchRow:String(index), historyGroup:group});
         row.nodes['[data-dispatch-open]'] = new Element({dispatchOpen:String(index)});
-        row.nodes['[data-history-status]'] = new Element(); return row;
+        row.nodes['[data-history-status]'] = new Element();
+        row.nodes['[data-history-exclusions]'] = new Element(); return row;
     });
     const dialogs = rows.map(row => {
         const dialog = new Element();
@@ -38,6 +41,7 @@ function setup(auto = false) {
         '[data-history-visible]':new Element(), '[data-dispatch-open]':rows.map(r=>r.nodes['[data-dispatch-open]']),
         '.dispatch-dialog':dialogs, '.dispatch-dialog[data-auto-open="true"]':auto ? dialogs[0] : null,
     };
+    document.createElement = () => new Element();
     document.getElementById = id => id === 'alimtalk-progress' ? history : dialogs[Number(id.replace('dispatch-dialog-', ''))];
     vm.runInNewContext(fs.readFileSync('public/js/admin-dispatch-history.js', 'utf8'), {document});
     return {document, history, tabs, rows, dialogs, panel, empty, scroll, summary};
@@ -111,4 +115,21 @@ test('reservation cancellation requires confirmation and repeated submits are bl
     s.form.dispatchEvent({type:'submit',submitter:{value:'cancel'},preventDefault(){repeated = true;}});
     assert.equal(repeated, true);
     assert.equal(s.form.children.length, 1);
+});
+
+
+test('live exclusion reasons appear as plain text in the row and disappear when cleared', () => {
+    const s = setup();
+    const card = s.dialogs[0].nodes['[data-dispatch-id]'];
+    card.dataset.status = 'completed';
+    card.nodes['[data-dispatch-status]'].textContent = '발송 제외';
+    const reasons = ['발송 설정이 변경되어 제외했습니다.', '<script>alert(1)</script>'];
+    s.document.dispatchEvent({type:'dispatches:updated', detail:[{id:'0',history_group:'review',exclusion_reasons:reasons}]});
+    const exclusions = s.rows[0].nodes['[data-history-exclusions]'];
+    assert.equal(exclusions.hidden, false);
+    assert.deepEqual(exclusions.children.map(el => el.textContent), reasons);
+    assert.equal(s.rows[0].nodes['[data-history-status]'].textContent, '발송 제외');
+    s.document.dispatchEvent({type:'dispatches:updated', detail:[{id:'0',history_group:'done',exclusion_reasons:[]}]});
+    assert.equal(exclusions.hidden, true);
+    assert.deepEqual(exclusions.children, []);
 });

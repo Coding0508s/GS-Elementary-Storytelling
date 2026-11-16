@@ -64,3 +64,7 @@ html:has(.dispatch-dialog[open]) { overflow: hidden; }
     .dispatch-detail-facts > div { grid-template-columns: 88px minmax(0, 1fr); }
     .dispatch-dialog .dispatch-record-head { flex-wrap: wrap; }
 }
+
+.dispatch-history-exclusions { max-width: 340px; min-width: 200px; margin-top: 6px; color: #8e471c; font-size: .78rem; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
+.dispatch-history-exclusions p { margin: 0; }
+.dispatch-history-exclusions p + p { margin-top: 4px; }
