@@ -18,7 +18,7 @@
                 <span class="closed-brand">2026 GrapeSEED</span>
                 <span class="closed-title">학부모 웨비나 신청 마감</span>
             </h1>
-            <p class="closed-description">학부모 웨비나 참가 신청이 마감되었습니다.</p>
+            <p class="closed-description">현재 2026 GrapeSEED 학부모 웨비나 신청이 마감되었습니다.</p>
             <div class="closed-thanks">
                 <p>학부모 웨비나에 관심을 가져주셔서<br class="closed-mobile-break"> 감사합니다!</p>
                 <i class="bi bi-heart" aria-hidden="true"></i>
