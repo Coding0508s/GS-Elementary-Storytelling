@@ -87,6 +87,33 @@ class AdminAlimtalkDispatchTest extends TestCase
             ->assertSee('등록자 전체 23명 선택')->assertSee('21개 번호에 발송 확정');
     }
 
+    public function test_application_search_matches_formatted_and_partial_receipt_numbers(): void
+    {
+        $target = $this->submission('01099990001');
+        $target->forceFill(['id' => 123, 'student_name_korean' => '접수 검색 대상'])->save();
+        $large = $this->submission('01099990002');
+        $large->forceFill(['id' => 123456, 'student_name_korean' => '여섯 자리 대상'])->save();
+        $other = $this->submission('01099990003');
+        $other->forceFill(['id' => 77, 'student_name_korean' => '별도 대상'])->save();
+
+        foreach (['GSK-00123', 'gsk-00123', '00123', 'GSK-001', '  GSK-00123  '] as $search) {
+            $this->get(route('admin.applications', ['search' => $search]))->assertOk()
+                ->assertViewHas('applications', fn ($rows) => $rows->pluck('id')->all() === [123]);
+        }
+        foreach (['GSK-123456', '3456'] as $search) {
+            $this->get(route('admin.applications', ['search' => $search]))->assertOk()
+                ->assertViewHas('applications', fn ($rows) => $rows->pluck('id')->all() === [123456]);
+        }
+        $this->get(route('admin.applications', ['search' => '123']))->assertOk()
+            ->assertViewHas('applications', fn ($rows) => $rows->pluck('id')->sort()->values()->all() === [123, 123456]);
+        $this->get(route('admin.applications', ['search' => '없는학생123']))->assertOk()
+            ->assertViewHas('applications', fn ($rows) => $rows->isEmpty());
+        $target->delete();
+        $this->get(route('admin.applications', ['search' => 'GSK-00123']))->assertOk()
+            ->assertViewHas('applications', fn ($rows) => $rows->isEmpty());
+        $this->assertSame([], $this->sender->calls);
+    }
+
     public function test_confirmation_uses_real_database_queue_and_duplicate_submission_does_not_enqueue_again(): void
     {
         $row = $this->submission('010-1234-5678');

@@ -444,8 +444,16 @@ class AdminController extends Controller
                         ->orWhere('region', 'like', "%{$searchQuery}%")
                         ->orWhere('grade', 'like', "%{$searchQuery}%");
 
-                    if (preg_match('/(\d+)/', $searchQuery, $matches)) {
-                        $inner->orWhere('id', (int) $matches[1]);
+                    $receiptExpression = match ($inner->getConnection()->getDriverName()) {
+                        'sqlite' => "('GSK-' || printf('%05d', id))",
+                        'mysql', 'mariadb' => "CONCAT('GSK-', LPAD(id, GREATEST(5, LENGTH(id)), '0'))",
+                        'pgsql' => "('GSK-' || LPAD(id::text, GREATEST(5, LENGTH(id::text)), '0'))",
+                        'sqlsrv' => "CONCAT('GSK-', FORMAT(id, '00000'))",
+                    };
+                    $inner->orWhereRaw($receiptExpression.' LIKE ?', ['%'.strtoupper($searchQuery).'%']);
+
+                    if (preg_match('/^[0-9]+$/D', $searchQuery)) {
+                        $inner->orWhere('id', (int) $searchQuery);
                     }
                 });
             });
